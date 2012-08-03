@@ -1,0 +1,34 @@
+﻿NVorbis
+-------
+
+NVorbis is a .Net library for decoding Xiph.org Vorbis files.  It is purely
+managed code, and should run correctly in partial-trust environments.
+
+This implementation is based on the Vorbis specification found on xiph.org.
+Portions were "borrowed" from elsewhere.  Specifically, the Huffman code
+generator and the MDCT algorithm were adapted from csvorbis.  Also,
+libvorbis was referenced heavily during development.
+
+Currently the only container supported is Xiph.org Ogg.  Matroska and RTP
+are planned.
+
+To use:
+
+- Create an instance of NVorbis.VorbisReader (pass the Ogg Vorbis filename in)
+- Use these properties to gather data about the logical stream:
+	- Channels
+	- SampleRate
+	- TotalTime		- A TimeSpan indicating the total length of the audio data
+	- DecodedTime	- A TimeSpan indicating the last returned sample's timestamp
+	- NominalBitrate, UpperBitrate, and LowerBitrate
+		- These are the encoder's reported bitrates
+	- Vendor	- The encoder's vendor string
+	- Comments	- An array of comments in the file (usually tags)
+- Call "int ReadSamples(float[], int, int)" to retrieve the next batch of
+  samples.  It will return 0 when the logical Vorbis stream is done.
+
+
+History
+-------
+0.1	- 08/03/2012
+	* Initial Release
