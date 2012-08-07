@@ -3,6 +3,7 @@
 * Check that seeking is implemented correctly
 
 * Add multi-stream support (single container, multiple logical streams)
+	- This is partially implemented
 
 * Add appropriate properties to VorbisStreamStatus.cs
 
