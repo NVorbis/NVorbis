@@ -26,64 +26,153 @@ namespace NVorbis
 
         }
 
-        internal void Init(OggPacket reader)
+        internal void Init(OggPacket packet)
         {
             // first, check the sync pattern
-            var chkVal = reader.ReadBits(24);
+            var chkVal = packet.ReadBits(24);
             if (chkVal != 0x564342UL) throw new InvalidDataException();
 
             // get the counts
-            Dimensions = (int)reader.ReadBits(16);
-            Entries = (int)reader.ReadBits(24);
+            Dimensions = (int)packet.ReadBits(16);
+            Entries = (int)packet.ReadBits(24);
             
             // init the storage
             Lengths = new int[Entries];
 
-            InitLengthList(reader);
-            InitTree();
-            InitLookupTable(reader);
+            InitTree(packet);
+            InitLookupTable(packet);
         }
 
-        void InitLengthList(OggPacket reader)
+        void InitTree(OggPacket packet)
         {
-            var ordered = reader.ReadBit();
-            if (!ordered)
+            bool sparse;
+            int total = 0;
+
+            if (packet.ReadBit())
             {
-                var sparse = reader.ReadBit();
-                for (int i = 0; i < Entries; i++)
+                // ordered
+                var len = (int)packet.ReadBits(5) + 1;
+                for (var i = 0; i < Entries; )
                 {
-                    // if we're spare, read the flag bit, otherwise just grab the next value
-                    if (!sparse || reader.ReadBit())
+                    var cnt = (int)packet.ReadBits(Utils.ilog(Entries - i));
+
+                    while (--cnt >= 0)
                     {
-                        Lengths[i] = (int)reader.ReadBits(5) + 1;
+                        Lengths[i++] = len;
                     }
-                    else
-                    {
-                        Lengths[i] = 0;
-                    }
+
+                    ++len;
                 }
+                total = 0;
+                sparse = false;
             }
             else
             {
-                var curLen = (int)reader.ReadBits(5) + 1;
-                for (var i = 0; i < Entries; )
+                // unordered
+                sparse = packet.ReadBit();
+                for (var i = 0; i < Entries; i++)
                 {
-                    var num = (int)reader.ReadBits(Utils.ilog(Entries - i));
-
-                    for (var j = 0; j < num; j++, i++)
+                    if (!sparse || packet.ReadBit())
                     {
-                        Lengths[i] = curLen;
+                        Lengths[i] = (int)packet.ReadBits(5) + 1;
+                        ++total;
                     }
-
-                    ++curLen;
+                    else
+                    {
+                        Lengths[i] = -1;
+                    }
                 }
             }
+            MaxBits = Lengths.Max();
+
+            int sortedCount = 0;
+            int[] codewordLengths = null;
+            if (sparse && total >= Entries >> 2)
+            {
+                codewordLengths = new int[Entries];
+                Array.Copy(Lengths, codewordLengths, Entries);
+
+                sparse = false;
+            }
+
+            // compute size of sorted tables
+            if (sparse)
+            {
+                sortedCount = total;
+            }
+            else
+            {
+                sortedCount = 0;
+            }
+
+            int sortedEntries = sortedCount;
+
+            int[] values = null;
+            int[] codewords = null;
+            if (!sparse)
+            {
+                codewords = new int[Entries];
+            }
+            else if (sortedEntries != 0)
+            {
+                codewordLengths = new int[sortedEntries];
+                codewords = new int[sortedEntries];
+                values = new int[sortedEntries];
+            }
+
+            if (!ComputeCodewords(sparse, sortedEntries, codewords, codewordLengths, len: Lengths, n: Entries, values: values)) throw new InvalidDataException();
+
+            LTree = Huffman.BuildLinkedList<int>(values ?? Enumerable.Range(0, codewords.Length).ToArray(), codewordLengths ?? Lengths, codewords);
         }
 
-        void InitTree()
+        bool ComputeCodewords(bool sparse, int sortedEntries, int[] codewords, int[] codewordLengths, int[] len, int n, int[] values)
         {
-            LTree = Huffman.BuildLinkedList(Enumerable.Range(0, Entries).ToArray(), Lengths);
-            MaxBits = Lengths.Max();
+            int i, k, m = 0;
+            uint[] available = new uint[32];
+
+            for (k = 0; k < n; ++k) if (len[k] > 0) break;
+            if (k == n) return true;
+
+            AddEntry(sparse, codewords, codewordLengths, 0, k, m++, len[k], values);
+
+            for (i = 1; i <= len[k]; ++i) available[i] = 1U << (32 - i);
+
+            for (i = k + 1; i < n; ++i)
+            {
+                uint res;
+                int z = len[i], y;
+                if (z <= 0) continue;
+
+                while (z > 0 && available[z] == 0) --z;
+                if (z == 0) return false;
+                res = available[z];
+                available[z] = 0;
+                AddEntry(sparse, codewords, codewordLengths, Utils.BitReverse(res), i, m++, len[i], values);
+
+                if (z != len[i])
+                {
+                    for (y = len[i]; y > z; --y)
+                    {
+                        available[y] = res + (1U << (32 - y));
+                    }
+                }
+            }
+
+            return true;
+        }
+
+        void AddEntry(bool sparse, int[] codewords, int[] codewordLengths, uint huffCode, int symbol, int count, int len, int[] values)
+        {
+            if (sparse)
+            {
+                codewords[count] = (int)huffCode;
+                codewordLengths[count] = len;
+                values[count] = symbol;
+            }
+            else
+            {
+                codewords[symbol] = (int)huffCode;
+            }
         }
 
         void InitLookupTable(OggPacket reader)
@@ -151,7 +240,11 @@ namespace NVorbis
 
         int lookup1_values()
         {
-            return (int)Math.Floor(Math.Pow(Entries, 1.0 / Dimensions));
+            var r = (int)Math.Floor(Math.Exp(Math.Log(Entries) / Dimensions));
+            
+            if (Math.Floor(Math.Pow(r + 1, Dimensions)) <= Entries) ++r;
+            
+            return r;
         }
 
         internal int BookNum;
@@ -191,6 +284,7 @@ namespace NVorbis
             {
                 if (node.Bits == (bits & node.Mask))
                 {
+                    node.HitCount++;
                     packet.SkipBits(node.Length);
                     return node.Value;
                 }

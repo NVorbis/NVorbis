@@ -204,6 +204,9 @@ namespace NVorbis
             VorbisCodebook[][] _subclassBooks;
             int[][] _subclassBookIndex;
 
+            static int[] _rangeLookup = { 256, 128, 86, 64 };
+            static int[] _yBitsLookup = { 8, 7, 7, 6 };
+
             protected override void Init(OggPacket reader)
             {
                 _partitionClass = new int[(int)reader.ReadBits(5)];
@@ -239,10 +242,12 @@ namespace NVorbis
                     }
                 }
 
-                _multiplier = (int)reader.ReadBits(2) + 1;
+                _multiplier = (int)reader.ReadBits(2);
 
-                _range = (new int[] { 256, 128, 86, 64 })[_multiplier - 1];
-                _yBits = Utils.ilog(_range - 1);
+                _range = _rangeLookup[_multiplier];
+                _yBits = _yBitsLookup[_multiplier];
+
+                ++_multiplier;
 
                 var rangeBits = (int)reader.ReadBits(4);
 

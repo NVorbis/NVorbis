@@ -13,25 +13,19 @@ namespace NVorbis
 {
     class OggContainerReader : IDisposable
     {
+        const uint CRC32_POLY = 0x04c11db7;
         static uint[] crcTable = new uint[256];
 
         static OggContainerReader()
         {
-            for (uint i = 0; i < crcTable.Length; i++)
+            for (uint i = 0; i < 256; i++)
             {
-                uint r = i << 24;
-                for (var j = 0; j < 8; j++)
+                uint s = i << 24;
+                for (int j = 0; j < 8; ++j)
                 {
-                    if ((r & 0x80000000) != 0)
-                    {
-                        r = (r << 1) ^ 0x04c11db7;
-                    }
-                    else
-                    {
-                        r <<= 1;
-                    }
+                    s = (s << 1) ^ (s >= (1U << 31) ? CRC32_POLY : 0);
                 }
-                crcTable[i] = r;
+                crcTable[i] = s;
             }
         }
 
@@ -208,9 +202,7 @@ namespace NVorbis
 
         void UpdateCRC(int nextVal, ref uint crc)
         {
-            var a = (uint)nextVal & 0xff;
-            var b = (crc >> 24) & 0xff;
-            crc = (crc << 8) ^ crcTable[a ^ b];
+            crc = (crc << 8) ^ crcTable[nextVal ^ (crc >> 24)];
         }
 
         internal void GatherNextPage(int streamSerial)
