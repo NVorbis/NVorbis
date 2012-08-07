@@ -1,4 +1,11 @@
-﻿using System;
+﻿/****************************************************************************
+ * NVorbis                                                                  *
+ * Copyright (C) 2012, Andrew Ward <afward@gmail.com>                       *
+ *                                                                          *
+ * See COPYING for license terms (Ms-PL).                                   *
+ *                                                                          *
+ ***************************************************************************/
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;

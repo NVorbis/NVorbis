@@ -2,7 +2,7 @@
  * NVorbis                                                                  *
  * Copyright (C) 2012, Andrew Ward <afward@gmail.com>                       *
  *                                                                          *
- * See COPYING for license terms (LGPL all the way back to libvorbis).      *
+ * See COPYING for license terms (Ms-PL).                                   *
  *                                                                          *
  ***************************************************************************/
 using System;
