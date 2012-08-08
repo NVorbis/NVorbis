@@ -311,7 +311,7 @@ namespace NVorbis
             internal override float[] DecodePacket(OggPacket reader, int blockSize)
             {
                 var posts = ReadPosts(reader);
-                if (posts == null) return ACache.Get<float>(blockSize);
+                if (posts == null) return null;
 
                 var stepFlags = UnwrapPosts(posts);
                 return ComputeCurve(posts, stepFlags, blockSize);

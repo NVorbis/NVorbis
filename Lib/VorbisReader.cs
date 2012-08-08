@@ -396,28 +396,25 @@ namespace NVorbis
                     // check that we have energy in all coupled channels
                     foreach (var step in mode.Mapping.CouplingSteps)
                     {
-                        if (floors[step.Angle] == null || floors[step.Magnitude] == null)
+                        if (floors[step.Angle] != null || floors[step.Magnitude] != null)
                         {
-                            floors[step.Angle] = null;
-                            floors[step.Magnitude] = null;
+                            floors[step.Angle] = floors[step.Angle] ?? ACache.Get<float>(mode.BlockSize);
+                            floors[step.Magnitude] = floors[step.Magnitude] ?? ACache.Get<float>(mode.BlockSize);
                         }
                     }
 
                     // get the residue
                     foreach (var subMap in mode.Mapping.Submaps)
                     {
-                        var ch = 0;
                         for (int j = 0; j < _channels; j++)
                         {
-                            if (mode.Mapping.ChannelSubmap[j] == subMap)
+                            if (mode.Mapping.ChannelSubmap[j] != subMap)
                             {
-                                // the spec says to tweak a "do_not_encode_flag", but we have that in floors already
-
-                                ++ch;
+                                floors[j] = null;
                             }
                         }
 
-                        var rTemp = subMap.Residue.Decode(packet, floors.Select(f => f == null).ToArray(), ch, mode.BlockSize);
+                        var rTemp = subMap.Residue.Decode(packet, floors.Select(f => f == null).ToArray(), _channels, mode.BlockSize);
                         for (int c = 0; c < _channels; c++)
                         {
                             var r = residue[c];
@@ -465,7 +462,8 @@ namespace NVorbis
                     var magnitude = residue[steps[i].Magnitude];
                     var angle = residue[steps[i].Angle];
 
-                    for (int j = 0; j < mode.BlockSize; j++)
+                    // we only have to do the first half; MDCT ignores the last half
+                    for (int j = 0; j < mode.BlockSize / 2; j++)
                     {
                         float newM, newA;
 
@@ -501,7 +499,8 @@ namespace NVorbis
                     }
                 }
 
-                // dot product
+                // dot product / MDCT (only run if we have sound energy in that channel)
+                var pcm = ACache.Get<float[]>(_channels);
                 for (int c = 0; c < _channels; c++)
                 {
                     var res = residue[c];
@@ -512,19 +511,13 @@ namespace NVorbis
                         {
                             res[i] *= floor[i];
                         }
+                        pcm[c] = Mdct.Reverse(res);
                     }
                     else
                     {
-                        Array.Clear(res, 0, mode.BlockSize);
+                        // Mdct.Reverse does an in-place transform, then returns the input buffer... mimic that
+                        pcm[c] = res;
                     }
-                }
-
-                // inverse MDCT
-                var pcm = ACache.Get<float[]>(_channels);
-                for (int c = 0; c < _channels; c++)
-                {
-                    // pcm[c] will equal residue[c]!
-                    pcm[c] = Mdct.Reverse(residue[c]);
                 }
 
                 // window
@@ -610,7 +603,7 @@ namespace NVorbis
                         }
                         else if (packet.IsEndOfStream && packet.PageGranulePosition > _currentPosition)
                         {
-                            _preparedLength -= (int)(_currentPosition - packet.PageGranulePosition);
+                            _preparedLength -= (int)Math.Max(_currentPosition - packet.PageGranulePosition, 0L);
                             packet.GranulePosition = packet.PageGranulePosition;
                         }
                     }
