@@ -96,10 +96,10 @@ namespace NVorbis
 
             for (int i = 0; i < packetSizes.Length - 1; i++)
             {
-                _packetReaders[streamSerial].AddPacket(new OggPacket(_stream, dataOffset, packetSizes[i]) { PageGranulePosition = granulePosition, IsContinued = false, IsFresh = false, IsResync = false, PageSequenceNumber = seqNo });
+                _packetReaders[streamSerial].AddPacket(new OggPacket(_stream, dataOffset, packetSizes[i]) { PageGranulePosition = granulePosition, IsContinued = false, IsContinuation = false, IsResync = false, PageSequenceNumber = seqNo });
                 dataOffset += packetSizes[i];
             }
-            _packetReaders[streamSerial].AddPacket(new OggPacket(_stream, dataOffset, packetSizes[packetSizes.Length - 1]) { PageGranulePosition = granulePosition, IsContinued = lastPacketContinues, IsFresh = false, IsResync = false, PageSequenceNumber = seqNo });
+            _packetReaders[streamSerial].AddPacket(new OggPacket(_stream, dataOffset, packetSizes[packetSizes.Length - 1]) { PageGranulePosition = granulePosition, IsContinued = lastPacketContinues, IsContinuation = false, IsResync = false, PageSequenceNumber = seqNo });
         }
 
         bool ReadPageHeader(out int streamSerial, out PageFlags flags, out long granulePosition, out int seqNo, out long dataOffset, out int[] packetSizes, out bool lastPacketContinues)
@@ -153,7 +153,7 @@ namespace NVorbis
             var segCnt = (int)hdrBuf[26];
             packetSizes = new int[segCnt];
             int size = 0, idx = 0;
-            while (--segCnt >= 0)
+            for (int i = 0; i < segCnt; i++)
             {
                 var temp = _stream.ReadByte();
                 UpdateCRC(temp, ref testCRC);
@@ -171,6 +171,7 @@ namespace NVorbis
 
                 size += temp;
             }
+            if (lastPacketContinues) ++idx;
             if (idx < packetSizes.Length)
             {
                 var temp = new int[idx];
@@ -259,16 +260,16 @@ namespace NVorbis
                 _streamSerials.Add(streamSerial);
             }
 
-            _packetReaders[streamSerial].AddPacket(new OggPacket(_stream, dataOffset, packetSizes[0]) { PageGranulePosition = granulePosition, IsContinued = false, IsFresh = (pageFlags & PageFlags.FreshPacket) == PageFlags.FreshPacket, IsResync = isResync, PageSequenceNumber = seqNo });
+            _packetReaders[streamSerial].AddPacket(new OggPacket(_stream, dataOffset, packetSizes[0]) { PageGranulePosition = granulePosition, IsContinued = false, IsContinuation = (pageFlags & PageFlags.ContinuesPacket) == PageFlags.ContinuesPacket, IsResync = isResync, PageSequenceNumber = seqNo });
             dataOffset += packetSizes[0];
             for (int i = 1; i < packetSizes.Length - 1; i++)
             {
-                _packetReaders[streamSerial].AddPacket(new OggPacket(_stream, dataOffset, packetSizes[i]) { PageGranulePosition = granulePosition, IsContinued = false, IsFresh = false, IsResync = false, PageSequenceNumber = seqNo });
+                _packetReaders[streamSerial].AddPacket(new OggPacket(_stream, dataOffset, packetSizes[i]) { PageGranulePosition = granulePosition, IsContinued = false, IsContinuation = false, IsResync = false, PageSequenceNumber = seqNo });
                 dataOffset += packetSizes[i];
             }
             if (packetSizes.Length > 1)
             {
-                _packetReaders[streamSerial].AddPacket(new OggPacket(_stream, dataOffset, packetSizes[packetSizes.Length - 1]) { PageGranulePosition = granulePosition, IsContinued = lastPacketContinues, IsFresh = false, IsResync = false, IsEndOfStream = (pageFlags & PageFlags.EndOfStream) == PageFlags.EndOfStream, PageSequenceNumber = seqNo });
+                _packetReaders[streamSerial].AddPacket(new OggPacket(_stream, dataOffset, packetSizes[packetSizes.Length - 1]) { PageGranulePosition = granulePosition, IsContinued = lastPacketContinues, IsContinuation = false, IsResync = false, IsEndOfStream = (pageFlags & PageFlags.EndOfStream) == PageFlags.EndOfStream, PageSequenceNumber = seqNo });
             }
 
             if ((pageFlags & PageFlags.EndOfStream) == PageFlags.EndOfStream)

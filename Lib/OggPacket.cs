@@ -33,15 +33,18 @@ namespace NVorbis
             _curIdx = 0;
             _curOfs = 0;
 
-            AddNextPage(startPos, length);
-        }
-
-        internal void AddNextPage(long startPos, int length)
-        {
             _offsets.Add(startPos);
             _lengths.Add(length);
 
-            Length += length;
+            Length = length;
+        }
+
+        internal void MergeWith(OggPacket continuation)
+        {
+            _offsets.AddRange(continuation._offsets);
+            _lengths.AddRange(continuation._lengths);
+
+            Length += continuation.Length;
         }
 
         public void Reset()
@@ -170,8 +173,7 @@ namespace NVorbis
         public long BitsRead { get { return _readBits; } }
 
         internal bool IsContinued { get; set; }
-        internal bool IsFresh { get; set; }
-        internal long Offset { get; set; }
+        internal bool IsContinuation { get; set; }
         internal int PageSequenceNumber { get; set; }
 
 

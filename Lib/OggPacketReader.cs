@@ -20,7 +20,7 @@ namespace NVorbis
 
         int _dataStartPacketIndex;
 
-        Queue<OggPacket> _packetQueue;
+        Queue<OggPacket> _packetQueue, _tempQueue;
         List<OggPacket> _packetList;
 
         List<int> _pageSeqNos;
@@ -31,6 +31,7 @@ namespace NVorbis
             _streamSerial = streamSerial;
 
             _packetQueue = new Queue<OggPacket>();
+            _tempQueue = new Queue<OggPacket>();
             _packetList = new List<OggPacket>();
 
             _pageSeqNos = new List<int>();
@@ -51,11 +52,9 @@ namespace NVorbis
 
         void GetMorePackets()
         {
-            // gather pages until we have packets or we've found the end of our stream...
-            while (!_eosFound && _packetQueue.Count == 0) _container.GatherNextPage(_streamSerial);
-
-            // if the queue is still empty, we're done...
-            if (_packetQueue.Count == 0) throw new EndOfStreamException();
+            // gather pages until we have more packets or we've found the end of our stream...
+            var count = _packetQueue.Count;
+            while (!_eosFound && _packetQueue.Count == count) _container.GatherNextPage(_streamSerial);
         }
 
         void MergeQueuePackets()
@@ -63,68 +62,41 @@ namespace NVorbis
             // if the queue is empty, we have nothing to do...
             if (_packetQueue.Count == 0) return;
 
-            // go through the queue and merge all continuations...
-            var list = _packetQueue.ToArray();
-
-            var idx = Array.FindIndex(list, p => p.IsContinued);
-            if (idx > -1)
+            // try to merge things in
+            OggPacket lastPacket = null;
+            while (_packetQueue.Count > 0)
             {
-                // if the last packet is a continuation, get more packets first...
-                while (list[list.Length - 1].IsContinued)
+                // get the next packet and queue it up
+                var packet = _packetQueue.Dequeue();
+
+                if (!packet.IsResync && packet.IsContinuation)
                 {
-                    if (_eosFound)
-                    {
-                        // the continuation flag must be wrong, or we have a partial stream...  ignore the flag...
-                        list[list.Length - 1].IsContinued = false;
-                        break;
-                    }
-                    else
-                    {
-                        // we're not at the end of the stream, so get more data and try again...
-                        GetMorePackets();
-                        list = _packetQueue.ToArray();
-                    }
+                    if (lastPacket == null) throw new InvalidDataException();
+
+                    // continue the last packet
+                    lastPacket.MergeWith(packet);
                 }
-
-                // clear the queue as we will be repopulating it momentarily...
-                _packetQueue.Clear();
-                for (int i = 0; i < idx; i++)
+                else
                 {
-                    _packetQueue.Enqueue(list[i]);
-                }
-
-                var mergeTarget = idx;
-                while (++idx < list.Length)
-                {
-                    if (list[idx].IsResync || list[idx].IsFresh)
-                    {
-                        // we can't merge...  cancel the merge target
-                        mergeTarget = -1;
-                    }
-
-                    if (mergeTarget > -1)
-                    {
-                        list[mergeTarget].AddNextPage(list[idx].Offset, list[idx].Length);
-                        if (!list[idx].IsContinued) mergeTarget = -1;
-                    }
-                    else
-                    {
-                        _packetQueue.Enqueue(list[idx]);
-                        if (list[idx].IsContinued)
-                        {
-                            mergeTarget = idx;
-                            list[idx].IsContinued = false;
-                        }
-                    }
+                    _tempQueue.Enqueue(packet);
+                    lastPacket = packet;
                 }
             }
+            var temp = _packetQueue;
+            _packetQueue = _tempQueue;
+            _tempQueue = temp;
         }
 
         internal OggPacket GetNextPacket()
         {
             // make sure we have some packets in the queue...
-            GetMorePackets();
-            MergeQueuePackets();
+            if (_packetQueue.Count <= 1)    // never wait until the last packet... makes merges happen correctly...
+            {
+                GetMorePackets();
+                MergeQueuePackets();
+
+                if (_packetQueue.Count == 0) throw new EndOfStreamException();
+            }
 
             // get the next packet in the queue...
             var packet = _packetQueue.Dequeue();
@@ -171,6 +143,8 @@ namespace NVorbis
 
                 GetMorePackets();
                 MergeQueuePackets();
+
+                if (_packetQueue.Count == 0) throw new EndOfStreamException();
 
                 _packetList.AddRange(_packetQueue);
                 _packetQueue.Clear();
