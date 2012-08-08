@@ -2,11 +2,6 @@
 * Check that Residue0 is implemented correctly
 * Check that seeking is implemented correctly
 
-* Add multi-stream support (single container, multiple logical streams)
-	- This is partially implemented
-
-* Add appropriate properties to VorbisStreamStatus.cs
-
 * RTP support
 	- Put an interface between VorbisReader and OggContainerReader
 	- Implement the same interface for RTP (non-seekable)

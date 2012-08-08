@@ -31,10 +31,10 @@ namespace NVorbis
 
         Stream _stream;
         Dictionary<int, OggPacketReader> _packetReaders;
-        Dictionary<int, List<long>> _pageOffsets;
         Dictionary<int, bool> _eosFlags;
         List<int> _streamSerials;
         long _nextPageOffset;
+        int _pageCount;
 
         internal long _containerBits;
 
@@ -61,7 +61,6 @@ namespace NVorbis
             _stream = stream;
 
             _packetReaders = new Dictionary<int, OggPacketReader>();
-            _pageOffsets = new Dictionary<int, List<long>>();
             _eosFlags = new Dictionary<int, bool>();
             _streamSerials = new List<int>();
 
@@ -71,7 +70,6 @@ namespace NVorbis
         public void Dispose()
         {
             _packetReaders.Clear();
-            _pageOffsets.Clear();
             _nextPageOffset = 0L;
             _containerBits = 0L;
 
@@ -90,7 +88,6 @@ namespace NVorbis
 
             // go ahead and process this first page
             _packetReaders.Add(streamSerial, new OggPacketReader(this, streamSerial));
-            _pageOffsets.Add(streamSerial, new List<long>(new long[] { 0L }));
             _eosFlags.Add(streamSerial, false);
             _streamSerials.Add(streamSerial);
 
@@ -195,6 +192,7 @@ namespace NVorbis
             _containerBits += 8 * (27 + segCnt);
             if (testCRC == crc)
             {
+                ++_pageCount;
                 return true;
             }
             _containerBits -= 8 * (27 + segCnt);    // we're going to look for the bits separately...
@@ -255,7 +253,6 @@ namespace NVorbis
             if (!_packetReaders.ContainsKey(streamSerial))
             {
                 _packetReaders.Add(streamSerial, new OggPacketReader(this, streamSerial));
-                _pageOffsets.Add(streamSerial, new List<long>(new long[] { startPos }));
                 _eosFlags.Add(streamSerial, false);
                 _streamSerials.Add(streamSerial);
             }
@@ -316,9 +313,29 @@ namespace NVorbis
             return cnt > this._packetReaders.Count;
         }
 
-        internal int GetPageCount(int streamSerial)
+        internal int GetReadPageCount()
         {
-            return _packetReaders[streamSerial].GetPageCount();
+            return _pageCount;
+        }
+
+        internal int GetTotalPageCount()
+        {
+            _eosFlags.Add(-1, false);
+
+            // there cannot possibly be another page less than 28 bytes from the end of the file
+            while (_stream.Position < _stream.Length - 28)
+            {
+                GatherNextPage(-1);
+            }
+
+            _eosFlags.Remove(-1);
+
+            return _pageCount;
+        }
+
+        internal bool CanSeek
+        {
+            get { return true; }
         }
     }
 }

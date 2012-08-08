@@ -16,14 +16,12 @@ namespace NVorbis
     {
         OggContainerReader _container;
         int _streamSerial;
-        bool _eosFound;
+        bool _eosFound, _runMerge;
 
         int _dataStartPacketIndex;
 
         Queue<OggPacket> _packetQueue, _tempQueue;
         List<OggPacket> _packetList;
-
-        List<int> _pageSeqNos;
 
         internal OggPacketReader(OggContainerReader container, int streamSerial)
         {
@@ -33,14 +31,11 @@ namespace NVorbis
             _packetQueue = new Queue<OggPacket>();
             _tempQueue = new Queue<OggPacket>();
             _packetList = new List<OggPacket>();
-
-            _pageSeqNos = new List<int>();
         }
 
         internal void AddPacket(OggPacket packet)
         {
-            if (!_pageSeqNos.Contains(packet.PageSequenceNumber)) _pageSeqNos.Add(packet.PageSequenceNumber);
-
+            _runMerge |= packet.IsContinuation;
             _eosFound |= packet.IsEndOfStream;
             _packetQueue.Enqueue(packet);
         }
@@ -85,6 +80,8 @@ namespace NVorbis
             var temp = _packetQueue;
             _packetQueue = _tempQueue;
             _tempQueue = temp;
+
+            _runMerge = false;
         }
 
         internal OggPacket GetNextPacket()
@@ -93,10 +90,11 @@ namespace NVorbis
             if (_packetQueue.Count <= 1)    // never wait until the last packet... makes merges happen correctly...
             {
                 GetMorePackets();
-                MergeQueuePackets();
 
                 if (_packetQueue.Count == 0) throw new EndOfStreamException();
             }
+
+            if (_runMerge) MergeQueuePackets();
 
             // get the next packet in the queue...
             var packet = _packetQueue.Dequeue();
@@ -142,7 +140,7 @@ namespace NVorbis
                 if (_eosFound) throw new ArgumentOutOfRangeException("position");
 
                 GetMorePackets();
-                MergeQueuePackets();
+                if (_runMerge) MergeQueuePackets();
 
                 if (_packetQueue.Count == 0) throw new EndOfStreamException();
 
@@ -199,11 +197,6 @@ namespace NVorbis
             ReadAllPages();
 
             return _packetQueue.LastOrDefault() ?? _packetList.Last();
-        }
-
-        internal int GetPageCount()
-        {
-            return _pageSeqNos.Count;
         }
     }
 }

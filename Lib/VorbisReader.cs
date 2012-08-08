@@ -16,7 +16,7 @@ namespace NVorbis
     public class VorbisReader : IDisposable
     {
         public int Channels { get { return _channels; } }
-        public int SampleRate { get; private set; }
+        public int SampleRate { get { return _sampleRate; } }
         public int UpperBitrate { get; private set; }
         public int NominalBitrate { get; private set; }
         public int LowerBitrate { get; private set; }
@@ -25,6 +25,7 @@ namespace NVorbis
         public string[] Comments { get; private set; }
 
         internal int _channels;
+        internal int _sampleRate;
         internal int Block0Size;
         internal int Block1Size;
 
@@ -57,6 +58,8 @@ namespace NVorbis
         internal long _resBits;
         internal long _wasteBits;
 
+        internal long _samples;
+
         internal int _packetCount;
         internal System.Diagnostics.Stopwatch _sw = new System.Diagnostics.Stopwatch();
 
@@ -65,7 +68,7 @@ namespace NVorbis
             _reader = new OggContainerReader(fileName);
             _streamIdx = -1;
 
-            while (!InitNextStream(false))
+            while (!InitNextStream())
             {
                 if (!_reader.FindNextStream(_streamSerial))
                 {
@@ -85,10 +88,13 @@ namespace NVorbis
             }
         }
 
-        bool InitNextStream(bool checkProperties)
+        // TODO: Wouldn't it make more sense to put the "per-logical stream" bits in a subclass?
+        //       That way you can switch streams / init new streams without throwing off the
+        //       current decoder state...
+        bool InitNextStream()
         {
             int channels = _channels;
-            int rate = SampleRate;
+            int rate = _sampleRate;
 
             // increment the stream index
             ++_streamIdx;
@@ -136,14 +142,6 @@ namespace NVorbis
                 return false;
             }
 
-            if (checkProperties)
-            {
-                if (_channels != channels || rate != SampleRate)
-                {
-                    throw new InvalidDataException("Next stream setup incompatible!");
-                }
-            }
-
             InitDecoder();
 
             return true;
@@ -158,7 +156,7 @@ namespace NVorbis
             if (packet.ReadInt32() != 0) throw new InvalidDataException("Only Vorbis stream version 0 is supported.");
 
             _channels = packet.ReadByte();
-            SampleRate = packet.ReadInt32();
+            _sampleRate = packet.ReadInt32();
             UpperBitrate = packet.ReadInt32();
             NominalBitrate = packet.ReadInt32();
             LowerBitrate = packet.ReadInt32();
@@ -280,8 +278,13 @@ namespace NVorbis
 
         #region Stream Decode
 
+        internal int LastSecondBits { get { return _bitsPerPacketHistory.Sum(); } }
+        internal int LastSecondSamples { get { return _sampleCountHistory.Sum(); } }
+
         float[] _prevBuffer;
         RingBuffer<float> _outputBuffer;
+        Queue<int> _bitsPerPacketHistory;
+        Queue<int> _sampleCountHistory;
         int _lastBlockSize;
         int _preparedLength;
         int _lastCenter;
@@ -306,6 +309,9 @@ namespace NVorbis
             _currentPosition = 0L;
 
             _resyncQueue = new Stack<OggPacket>();
+
+            _bitsPerPacketHistory = new Queue<int>();
+            _sampleCountHistory = new Queue<int>();
         }
 
         void ResetDecoder()
@@ -566,6 +572,9 @@ namespace NVorbis
 
                 #region Position Update
 
+                var samplesDecoded = _centerW - _lastCenter;
+                _samples += samplesDecoded;
+
                 if (packet.IsResync)
                 {
                     // during a resync, we have to go through and watch for the next "marker"
@@ -577,7 +586,7 @@ namespace NVorbis
                 {
                     if (_lastCenter != Block0Size / -2)
                     {
-                        _currentPosition += _centerW - _lastCenter;
+                        _currentPosition += samplesDecoded;
                         packet.GranulePosition = _currentPosition;
 
                         if (_currentPosition < 0)
@@ -585,7 +594,7 @@ namespace NVorbis
                             if (packet.PageGranulePosition > -_currentPosition)
                             {
                                 // we now have a valid granuleposition...  populate the queued packets' GranulePositions
-                                var gp = _currentPosition - (_centerW - _lastCenter);
+                                var gp = _currentPosition - samplesDecoded;
                                 while (_resyncQueue.Count > 0)
                                 {
                                     var pkt = _resyncQueue.Pop();
@@ -597,19 +606,30 @@ namespace NVorbis
                             }
                             else
                             {
-                                packet.GranulePosition = -(_centerW - _lastCenter);
+                                packet.GranulePosition = -samplesDecoded;
                                 _resyncQueue.Push(packet);
                             }
                         }
                         else if (packet.IsEndOfStream && packet.PageGranulePosition > _currentPosition)
                         {
-                            _preparedLength -= (int)Math.Max(_currentPosition - packet.PageGranulePosition, 0L);
+                            _preparedLength -= (int)(_currentPosition - packet.PageGranulePosition);
                             packet.GranulePosition = packet.PageGranulePosition;
                         }
                     }
                 }
 
                 #endregion
+
+                // a little statistical housekeeping...
+                _bitsPerPacketHistory.Enqueue((int)packet.BitsRead);
+                _sampleCountHistory.Enqueue(samplesDecoded);
+
+                var sc = _sampleCountHistory.Sum();
+                while (sc > _sampleRate)
+                {
+                    _bitsPerPacketHistory.Dequeue();
+                    sc -= _sampleCountHistory.Dequeue();
+                }
 
                 _lastCenter = _centerW;
             }
@@ -624,8 +644,18 @@ namespace NVorbis
 
         #region Public Interface
 
+        /// <summary>
+        /// Reads decoded samples from the current logical stream
+        /// </summary>
+        /// <param name="buffer">The buffer to write the samples to</param>
+        /// <param name="offset">The offset into the buffer to write the samples to</param>
+        /// <param name="count">The number of samples to write</param>
+        /// <returns>The number of samples written</returns>
         public int ReadSamples(float[] buffer, int offset, int count)
         {
+            if (offset < 0) throw new ArgumentOutOfRangeException("offset");
+            if (count < 0 || offset + count > buffer.Length) throw new ArgumentOutOfRangeException("count");
+
             int samplesRead = 0;
 
             if (_prevBuffer != null)
@@ -677,19 +707,55 @@ namespace NVorbis
             return samplesRead + count;
         }
 
-        // TODO: Uncomment this when adding support for stream switching
-        //public int StreamCount
-        //{
-        //    get { return _reader.StreamSerials.Length; }
-        //}
+        /// <summary>
+        /// Returns the number of logical streams found so far in the physical container
+        /// </summary>
+        public int StreamCount
+        {
+            get { return _reader.StreamSerials.Length; }
+        }
 
+        /// <summary>
+        /// Switches to an alternate logical stream.
+        /// </summary>
+        /// <param name="index">The logical stream index to switch to</param>
+        /// <returns><c>True</c> if the properties of the logical stream differ from those of the one previously being decoded. Otherwise, <c>False</c>.</returns>
+        public bool SwitchStreams(int index)
+        {
+            if (index < 0 || index >= _reader.StreamSerials.Length) throw new ArgumentOutOfRangeException("index");
+
+            int channels = _channels;
+            int rate = _sampleRate;
+
+            _streamIdx = index - 1;
+            if (!InitNextStream())
+            {
+                throw new ArgumentException("The selected stream is not a valid Vorbis stream!");
+            }
+
+            return _channels != channels || rate != _sampleRate;
+        }
+
+        /// <summary>
+        /// Returns the last batch of samples from the previous logical stream being decoded
+        /// </summary>
+        public float[] GetSavedSamples()
+        {
+            var temp = _prevBuffer;
+            _prevBuffer = null;
+            return temp;
+        }
+
+        /// <summary>
+        /// Gets or Sets the current timestamp of the decoder.  Is the timestamp before the next sample to be decoded
+        /// </summary>
         public TimeSpan DecodedTime
         {
-            get { return TimeSpan.FromSeconds((double)(_currentPosition - _preparedLength) / SampleRate); }
+            get { return TimeSpan.FromSeconds((double)(_currentPosition - _preparedLength) / _sampleRate); }
             set
             {
                 // get the sample number to look for...
-                var sampleNum = (int)(value.TotalSeconds * SampleRate);
+                var sampleNum = (int)(value.TotalSeconds * _sampleRate);
 
                 _reader.SeekToSample(_streamSerial, sampleNum);
 
@@ -698,9 +764,12 @@ namespace NVorbis
             }
         }
 
+        /// <summary>
+        /// Gets the total length of the current logical stream
+        /// </summary>
         public TimeSpan TotalTime
         {
-            get { return TimeSpan.FromSeconds((double)_reader.GetLastGranulePos(_streamSerial) / SampleRate); }
+            get { return TimeSpan.FromSeconds((double)_reader.GetLastGranulePos(_streamSerial) / _sampleRate); }
         }
         
         #endregion

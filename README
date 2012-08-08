@@ -42,3 +42,10 @@ History
 	* Added NAudio support project
 	* Added test files & app
 	* Performance improvements
+0.3 - 08/08/2012
+	* Fixed Page / Packet decode (packets overlapping 2 pages)
+	* Fixed "no energy" packet handling
+	* Fixed packet reader not merging when unsolicited packets are added
+	* Added .gitignore
+	* Added initial multi-stream support
+	* Added statistics (see VorbisReader.Stats)
