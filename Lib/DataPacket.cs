@@ -11,67 +11,37 @@ using System.IO;
 
 namespace NVorbis
 {
-    class OggPacket
+    abstract class DataPacket
     {
-        Stream _stream;
-
-        List<long> _offsets;
-        List<int> _lengths;
-        int _curIdx;
-        int _curOfs;
-
         ulong _bitBucket;
         int _bitCount;
         long _readBits;
 
-        internal OggPacket(Stream stream, long startPos, int length)
+        protected DataPacket(int length)
         {
-            _stream = stream;
-
-            _offsets = new List<long>();
-            _lengths = new List<int>();
-            _curIdx = 0;
-            _curOfs = 0;
-
-            _offsets.Add(startPos);
-            _lengths.Add(length);
-
             Length = length;
         }
 
-        internal void MergeWith(OggPacket continuation)
+        internal void MergeWith(DataPacket continuation)
         {
-            _offsets.AddRange(continuation._offsets);
-            _lengths.AddRange(continuation._lengths);
-
-            Length += continuation.Length;
+            DoMergeWith(continuation);
         }
+
+        abstract protected void DoMergeWith(DataPacket continuation);
+
+        abstract protected bool CanReset { get; }
+        abstract protected void DoReset();
+        abstract protected int ReadNextByte();
 
         public void Reset()
         {
-            _curIdx = 0;
-            _curOfs = 0;
-            _stream.Position = _offsets[0];
+            if (!CanReset) throw new NotSupportedException();
+
+            DoReset();
 
             _bitBucket = 0UL;
             _bitCount = 0;
             _readBits = 0L;
-        }
-
-        int ReadNextByte()
-        {
-            if (_curIdx == _offsets.Count) return -1;
-
-            var pos = _offsets[_curIdx] + _curOfs;
-            if (_stream.Position != pos) _stream.Seek(pos, SeekOrigin.Begin);
-            var b = _stream.ReadByte();
-            ++_curOfs;
-            if (_curOfs >= _lengths[_curIdx])
-            {
-                ++_curIdx;
-                _curOfs = 0;
-            }
-            return b;
         }
 
         public ulong TryPeekBits(int count, out int bitsRead)
@@ -167,7 +137,7 @@ namespace NVorbis
         public bool IsResync { get; internal set; }
         public long GranulePosition { get; set; }
         public long PageGranulePosition { get; internal set; }
-        public int Length { get; private set; }
+        public int Length { get; protected set; }
         public bool IsEndOfStream { get; internal set; }
 
         public long BitsRead { get { return _readBits; } }

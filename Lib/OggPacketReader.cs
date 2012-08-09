@@ -16,28 +16,49 @@ namespace NVorbis
     {
         OggContainerReader _container;
         int _streamSerial;
-        bool _eosFound, _runMerge;
+        bool _eosFound;
 
         int _dataStartPacketIndex;
 
-        Queue<OggPacket> _packetQueue, _tempQueue;
-        List<OggPacket> _packetList;
+        Queue<DataPacket> _packetQueue;
+        List<DataPacket> _packetList;
+        DataPacket _lastAddedPacket;
 
         internal OggPacketReader(OggContainerReader container, int streamSerial)
         {
             _container = container;
             _streamSerial = streamSerial;
 
-            _packetQueue = new Queue<OggPacket>();
-            _tempQueue = new Queue<OggPacket>();
-            _packetList = new List<OggPacket>();
+            _packetQueue = new Queue<DataPacket>();
+            _packetList = new List<DataPacket>();
         }
 
-        internal void AddPacket(OggPacket packet)
+        internal void AddPacket(DataPacket packet)
         {
-            _runMerge |= packet.IsContinuation;
+            // if the packet is a resync, it cannot be a continuation...
+            if (packet.IsResync)
+            {
+                packet.IsContinuation = false;
+                if (_lastAddedPacket != null) packet.IsContinued = false;
+            }
+
+            if (packet.IsContinuation)
+            {
+                // if we get here, the stream is invalid if there isn't a previous packet
+                if (_lastAddedPacket == null) throw new InvalidDataException();
+
+                // if the last packet isn't continued, something is wrong
+                if (!_lastAddedPacket.IsContinued) throw new InvalidDataException();
+
+                _lastAddedPacket.MergeWith(packet);
+                _lastAddedPacket.IsContinued = packet.IsContinued;
+            }
+            else
+            {
+                _packetQueue.Enqueue(packet);
+                _lastAddedPacket = packet;
+            }
             _eosFound |= packet.IsEndOfStream;
-            _packetQueue.Enqueue(packet);
         }
 
         internal void SetDataStart()
@@ -47,57 +68,31 @@ namespace NVorbis
 
         void GetMorePackets()
         {
-            // gather pages until we have more packets or we've found the end of our stream...
-            var count = _packetQueue.Count;
-            while (!_eosFound && _packetQueue.Count == count) _container.GatherNextPage(_streamSerial);
+            // tell our container we need another page...  unless we've found the end of our stream.
+            if (!_eosFound) _container.GatherNextPage(_streamSerial);
         }
 
-        void MergeQueuePackets()
-        {
-            // if the queue is empty, we have nothing to do...
-            if (_packetQueue.Count == 0) return;
-
-            // try to merge things in
-            OggPacket lastPacket = null;
-            while (_packetQueue.Count > 0)
-            {
-                // get the next packet and queue it up
-                var packet = _packetQueue.Dequeue();
-
-                if (!packet.IsResync && packet.IsContinuation)
-                {
-                    if (lastPacket == null) throw new InvalidDataException();
-
-                    // continue the last packet
-                    lastPacket.MergeWith(packet);
-                }
-                else
-                {
-                    _tempQueue.Enqueue(packet);
-                    lastPacket = packet;
-                }
-            }
-            var temp = _packetQueue;
-            _packetQueue = _tempQueue;
-            _tempQueue = temp;
-
-            _runMerge = false;
-        }
-
-        internal OggPacket GetNextPacket()
+        internal DataPacket GetNextPacket()
         {
             // make sure we have some packets in the queue...
-            if (_packetQueue.Count <= 1)    // never wait until the last packet... makes merges happen correctly...
+            if (_packetQueue.Count == 0 || _packetQueue.Peek().IsContinued) // make sure we have at least 1 full packet available
             {
                 GetMorePackets();
 
+                // no packets, we must have a problem...
                 if (_packetQueue.Count == 0) throw new EndOfStreamException();
-            }
 
-            if (_runMerge) MergeQueuePackets();
+                if (_packetQueue.Count == 1)
+                {
+                    // we're on our last packet...  make sure it's not marked as continued
+                    _packetQueue.Peek().IsContinued &= !_eosFound;
+                }
+            }
 
             // get the next packet in the queue...
             var packet = _packetQueue.Dequeue();
+
+            if (packet.IsContinued) throw new InvalidDataException();
 
             // save off the packet for later (in case we start seeking around)
             _packetList.Add(packet);
@@ -108,9 +103,6 @@ namespace NVorbis
         internal void SeekToPacket(int index)
         {
             if (index < 0) throw new ArgumentOutOfRangeException("index");
-
-            // make sure we've merged-up everything...
-            MergeQueuePackets();
 
             if (index >= _packetList.Count + _packetQueue.Count) throw new ArgumentOutOfRangeException("index");
 
@@ -140,7 +132,6 @@ namespace NVorbis
                 if (_eosFound) throw new ArgumentOutOfRangeException("position");
 
                 GetMorePackets();
-                if (_runMerge) MergeQueuePackets();
 
                 if (_packetQueue.Count == 0) throw new EndOfStreamException();
 
@@ -188,11 +179,9 @@ namespace NVorbis
             {
                 _container.GatherNextPage(_streamSerial);
             }
-
-            MergeQueuePackets();
         }
 
-        internal OggPacket GetLastPacket()
+        internal DataPacket GetLastPacket()
         {
             ReadAllPages();
 

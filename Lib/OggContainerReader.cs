@@ -13,6 +13,70 @@ namespace NVorbis
 {
     class OggContainerReader : IDisposable
     {
+        class OggPacket : DataPacket
+        {
+            Stream _stream;
+
+            List<long> _offsets;
+            List<int> _lengths;
+            int _curIdx;
+            int _curOfs;
+
+            internal OggPacket(Stream stream, long startPos, int length)
+                : base(length)
+            {
+                _stream = stream;
+
+                _offsets = new List<long>();
+                _lengths = new List<int>();
+                _curIdx = 0;
+                _curOfs = 0;
+
+                _offsets.Add(startPos);
+                _lengths.Add(length);
+            }
+
+            protected override void DoMergeWith(NVorbis.DataPacket continuation)
+            {
+                var op = continuation as OggPacket;
+
+                if (op == null) throw new ArgumentException("Incorrect packet type!");
+
+                _offsets.AddRange(op._offsets);
+                _lengths.AddRange(op._lengths);
+
+                Length += continuation.Length;
+            }
+
+            protected override bool CanReset
+            {
+                get { return true; }
+            }
+
+            protected override void DoReset()
+            {
+                _curIdx = 0;
+                _curOfs = 0;
+                _stream.Position = _offsets[0];
+            }
+
+            protected override int ReadNextByte()
+            {
+                if (_curIdx == _offsets.Count) return -1;
+
+                var pos = _offsets[_curIdx] + _curOfs;
+                if (_stream.Position != pos) _stream.Seek(pos, SeekOrigin.Begin);
+                var b = _stream.ReadByte();
+                ++_curOfs;
+                if (_curOfs >= _lengths[_curIdx])
+                {
+                    ++_curIdx;
+                    _curOfs = 0;
+                }
+                return b;
+            }
+        }
+
         const uint CRC32_POLY = 0x04c11db7;
         static uint[] crcTable = new uint[256];
 
@@ -204,78 +268,84 @@ namespace NVorbis
             crc = (crc << 8) ^ crcTable[nextVal ^ (crc >> 24)];
         }
 
+        /// <summary>
+        /// Gathers pages until finding a page for the stream indicated
+        /// </summary>
         internal void GatherNextPage(int streamSerial)
         {
-            if (_eosFlags[streamSerial]) throw new EndOfStreamException();
-
             int pageStreamSerial, seqNo;
             long granulePosition, dataOffset;
             PageFlags pageFlags;
             int[] packetSizes;
             bool lastPacketContinues;
 
-            _stream.Position = _nextPageOffset;
-            var startPos = _nextPageOffset;
-
-            var isResync = false;
-            while (!ReadPageHeader(out pageStreamSerial, out pageFlags, out granulePosition, out seqNo, out dataOffset, out packetSizes, out lastPacketContinues))
+            do
             {
-                isResync = true;
+                if (_eosFlags[streamSerial]) throw new EndOfStreamException();
 
-                // gotta find the next sync header...
-                // start on the next byte...
-                _containerBits += 8;
-                _stream.Position++;
+                _stream.Position = _nextPageOffset;
+                var startPos = _nextPageOffset;
 
-                var cnt = 0;
-                while (++cnt < 65536)
+                var isResync = false;
+                while (!ReadPageHeader(out pageStreamSerial, out pageFlags, out granulePosition, out seqNo, out dataOffset, out packetSizes, out lastPacketContinues))
                 {
-                    if (_stream.ReadByte() == 0x4f)
+                    isResync = true;
+
+                    // gotta find the next sync header...
+                    // start on the next byte...
+                    _containerBits += 8;
+                    _stream.Position++;
+
+                    var cnt = 0;
+                    while (++cnt < 65536)
                     {
-                        var checkPos = _stream.Position;
-                        if (_stream.ReadByte() == 'g' && _stream.ReadByte() == 'g' && _stream.ReadByte() == 'S')
+                        if (_stream.ReadByte() == 0x4f)
                         {
-                            // found it!
-                            _stream.Position -= 4;
-                            startPos = _stream.Position;
-                        }
-                        else
-                        {
-                            _stream.Position = checkPos;
-                            _containerBits += 8;
+                            var checkPos = _stream.Position;
+                            if (_stream.ReadByte() == 'g' && _stream.ReadByte() == 'g' && _stream.ReadByte() == 'S')
+                            {
+                                // found it!
+                                _stream.Position -= 4;
+                                startPos = _stream.Position;
+                            }
+                            else
+                            {
+                                _stream.Position = checkPos;
+                                _containerBits += 8;
+                            }
                         }
                     }
+                    if (cnt == 65536) throw new InvalidDataException("Sync lost and could not find next page.");
                 }
-                if (cnt == 65536) throw new InvalidDataException("Sync lost and could not find next page.");
-            }
 
-            // we now have a parsed header...  generate packets...
-            if (!_packetReaders.ContainsKey(streamSerial))
-            {
-                _packetReaders.Add(streamSerial, new OggPacketReader(this, streamSerial));
-                _eosFlags.Add(streamSerial, false);
-                _streamSerials.Add(streamSerial);
-            }
+                // we now have a parsed header...  generate packets...
+                if (!_packetReaders.ContainsKey(pageStreamSerial))
+                {
+                    _packetReaders.Add(pageStreamSerial, new OggPacketReader(this, pageStreamSerial));
+                    _eosFlags.Add(pageStreamSerial, false);
+                    _streamSerials.Add(pageStreamSerial);
+                }
 
-            _packetReaders[streamSerial].AddPacket(new OggPacket(_stream, dataOffset, packetSizes[0]) { PageGranulePosition = granulePosition, IsContinued = false, IsContinuation = (pageFlags & PageFlags.ContinuesPacket) == PageFlags.ContinuesPacket, IsResync = isResync, PageSequenceNumber = seqNo });
-            dataOffset += packetSizes[0];
-            for (int i = 1; i < packetSizes.Length - 1; i++)
-            {
-                _packetReaders[streamSerial].AddPacket(new OggPacket(_stream, dataOffset, packetSizes[i]) { PageGranulePosition = granulePosition, IsContinued = false, IsContinuation = false, IsResync = false, PageSequenceNumber = seqNo });
-                dataOffset += packetSizes[i];
-            }
-            if (packetSizes.Length > 1)
-            {
-                _packetReaders[streamSerial].AddPacket(new OggPacket(_stream, dataOffset, packetSizes[packetSizes.Length - 1]) { PageGranulePosition = granulePosition, IsContinued = lastPacketContinues, IsContinuation = false, IsResync = false, IsEndOfStream = (pageFlags & PageFlags.EndOfStream) == PageFlags.EndOfStream, PageSequenceNumber = seqNo });
-            }
+                _packetReaders[pageStreamSerial].AddPacket(new OggPacket(_stream, dataOffset, packetSizes[0]) { PageGranulePosition = granulePosition, IsContinued = false, IsContinuation = (pageFlags & PageFlags.ContinuesPacket) == PageFlags.ContinuesPacket, IsResync = isResync, PageSequenceNumber = seqNo });
+                dataOffset += packetSizes[0];
+                for (int i = 1; i < packetSizes.Length - 1; i++)
+                {
+                    _packetReaders[pageStreamSerial].AddPacket(new OggPacket(_stream, dataOffset, packetSizes[i]) { PageGranulePosition = granulePosition, IsContinued = false, IsContinuation = false, IsResync = false, PageSequenceNumber = seqNo });
+                    dataOffset += packetSizes[i];
+                }
+                if (packetSizes.Length > 1)
+                {
+                    _packetReaders[pageStreamSerial].AddPacket(new OggPacket(_stream, dataOffset, packetSizes[packetSizes.Length - 1]) { PageGranulePosition = granulePosition, IsContinued = lastPacketContinues, IsContinuation = false, IsResync = false, IsEndOfStream = (pageFlags & PageFlags.EndOfStream) == PageFlags.EndOfStream, PageSequenceNumber = seqNo });
+                }
 
-            if ((pageFlags & PageFlags.EndOfStream) == PageFlags.EndOfStream)
-            {
-                _eosFlags[streamSerial] = true;
-            }
+                if ((pageFlags & PageFlags.EndOfStream) == PageFlags.EndOfStream)
+                {
+                    _eosFlags[pageStreamSerial] = true;
+                }
+            } while (pageStreamSerial != streamSerial);
         }
 
-        internal OggPacket GetNextPacket(int streamSerial)
+        internal DataPacket GetNextPacket(int streamSerial)
         {
             return _packetReaders[streamSerial].GetNextPacket();
         }
