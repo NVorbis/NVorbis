@@ -11,9 +11,9 @@ namespace NVorbis
 {
     abstract class VorbisMapping
     {
-        internal static VorbisMapping Init(VorbisReader vorbis, OggPacket reader)
+        internal static VorbisMapping Init(VorbisStreamDecoder vorbis, DataPacket packet)
         {
-            var type = (int)reader.ReadBits(16);
+            var type = (int)packet.ReadBits(16);
 
             VorbisMapping mapping = null;
             switch (type)
@@ -22,18 +22,18 @@ namespace NVorbis
             }
             if (mapping == null) throw new InvalidDataException();
 
-            mapping.Init(reader);
+            mapping.Init(packet);
             return mapping;
         }
 
-        VorbisReader _vorbis;
+        VorbisStreamDecoder _vorbis;
 
-        protected VorbisMapping(VorbisReader vorbis)
+        protected VorbisMapping(VorbisStreamDecoder vorbis)
         {
             _vorbis = vorbis;
         }
 
-        abstract protected void Init(OggPacket reader);
+        abstract protected void Init(DataPacket packet);
 
         internal Submap[] Submaps;
 
@@ -43,33 +43,33 @@ namespace NVorbis
 
         class Mapping0 : VorbisMapping
         {
-            internal Mapping0(VorbisReader vorbis) : base(vorbis) { }
+            internal Mapping0(VorbisStreamDecoder vorbis) : base(vorbis) { }
 
-            protected override void Init(OggPacket reader)
+            protected override void Init(DataPacket packet)
             {
                 var submapCount = 1;
-                if (reader.ReadBit()) submapCount += (int)reader.ReadBits(4);
+                if (packet.ReadBit()) submapCount += (int)packet.ReadBits(4);
 
                 // square polar mapping
                 var couplingSteps = 0;
-                if (reader.ReadBit())
+                if (packet.ReadBit())
                 {
-                    couplingSteps = (int)reader.ReadBits(8) + 1;
+                    couplingSteps = (int)packet.ReadBits(8) + 1;
                 }
 
                 var couplingBits = Utils.ilog(_vorbis._channels - 1);
                 CouplingSteps = new CouplingStep[couplingSteps];
                 for (int j = 0; j < couplingSteps; j++)
                 {
-                    var magnitude = (int)reader.ReadBits(couplingBits);
-                    var angle = (int)reader.ReadBits(couplingBits);
+                    var magnitude = (int)packet.ReadBits(couplingBits);
+                    var angle = (int)packet.ReadBits(couplingBits);
                     if (magnitude == angle || magnitude > _vorbis._channels - 1 || angle > _vorbis._channels - 1)
                         throw new InvalidDataException();
                     CouplingSteps[j] = new CouplingStep { Angle = angle, Magnitude = magnitude };
                 }
 
                 // reserved bits
-                if (reader.ReadBits(2) != 0UL) throw new InvalidDataException();
+                if (packet.ReadBits(2) != 0UL) throw new InvalidDataException();
 
                 // channel multiplex
                 var mux = new int[_vorbis._channels];
@@ -77,7 +77,7 @@ namespace NVorbis
                 {
                     for (int c = 0; c < ChannelSubmap.Length; c++)
                     {
-                        mux[c] = (int)reader.ReadBits(4);
+                        mux[c] = (int)packet.ReadBits(4);
                         if (mux[c] >= submapCount) throw new InvalidDataException();
                     }
                 }
@@ -86,10 +86,10 @@ namespace NVorbis
                 Submaps = new Submap[submapCount];
                 for (int j = 0; j < submapCount; j++)
                 {
-                    reader.ReadBits(8); // unused placeholder
-                    var floorNum = (int)reader.ReadBits(8);
+                    packet.ReadBits(8); // unused placeholder
+                    var floorNum = (int)packet.ReadBits(8);
                     if (floorNum >= _vorbis.Floors.Length) throw new InvalidDataException();
-                    var residueNum = (int)reader.ReadBits(8);
+                    var residueNum = (int)packet.ReadBits(8);
                     if (residueNum >= _vorbis.Residues.Length) throw new InvalidDataException();
 
                     Submaps[j] = new Submap

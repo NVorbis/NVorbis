@@ -13,11 +13,11 @@ namespace NVorbis
 {
     class VorbisCodebook
     {
-        internal static VorbisCodebook Init(VorbisReader vorbis, OggPacket reader, int number)
+        internal static VorbisCodebook Init(VorbisStreamDecoder vorbis, DataPacket packet, int number)
         {
             var temp = new VorbisCodebook();
             temp.BookNum = number;
-            temp.Init(reader);
+            temp.Init(packet);
             return temp;
         }
 
@@ -26,7 +26,7 @@ namespace NVorbis
 
         }
 
-        internal void Init(OggPacket packet)
+        internal void Init(DataPacket packet)
         {
             // first, check the sync pattern
             var chkVal = packet.ReadBits(24);
@@ -43,7 +43,7 @@ namespace NVorbis
             InitLookupTable(packet);
         }
 
-        void InitTree(OggPacket packet)
+        void InitTree(DataPacket packet)
         {
             bool sparse;
             int total = 0;
@@ -175,15 +175,15 @@ namespace NVorbis
             }
         }
 
-        void InitLookupTable(OggPacket reader)
+        void InitLookupTable(DataPacket packet)
         {
-            MapType = (int)reader.ReadBits(4);
+            MapType = (int)packet.ReadBits(4);
             if (MapType == 0) return;
 
-            var minValue = reader.ReadVorbisFloat();
-            var deltaValue = reader.ReadVorbisFloat();
-            var valueBits = (int)reader.ReadBits(4) + 1;
-            var sequence_p = reader.ReadBit();
+            var minValue = packet.ReadVorbisFloat();
+            var deltaValue = packet.ReadVorbisFloat();
+            var valueBits = (int)packet.ReadBits(4) + 1;
+            var sequence_p = packet.ReadBit();
 
             var lookupValueCount = Entries * Dimensions;
             var lookupTable = new float[lookupValueCount];
@@ -195,7 +195,7 @@ namespace NVorbis
             var multiplicands = new uint[lookupValueCount];
             for (var i = 0; i < lookupValueCount; i++)
             {
-                multiplicands[i] = (uint)reader.ReadBits(valueBits);
+                multiplicands[i] = (uint)packet.ReadBits(valueBits);
             }
 
             // now that we have the initial data read in, calculate the entry tree
@@ -262,7 +262,7 @@ namespace NVorbis
         HuffmanListNode<int> LTree;
         int MaxBits;
 
-        internal void DecodeVQ(OggPacket packet, Action<float> writeValue)
+        internal void DecodeVQ(DataPacket packet, Action<float> writeValue)
         {
             var entry = DecodeScalar(packet);
             for (int ofs = entry * Dimensions, i = 0; i < Dimensions; ofs++, i++)
@@ -271,7 +271,7 @@ namespace NVorbis
             }
         }
 
-        internal int DecodeScalar(OggPacket packet)
+        internal int DecodeScalar(DataPacket packet)
         {
             // try to get as many bits as possible...
             int bitCnt; // we really don't care how many bits were read; try to decode anyway...

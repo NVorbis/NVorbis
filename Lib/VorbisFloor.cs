@@ -14,9 +14,9 @@ namespace NVorbis
 {
     abstract class VorbisFloor
     {
-        internal static VorbisFloor Init(VorbisReader vorbis, OggPacket reader)
+        internal static VorbisFloor Init(VorbisStreamDecoder vorbis, DataPacket packet)
         {
-            var type = (int)reader.ReadBits(16);
+            var type = (int)packet.ReadBits(16);
 
             VorbisFloor floor = null;
             switch (type)
@@ -26,92 +26,134 @@ namespace NVorbis
             }
             if (floor == null) throw new InvalidDataException();
 
-            floor.Init(reader);
+            floor.Init(packet);
             return floor;
         }
 
-        VorbisReader _vorbis;
+        VorbisStreamDecoder _vorbis;
 
-        protected VorbisFloor(VorbisReader vorbis)
+        protected VorbisFloor(VorbisStreamDecoder vorbis)
         {
             _vorbis = vorbis;
         }
 
-        abstract protected void Init(OggPacket reader);
+        abstract protected void Init(DataPacket packet);
 
-        abstract internal float[] DecodePacket(OggPacket reader, int blockSize);
+        abstract internal PacketData UnpackPacket(DataPacket packet, int blockSize);
+
+        abstract internal void Apply(PacketData packetData, float[] residue);
+
+        abstract internal class PacketData
+        {
+            internal int BlockSize;
+            abstract protected bool HasEnergy { get; }
+            internal bool ForceEnergy { get; set; }
+            internal bool ForceNoEnergy { get; set; }
+
+            internal bool ExecuteChannel
+            {
+                // if we have energy or are forcing energy, return !ForceNoEnergy, else false
+                get { return (ForceEnergy | HasEnergy) & !ForceNoEnergy; }
+            }
+        }
 
         class Floor0 : VorbisFloor
         {
-            internal Floor0(VorbisReader vorbis) : base(vorbis) { }
+            internal Floor0(VorbisStreamDecoder vorbis) : base(vorbis) { }
 
             int _order, _rate, _bark_map_size, _ampBits, _ampOfs;
             VorbisCodebook[] _books;
             int _bookBits;
+            Dictionary<int, float[]> _barkMaps;
 
-            protected override void Init(OggPacket reader)
+            protected override void Init(DataPacket packet)
             {
-                _order = (int)reader.ReadBits(8);
-                _rate = (int)reader.ReadBits(16);
-                _bark_map_size = (int)reader.ReadBits(16);
-                _ampBits = (int)reader.ReadBits(6);
-                _ampOfs = (int)reader.ReadBits(8);
+                _order = (int)packet.ReadBits(8);
+                _rate = (int)packet.ReadBits(16);
+                _bark_map_size = (int)packet.ReadBits(16);
+                _ampBits = (int)packet.ReadBits(6);
+                _ampOfs = (int)packet.ReadBits(8);
 
-                _books = new VorbisCodebook[(int)reader.ReadBits(4) + 1];
+                _books = new VorbisCodebook[(int)packet.ReadBits(4) + 1];
                 for (int i = 0; i < _books.Length; i++)
                 {
-                    _books[i] = _vorbis.Books[(int)reader.ReadBits(8)];
+                    _books[i] = _vorbis.Books[(int)packet.ReadBits(8)];
                 }
                 _bookBits = Utils.ilog(_books.Length);
+
+                _barkMaps = new Dictionary<int, float[]>();
+                _barkMaps[_vorbis.Block0Size] = SynthesizeBarkCurve(_vorbis.Block0Size);
+                _barkMaps[_vorbis.Block1Size] = SynthesizeBarkCurve(_vorbis.Block1Size);
             }
 
-            internal override float[] DecodePacket(OggPacket reader, int blockSize)
+            float[] SynthesizeBarkCurve(int n)
             {
-                float amplitude;
-                var coeff = ReadCoefficients(reader, out amplitude);
-                if (amplitude == 0.0) return null;
-                
-                return ComputeCurve(blockSize, coeff, amplitude);
+                var map = new float[n + 1];
+                for (int i = 0; i < n - 1; i++)
+                {
+                    var foobar = toBARK((_rate * i) / (2 * n)) * (_bark_map_size / toBARK(.5 * _rate));
+                    map[i] = Math.Min(_bark_map_size - 1, foobar);
+                }
+                map[n] = -1.0f;
+                return map;
             }
 
-            float[] ReadCoefficients(OggPacket reader, out float amplitude)
+            static float toBARK(double lsp)
             {
-                amplitude = (uint)reader.ReadBits(_ampBits);
-                if (amplitude > 0)
+                return (float)(13.1 * Math.Atan(0.00074 * lsp) + 2.24 * Math.Atan(0.0000000185 * lsp * lsp) + .0001 * lsp);
+            }
+
+            class PacketData0 : PacketData
+            {
+                protected override bool HasEnergy
+                {
+                    get { return Amp > 0f; }
+                }
+
+                internal float[] Coeff;
+                internal float Amp;
+            }
+
+            internal override PacketData UnpackPacket(DataPacket packet, int blockSize)
+            {
+                var data = new PacketData0 { BlockSize = blockSize };
+                data.Amp = packet.ReadBits(_ampBits);
+                if (data.Amp > 0f)
                 {
                     try
                     {
                         var coefficients = new List<float>();
-                        var bookNum = (uint)reader.ReadBits(_bookBits);
+                        var bookNum = (uint)packet.ReadBits(_bookBits);
                         if (bookNum >= _books.Length) throw new InvalidDataException();
                         var book = _books[bookNum];
 
                         for (int i = 0; i < _order; i++)
                         {
-                            book.DecodeVQ(reader, t => coefficients.Add(t));
+                            book.DecodeVQ(packet, t => coefficients.Add(t));
                         }
 
-                        return coefficients.ToArray();
+                        data.Coeff = coefficients.ToArray();
                     }
                     catch (EndOfStreamException)
                     {
                         // per the spec, an end of packet condition here indicates "no floor"
-                        amplitude = 0.0f;
+                        data.Amp = 0.0f;
                     }
                 }
-                return null;
+                return data;
             }
 
-            float[] ComputeCurve(int blockSize, float[] coefficients, float amplitude)
+            internal override void Apply(PacketData packetData, float[] residue)
             {
-                var curve = ACache.Get<float>(blockSize, false);// new float[blockSize];
+                var data = packetData as PacketData0;
+                if (data == null) throw new ArgumentException("Incorrect packet data!");
 
-                if (amplitude > 0.0)
+                if (data.Amp > 0f)
                 {
                     // now we have the black art of high-end math... (this version is slow!)
-                    var barkMap = SynthesizeBarkCurve(blockSize);
+                    var barkMap = _barkMaps[data.BlockSize];
 
-                    for (int i = 0; i < blockSize;)
+                    for (int i = 0; i < data.BlockSize; )
                     {
                         var w = Math.PI * barkMap[i] / _bark_map_size;
                         float multiplierP, multiplierQ;
@@ -136,23 +178,23 @@ namespace NVorbis
                         var p = multiplierP *
                             (_order - orderAdjP) /
                             (
-                                (4 * Math.Pow(Math.Cos(coefficients[1]) - Math.Cos(w), 2)) *
-                                (4 * Math.Pow(Math.Cos(coefficients[3]) - Math.Cos(w), 2)) *
-                                (4 * Math.Pow(Math.Cos(coefficients[5]) - Math.Cos(w), 2))
+                                (4 * Math.Pow(Math.Cos(data.Coeff[1]) - Math.Cos(w), 2)) *
+                                (4 * Math.Pow(Math.Cos(data.Coeff[3]) - Math.Cos(w), 2)) *
+                                (4 * Math.Pow(Math.Cos(data.Coeff[5]) - Math.Cos(w), 2))
                             );
                         var q = multiplierQ *
                             (_order - orderAdjQ) /
                             (
-                                (4 * Math.Pow(Math.Cos(coefficients[0]) - Math.Cos(w), 2)) *
-                                (4 * Math.Pow(Math.Cos(coefficients[2]) - Math.Cos(w), 2)) *
-                                (4 * Math.Pow(Math.Cos(coefficients[4]) - Math.Cos(w), 2))
+                                (4 * Math.Pow(Math.Cos(data.Coeff[0]) - Math.Cos(w), 2)) *
+                                (4 * Math.Pow(Math.Cos(data.Coeff[2]) - Math.Cos(w), 2)) *
+                                (4 * Math.Pow(Math.Cos(data.Coeff[4]) - Math.Cos(w), 2))
                             );
 
                         // finally, get the linear value
                         var value = (float)Math.Exp(
                             .11512925 *
                             (
-                                (amplitude * _ampOfs) /
+                                (data.Amp * _ampOfs) /
                                 (
                                     ((1 << _ampBits) - 1) *
                                     Math.Sqrt(p + q)
@@ -164,39 +206,18 @@ namespace NVorbis
                         while (true)
                         {
                             var iteration_condition = barkMap[i];
-                            curve[i] = value;
+                            residue[i] *= value;
                             i++;
                             if (barkMap[i] != iteration_condition) break;
                         }
                     }
-
-                    ACache.Return(ref barkMap);
                 }
-
-                return curve;
-            }
-
-            float[] SynthesizeBarkCurve(int n)
-            {
-                var map = ACache.Get<float>(n + 1, false);// new float[n + 1];
-                for (int i = 0; i < n - 1; i++)
-                {
-                    var foobar = toBARK((_rate * i) / (2 * n)) * (_bark_map_size / toBARK(.5 * _rate));
-                    map[i] = Math.Min(_bark_map_size - 1, foobar);
-                }
-                map[n] = -1.0f;
-                return map;
-            }
-
-            static float toBARK(double lsp)
-            {
-                return (float)(13.1 * Math.Atan(0.00074 * lsp) + 2.24 * Math.Atan(0.0000000185 * lsp * lsp) + .0001 * lsp);
             }
         }
 
         class Floor1 : VorbisFloor
         {
-            internal Floor1(VorbisReader vorbis) : base(vorbis) { }
+            internal Floor1(VorbisStreamDecoder vorbis) : base(vorbis) { }
 
             int[] _partitionClass, _classDimensions, _classSubclasses, _xList, _classMasterBookIndex, _hNeigh, _lNeigh, _sortIdx;
             int _multiplier, _range, _yBits;
@@ -207,12 +228,12 @@ namespace NVorbis
             static int[] _rangeLookup = { 256, 128, 86, 64 };
             static int[] _yBitsLookup = { 8, 7, 7, 6 };
 
-            protected override void Init(OggPacket reader)
+            protected override void Init(DataPacket packet)
             {
-                _partitionClass = new int[(int)reader.ReadBits(5)];
+                _partitionClass = new int[(int)packet.ReadBits(5)];
                 for (int i = 0; i < _partitionClass.Length; i++)
                 {
-                    _partitionClass[i] = (int)reader.ReadBits(4);
+                    _partitionClass[i] = (int)packet.ReadBits(4);
                 }
 
                 var maximum_class = _partitionClass.Max();
@@ -224,11 +245,11 @@ namespace NVorbis
                 _subclassBookIndex = new int[maximum_class + 1][];
                 for (int i = 0; i <= maximum_class; i++)
                 {
-                    _classDimensions[i] = (int)reader.ReadBits(3) + 1;
-                    _classSubclasses[i] = (int)reader.ReadBits(2);
+                    _classDimensions[i] = (int)packet.ReadBits(3) + 1;
+                    _classSubclasses[i] = (int)packet.ReadBits(2);
                     if (_classSubclasses[i] > 0)
                     {
-                        _classMasterBookIndex[i] = (int)reader.ReadBits(8);
+                        _classMasterBookIndex[i] = (int)packet.ReadBits(8);
                         _classMasterbooks[i] = _vorbis.Books[_classMasterBookIndex[i]];
                     }
 
@@ -236,20 +257,20 @@ namespace NVorbis
                     _subclassBookIndex[i] = new int[_subclassBooks[i].Length];
                     for (int j = 0; j < _subclassBooks[i].Length; j++)
                     {
-                        var bookNum = (int)reader.ReadBits(8) - 1;
+                        var bookNum = (int)packet.ReadBits(8) - 1;
                         if (bookNum >= 0) _subclassBooks[i][j] = _vorbis.Books[bookNum];
                         _subclassBookIndex[i][j] = bookNum;
                     }
                 }
 
-                _multiplier = (int)reader.ReadBits(2);
+                _multiplier = (int)packet.ReadBits(2);
 
                 _range = _rangeLookup[_multiplier];
                 _yBits = _yBitsLookup[_multiplier];
 
                 ++_multiplier;
 
-                var rangeBits = (int)reader.ReadBits(4);
+                var rangeBits = (int)packet.ReadBits(4);
 
                 var xList = new List<int>();
                 xList.Add(0);
@@ -260,7 +281,7 @@ namespace NVorbis
                     var classNum = _partitionClass[i];
                     for (int j = 0; j < _classDimensions[classNum]; j++)
                     {
-                        xList.Add((int)reader.ReadBits(rangeBits));
+                        xList.Add((int)packet.ReadBits(rangeBits));
                     }
                 }
                 _xList = xList.ToArray();
@@ -308,24 +329,78 @@ namespace NVorbis
                 }
             }
 
-            internal override float[] DecodePacket(OggPacket reader, int blockSize)
+            class PacketData1 : PacketData
             {
-                var posts = ReadPosts(reader);
-                if (posts == null) return null;
+                protected override bool HasEnergy
+                {
+                    get { return Posts != null; }
+                }
 
-                var stepFlags = UnwrapPosts(posts);
-                return ComputeCurve(posts, stepFlags, blockSize);
+                public int[] Posts;
             }
 
-            int[] ReadPosts(OggPacket reader)
+            internal override PacketData UnpackPacket(DataPacket packet, int blockSize)
             {
-                if (!reader.ReadBit()) return null;
+                var data = new PacketData1 { BlockSize = blockSize };
+                data.Posts = ReadPosts(packet);
+                return data;
+            }
+
+            internal override void Apply(PacketData packetData, float[] residue)
+            {
+                var data = packetData as PacketData1;
+                if (data == null) throw new InvalidDataException("Incorrect packet data!");
+
+                if (data.Posts != null)
+                {
+                    var stepFlags = UnwrapPosts(data.Posts);
+
+                    var n = data.BlockSize / 2;
+
+                    var lx = 0;
+                    var ly = data.Posts[0] * _multiplier;
+                    for (int i = 1; i < data.Posts.Length; i++)
+                    {
+                        var idx = _sortIdx[i];
+
+                        if (stepFlags[idx])
+                        {
+                            var hx = _xList[idx];
+                            var hy = data.Posts[idx] * _multiplier;
+                            if (lx < n) RenderLineMulti(lx, ly, Math.Min(hx, n), hy, residue);
+                            lx = hx;
+                            ly = hy;
+                        }
+                        if (lx >= n) break;
+                    }
+
+                    ACache.Return(ref stepFlags);
+
+                    if (lx < n)
+                    {
+                        RenderLineMulti(lx, ly, n, ly, residue);
+                    }
+                }
+            }
+
+            //internal override float[] DecodePacket(DataPacket packet, int blockSize)
+            //{
+            //    var posts = ReadPosts(packet);
+            //    if (posts == null) return null;
+
+            //    var stepFlags = UnwrapPosts(posts);
+            //    return ComputeCurve(posts, stepFlags, blockSize);
+            //}
+
+            int[] ReadPosts(DataPacket packet)
+            {
+                if (!packet.ReadBit()) return null;
 
                 try
                 {
                     var y = new List<int>();
-                    y.Add((int)reader.ReadBits(_yBits));
-                    y.Add((int)reader.ReadBits(_yBits));
+                    y.Add((int)packet.ReadBits(_yBits));
+                    y.Add((int)packet.ReadBits(_yBits));
 
                     for (int i = 0; i < _partitionClass.Length; i++)
                     {
@@ -336,7 +411,7 @@ namespace NVorbis
                         var cval = 0U;
                         if (cbits > 0)
                         {
-                            cval = (uint)_classMasterbooks[clsNum].DecodeScalar(reader);
+                            cval = (uint)_classMasterbooks[clsNum].DecodeScalar(packet);
                         }
                         for (int j = 0; j < cdim; j++)
                         {
@@ -344,7 +419,7 @@ namespace NVorbis
                             cval >>= cbits;
                             if (book != null)
                             {
-                                y.Add((int)book.DecodeScalar(reader));
+                                y.Add((int)book.DecodeScalar(packet));
                             }
                             else
                             {
@@ -438,38 +513,38 @@ namespace NVorbis
                 return stepFlags;
             }
 
-            float[] ComputeCurve(int[] y, bool[] stepFlags, int blockSize)
-            {
-                var n = blockSize / 2;
+            //float[] ComputeCurve(int[] y, bool[] stepFlags, int blockSize)
+            //{
+            //    var n = blockSize / 2;
 
-                var floor = ACache.Get<float>(blockSize, false);
+            //    var floor = ACache.Get<float>(blockSize, false);
 
-                var lx = 0;
-                var ly = y[0] * _multiplier;
-                for (int i = 1; i < y.Length; i++)
-                {
-                    var idx = _sortIdx[i];
+            //    var lx = 0;
+            //    var ly = y[0] * _multiplier;
+            //    for (int i = 1; i < y.Length; i++)
+            //    {
+            //        var idx = _sortIdx[i];
 
-                    if (stepFlags[idx])
-                    {
-                        var hx = _xList[idx];
-                        var hy = y[idx] * _multiplier;
-                        if (lx < n) RenderLine(lx, ly, Math.Min(hx, n), hy, floor);
-                        lx = hx;
-                        ly = hy;
-                    }
-                    if (lx >= n) break;
-                }
+            //        if (stepFlags[idx])
+            //        {
+            //            var hx = _xList[idx];
+            //            var hy = y[idx] * _multiplier;
+            //            if (lx < n) RenderLine(lx, ly, Math.Min(hx, n), hy, floor);
+            //            lx = hx;
+            //            ly = hy;
+            //        }
+            //        if (lx >= n) break;
+            //    }
 
-                ACache.Return(ref stepFlags);
+            //    ACache.Return(ref stepFlags);
 
-                if (lx < n)
-                {
-                    RenderLine(lx, ly, n, ly, floor);
-                }
+            //    if (lx < n)
+            //    {
+            //        RenderLine(lx, ly, n, ly, floor);
+            //    }
 
-                return floor;
-            }
+            //    return floor;
+            //}
 
             int RenderPoint(int x0, int y0, int x1, int y1, int X)
             {
@@ -488,19 +563,47 @@ namespace NVorbis
                 }
             }
 
-            void RenderLine(int x0, int y0, int x1, int y1, float[] v)
+            //void RenderLine(int x0, int y0, int x1, int y1, float[] v)
+            //{
+            //    var dy = y1 - y0;
+            //    var adx = x1 - x0;
+            //    var ady = Math.Abs(dy);
+            //    var sy = 1 - (((dy >> 31) & 1) * 2);
+            //    var b = dy / adx;
+            //    var x = x0;
+            //    var y = y0;
+            //    var err = -adx;
+                
+            //    v[x0] = inverse_dB_table[y0];
+            //    ady -= Math.Abs(b) * adx;
+                
+            //    while (++x < x1)
+            //    {
+            //        y += b;
+            //        err += ady;
+            //        if (err >= 0)
+            //        {
+            //            err -= adx;
+            //            y += sy;
+            //        }
+            //        v[x] = inverse_dB_table[y];
+            //    }
+            //}
+
+            void RenderLineMulti(int x0, int y0, int x1, int y1, float[] v)
             {
                 var dy = y1 - y0;
                 var adx = x1 - x0;
                 var ady = Math.Abs(dy);
-                var sy = 1 - (((dy >> 31) & 1) * 2);    // sign of dy
-                v[x0] = inverse_dB_table[y0];
-                // TODO: optimized version?
+                var sy = 1 - (((dy >> 31) & 1) * 2);
                 var b = dy / adx;
                 var x = x0;
                 var y = y0;
                 var err = -adx;
+
+                v[x0] *= inverse_dB_table[y0];
                 ady -= Math.Abs(b) * adx;
+
                 while (++x < x1)
                 {
                     y += b;
@@ -510,7 +613,7 @@ namespace NVorbis
                         err -= adx;
                         y += sy;
                     }
-                    v[x] = inverse_dB_table[y];
+                    v[x] *= inverse_dB_table[y];
                 }
             }
 

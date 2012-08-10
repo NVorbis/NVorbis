@@ -8,6 +8,9 @@
 	- Add a constructor for VorbisReader that accepts a NetworkStream
 		- Possibly another System.Net member?  Needs thought.
 
+* Matroska support
+	- Needs a base EBML reader
+
 * More optimization
 	- look for places where we can move logic into header decode
 	- more profiling

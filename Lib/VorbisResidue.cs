@@ -13,9 +13,9 @@ namespace NVorbis
 {
     abstract class VorbisResidue
     {
-        internal static VorbisResidue Init(VorbisReader vorbis, OggPacket reader)
+        internal static VorbisResidue Init(VorbisStreamDecoder vorbis, DataPacket packet)
         {
-            var type = (int)reader.ReadBits(16);
+            var type = (int)packet.ReadBits(16);
 
             VorbisResidue residue = null;
             switch (type)
@@ -26,32 +26,32 @@ namespace NVorbis
             }
             if (residue == null) throw new InvalidDataException();
 
-            residue.Init(reader);
+            residue.Init(packet);
             return residue;
         }
 
-        VorbisReader _vorbis;
+        VorbisStreamDecoder _vorbis;
 
-        protected VorbisResidue(VorbisReader vorbis)
+        protected VorbisResidue(VorbisStreamDecoder vorbis)
         {
             _vorbis = vorbis;
         }
 
-        abstract internal float[][] Decode(OggPacket reader, bool[] doNotDecode, int channels, int blockSize);
+        abstract internal float[][] Decode(DataPacket packet, bool[] doNotDecode, int channels, int blockSize);
 
-        abstract protected void Init(OggPacket reader);
+        abstract protected void Init(DataPacket packet);
 
         class Residue0 : VorbisResidue
         {
-            internal Residue0(VorbisReader vorbis) : base(vorbis) { }
+            internal Residue0(VorbisStreamDecoder vorbis) : base(vorbis) { }
 
-            protected override void Init(OggPacket reader)
+            protected override void Init(DataPacket packet)
             {
-                _begin = (int)reader.ReadBits(24);
-                _end = (int)reader.ReadBits(24);
-                _partitionSize = (int)reader.ReadBits(24) + 1;
-                _classifications = (int)reader.ReadBits(6) + 1;
-                _classBookNum = (int)reader.ReadBits(8);
+                _begin = (int)packet.ReadBits(24);
+                _end = (int)packet.ReadBits(24);
+                _partitionSize = (int)packet.ReadBits(24) + 1;
+                _classifications = (int)packet.ReadBits(6) + 1;
+                _classBookNum = (int)packet.ReadBits(8);
 
                 _classBook = _vorbis.Books[_classBookNum];
 
@@ -61,8 +61,8 @@ namespace NVorbis
                 for (int i = 0; i < _classifications; i++)
                 {
                     var high_bits = 0;
-                    var low_bits = (int)reader.ReadBits(3);
-                    if (reader.ReadBit()) high_bits = (int)reader.ReadBits(5);
+                    var low_bits = (int)packet.ReadBits(3);
+                    if (packet.ReadBit()) high_bits = (int)packet.ReadBits(5);
                     _cascade[i] = high_bits << 3 | low_bits;
                     acc += icount(_cascade[i]);
                     maxBits = Math.Max(Utils.ilog(_cascade[i]), maxBits);
@@ -72,7 +72,7 @@ namespace NVorbis
                 var bookNums = new int[acc];
                 for (var i = 0; i < acc; i++)
                 {
-                    bookNums[i] = (int)reader.ReadBits(8);
+                    bookNums[i] = (int)packet.ReadBits(8);
                 }
 
                 var bookIdx = 0;
@@ -129,7 +129,7 @@ namespace NVorbis
             protected int _partsToRead;
             protected int _partWords;
 
-            internal override float[][] Decode(OggPacket reader, bool[] doNotDecode, int channels, int blockSize)
+            internal override float[][] Decode(DataPacket packet, bool[] doNotDecode, int channels, int blockSize)
             {
                 var residue = ACache.Get<float>(doNotDecode.Length, blockSize);
 
@@ -147,7 +147,7 @@ namespace NVorbis
                                 {
                                     if (!doNotDecode[j])
                                     {
-                                        var temp = _classBook.DecodeScalar(reader);
+                                        var temp = _classBook.DecodeScalar(packet);
                                         for (int pi = _classWordsPerCodeWord - 1; pi >= 0; pi--)
                                         {
                                             cls[j][l][pi] = temp % _classifications;
@@ -167,7 +167,7 @@ namespace NVorbis
                                         var codebook = _books[vqclass][pass];
                                         if (codebook != null && codebook.MapType != 0)
                                         {
-                                            WriteVectors(codebook, reader, residue[j], offset, channel: j);
+                                            WriteVectors(codebook, packet, residue[j], offset, channel: j);
                                         }
                                     }
                                 }
@@ -181,7 +181,7 @@ namespace NVorbis
                 return residue;
             }
 
-            virtual protected void WriteVectors(VorbisCodebook codebook, OggPacket reader, float[] residue, int offset, int channel)
+            virtual protected void WriteVectors(VorbisCodebook codebook, DataPacket packet, float[] residue, int offset, int channel)
             {
                 var step = _nToRead / codebook.Dimensions;
 
@@ -189,7 +189,7 @@ namespace NVorbis
                 {
                     var j = 0;
                     codebook.DecodeVQ(
-                        reader,
+                        packet,
                         f =>
                         {
                             residue[offset + i + j++ * step] += f;
@@ -201,14 +201,14 @@ namespace NVorbis
 
         class Residue1 : Residue0
         {
-            internal Residue1(VorbisReader vorbis) : base(vorbis) { }
+            internal Residue1(VorbisStreamDecoder vorbis) : base(vorbis) { }
 
-            protected override void WriteVectors(VorbisCodebook codebook, OggPacket reader, float[] residue, int offset, int channel)
+            protected override void WriteVectors(VorbisCodebook codebook, DataPacket packet, float[] residue, int offset, int channel)
             {
                 for (int i = 0; i < _partitionSize;)
                 {
                     codebook.DecodeVQ(
-                        reader,
+                        packet,
                         f =>
                         {
                             residue[offset + i++] += f;
@@ -220,9 +220,9 @@ namespace NVorbis
 
         class Residue2 : Residue1
         {
-            internal Residue2(VorbisReader vorbis) : base(vorbis) { }
+            internal Residue2(VorbisStreamDecoder vorbis) : base(vorbis) { }
 
-            internal override float[][] Decode(OggPacket reader, bool[] doNotDecode, int channels, int blockSize)
+            internal override float[][] Decode(DataPacket packet, bool[] doNotDecode, int channels, int blockSize)
             {
                 var residue = ACache.Get<float>(channels, blockSize);
 
@@ -238,7 +238,7 @@ namespace NVorbis
                             {
                                 if (pass == 0)
                                 {
-                                    var temp = _classBook.DecodeScalar(reader);
+                                    var temp = _classBook.DecodeScalar(packet);
                                     for (int c = _classWordsPerCodeWord - 1; c >= 0 && temp > 0; c--)
                                     {
                                         cls[l][c] = temp % _classifications;
@@ -258,7 +258,7 @@ namespace NVorbis
                                         for (int c = 0; c < _partitionSize / channels; )
                                         {
                                             codebook.DecodeVQ(
-                                                reader,
+                                                packet,
                                                 f =>
                                                 {
                                                     residue[chPtr++][t + c] += f;

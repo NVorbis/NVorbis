@@ -10,11 +10,11 @@ using System.Collections.Generic;
 using System.Linq;
 using System.IO;
 
-namespace NVorbis
+namespace NVorbis.Ogg
 {
-    class OggPacketReader
+    class PacketReader
     {
-        OggContainerReader _container;
+        ContainerReader _container;
         int _streamSerial;
         bool _eosFound;
 
@@ -22,15 +22,17 @@ namespace NVorbis
 
         Queue<DataPacket> _packetQueue;
         List<DataPacket> _packetList;
+        List<int> _pageList;
         DataPacket _lastAddedPacket;
 
-        internal OggPacketReader(OggContainerReader container, int streamSerial)
+        internal PacketReader(ContainerReader container, int streamSerial)
         {
             _container = container;
             _streamSerial = streamSerial;
 
             _packetQueue = new Queue<DataPacket>();
             _packetList = new List<DataPacket>();
+            _pageList = new List<int>();
         }
 
         internal void AddPacket(DataPacket packet)
@@ -58,6 +60,9 @@ namespace NVorbis
                 _packetQueue.Enqueue(packet);
                 _lastAddedPacket = packet;
             }
+
+            if (!_pageList.Contains(packet.PageSequenceNumber)) _pageList.Add(packet.PageSequenceNumber);
+
             _eosFound |= packet.IsEndOfStream;
         }
 
@@ -75,18 +80,21 @@ namespace NVorbis
         internal DataPacket GetNextPacket()
         {
             // make sure we have some packets in the queue...
-            if (_packetQueue.Count == 0 || _packetQueue.Peek().IsContinued) // make sure we have at least 1 full packet available
+            while (_packetQueue.Count == 0 || _packetQueue.Peek().IsContinued) // make sure we have at least 1 full packet available
             {
                 GetMorePackets();
 
-                // no packets, we must have a problem...
-                if (_packetQueue.Count == 0) throw new EndOfStreamException();
-
                 if (_packetQueue.Count == 1)
                 {
-                    // we're on our last packet...  make sure it's not marked as continued
-                    _packetQueue.Peek().IsContinued &= !_eosFound;
+                    // per the spec, if the last packet is a partial, ignore it.
+                    if (_eosFound && _packetQueue.Peek().IsContinued)
+                    {
+                        _packetQueue.Dequeue();
+                    }
                 }
+
+                // no packets, we must have a problem...
+                if (_packetQueue.Count == 0) throw new EndOfStreamException();
             }
 
             // get the next packet in the queue...
@@ -186,6 +194,13 @@ namespace NVorbis
             ReadAllPages();
 
             return _packetQueue.LastOrDefault() ?? _packetList.Last();
+        }
+
+        internal int GetTotalPageCount()
+        {
+            ReadAllPages();
+
+            return _pageList.Count;
         }
     }
 }

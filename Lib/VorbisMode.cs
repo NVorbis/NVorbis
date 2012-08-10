@@ -15,13 +15,13 @@ namespace NVorbis
         const float M_PI = (float)Math.PI;
         const float M_PI2 = M_PI / 2;
 
-        internal static VorbisMode Init(VorbisReader vorbis, OggPacket reader)
+        internal static VorbisMode Init(VorbisStreamDecoder vorbis, DataPacket packet)
         {
             var mode = new VorbisMode(vorbis);
-            mode.BlockFlag = reader.ReadBit();
-            mode.WindowType = (int)reader.ReadBits(16);
-            mode.TransformType = (int)reader.ReadBits(16);
-            var mapping = (int)reader.ReadBits(8);
+            mode.BlockFlag = packet.ReadBit();
+            mode.WindowType = (int)packet.ReadBits(16);
+            mode.TransformType = (int)packet.ReadBits(16);
+            var mapping = (int)packet.ReadBits(8);
 
             if (mode.WindowType != 0 || mode.TransformType != 0 || mapping >= vorbis.Maps.Length) throw new InvalidDataException();
 
@@ -49,11 +49,11 @@ namespace NVorbis
             return mode;
         }
 
-        VorbisReader _vorbis;
+        VorbisStreamDecoder _vorbis;
 
         float[][] _windows;
 
-        private VorbisMode(VorbisReader vorbis)
+        private VorbisMode(VorbisStreamDecoder vorbis)
         {
             _vorbis = vorbis;
         }

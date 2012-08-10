@@ -7,7 +7,7 @@
  ***************************************************************************/
 using System;
 
-namespace NVorbis
+namespace NVorbis.Ogg
 {
     [Flags]
     enum PageFlags

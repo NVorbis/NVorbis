@@ -72,18 +72,19 @@
     <Reference Include="System.Core" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
-    <Reference Include="Microsoft.CSharp" />
     <Reference Include="System.Data" />
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="ACache.cs" />
     <Compile Include="Huffman.cs" />
+    <Compile Include="IPacketProvider.cs" />
     <Compile Include="Mdct.cs" />
-    <Compile Include="OggContainerReader.cs" />
+    <Compile Include="Ogg\OggContainerReader.cs" />
     <Compile Include="DataPacket.cs" />
-    <Compile Include="OggPacketReader.cs" />
-    <Compile Include="PageFlags.cs" />
+    <Compile Include="Ogg\OggPacket.cs" />
+    <Compile Include="Ogg\OggPacketReader.cs" />
+    <Compile Include="Ogg\OggPageFlags.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="RingBuffer.cs" />
     <Compile Include="Utils.cs" />
@@ -93,8 +94,15 @@
     <Compile Include="VorbisMode.cs" />
     <Compile Include="VorbisReader.cs" />
     <Compile Include="VorbisResidue.cs" />
-    <Compile Include="VorbisStreamStatus.cs" />
+    <Compile Include="VorbisStreamDecoder.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="IVorbisStreamStatus.cs" />
     <Compile Include="VorbisTime.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="Matroska\" />
+    <Folder Include="RTP\" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

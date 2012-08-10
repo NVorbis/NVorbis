@@ -11,9 +11,9 @@ namespace NVorbis
 {
     abstract class VorbisTime
     {
-        internal static VorbisTime Init(VorbisReader vorbis, OggPacket reader)
+        internal static VorbisTime Init(VorbisStreamDecoder vorbis, DataPacket packet)
         {
-            var type = (int)reader.ReadBits(16);
+            var type = (int)packet.ReadBits(16);
 
             VorbisTime time = null;
             switch (type)
@@ -22,24 +22,24 @@ namespace NVorbis
             }
             if (time == null) throw new InvalidDataException();
 
-            time.Init(reader);
+            time.Init(packet);
             return time;
         }
 
-        VorbisReader _vorbis;
+        VorbisStreamDecoder _vorbis;
 
-        protected VorbisTime(VorbisReader vorbis)
+        protected VorbisTime(VorbisStreamDecoder vorbis)
         {
             _vorbis = vorbis;
         }
 
-        abstract protected void Init(OggPacket reader);
+        abstract protected void Init(DataPacket packet);
 
         class Time0 : VorbisTime
         {
-            internal Time0(VorbisReader vorbis) : base(vorbis) { }
+            internal Time0(VorbisStreamDecoder vorbis) : base(vorbis) { }
 
-            protected override void Init(OggPacket reader)
+            protected override void Init(DataPacket packet)
             {
                 
             }
