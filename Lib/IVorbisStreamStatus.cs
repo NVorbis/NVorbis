@@ -12,17 +12,17 @@ namespace NVorbis
     public interface IVorbisStreamStatus
     {
         /// <summary>
-        /// Resets the counters for latency & bitrate calculations, as well as overall bit counts
+        /// Gets the counters for latency & bitrate calculations, as well as overall bit counts
         /// </summary>
         void ResetStats();
 
         /// <summary>
-        /// Returns the calculated bit rate of audio stream data for the everything decoded so far
+        /// Gets the calculated bit rate of audio stream data for the everything decoded so far
         /// </summary>
         int EffectiveBitRate { get; }
 
         /// <summary>
-        /// Returns the calculated bit rate for the last ~1 second of audio
+        /// Gets the calculated bit rate for the last ~1 second of audio
         /// </summary>
         int InstantBitRate { get; }
 
@@ -57,8 +57,13 @@ namespace NVorbis
         int PagesRead { get; }
 
         /// <summary>
-        /// Returns the total number of pages in the current stream
+        /// Gets the total number of pages in the current stream
         /// </summary>
         int TotalPages { get; }
+
+        /// <summary>
+        /// Gets whether the stream has been clipped since the last reset
+        /// </summary>
+        bool Clipped { get; }
     }
 }

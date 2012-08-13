@@ -34,6 +34,52 @@ namespace NVorbis
             return ((n >> 16) | (n << 16)) >> (32 - bits);
         }
 
+        // make is so we can twiddle bits in a float...
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Explicit)]
+        struct FloatBits
+        {
+            [System.Runtime.InteropServices.FieldOffset(0)]
+            public float Float;
+            [System.Runtime.InteropServices.FieldOffset(0)]
+            public uint Bits;
+        }
+
+        static internal float fabs(float x)
+        {
+            // bit-tricks...
+            FloatBits fb;
+            fb.Bits = 0;
+            fb.Float = x;
+            fb.Bits &= 0x7FFFFFFFU;   // for a float, we only have to mess with the sign bit
+            return fb.Float;
+        }
+
+        static internal float fmax(float x, float a)
+        {
+            FloatBits fb;
+            fb.Bits = 0;
+            fb.Float = x - a;
+
+            // if x >= a, the sign bit will be cleared...  If not, it will be set
+            var sign = (fb.Bits >> 31) & 1;
+
+            // use the sign bit to give the correct answer...
+            return (a * sign) + (x * (1 - sign));
+        }
+
+        static internal float fmin(float x, float b)
+        {
+            FloatBits fb;
+            fb.Bits = 0;
+            fb.Float = b - x;
+
+            // if x <= b, the sign bit will be cleared...  If not, it will be set
+            var sign = (fb.Bits >> 31) & 1;
+
+            // use the sign bit to give the correct answer...
+            return (b * sign) + (x * (1 - sign));
+        }
+
         static internal float ConvertFromVorbisFloat32(uint bits)
         {
             // do as much as possible with bit tricks

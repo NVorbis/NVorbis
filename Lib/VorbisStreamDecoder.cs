@@ -472,13 +472,12 @@ namespace NVorbis
             var window = pdi.Mode.GetWindow(pdi.PrevFlag, pdi.NextFlag);
             // this is applied as part of the lapping operation
 
-            // let's try a different lapping algorithm...  one that doesn't require knowledge of the previous block...
+            // now lap the data into the buffer...
+            
             // var sizeW = pdi.Mode.BlockSize
-            int left, center, right;
-            center = (
-                    right = sizeW
-                ) >> 1;
-            left = 0;
+            var right = sizeW;
+            var center = right >> 1;
+            var left = 0;
             var begin = -center;
             var end = center;
 
@@ -489,8 +488,9 @@ namespace NVorbis
                 if (!pdi.PrevFlag)
                 {
                     // previous block was short
-                    left = sizeW / 4 - Block0Size / 4;
-                    begin = Block0Size / -2 - left;
+                    left = Block1Size / 4 - Block0Size / 4;  // where to start in pcm[][]
+                    center = left + Block0Size / 2;     // adjust the center so we're correctly clearing the buffer...
+                    begin = Block0Size / -2 - left;     // where to start in _outputBuffer[,]
                 }
 
                 if (!pdi.NextFlag)
@@ -509,7 +509,7 @@ namespace NVorbis
                 int i = left, idx = lastLength + begin;
                 for (; i < center; i++)
                 {
-                    _outputBuffer[c, idx + i] = Math.Max(Math.Min(_outputBuffer[c, idx + i] + pcmChan[i] * window[i], 1f), -1f);
+                    ClipAcc(c, idx + i, pcmChan[i] * window[i]);
                 }
                 for (; i < right; i++)
                 {
@@ -522,6 +522,16 @@ namespace NVorbis
             _preparedLength = newPrepLen;
 
             return samplesDecoded;
+        }
+
+        bool _clipped = false;
+
+        void ClipAcc(int chan, int idx, float addend)
+        {
+            var temp = _outputBuffer[chan, idx] + addend;
+            var temp2 = Utils.fmin(Utils.fmax(temp, -1f), 1f);
+            _clipped |= temp2 != temp;
+            _outputBuffer[chan, idx] = temp2;
         }
 
         void UpdatePosition(int samplesDecoded, DataPacket packet)
@@ -707,6 +717,7 @@ namespace NVorbis
         {
             // only reset the stream info...  don't mess with the container, book, and hdr bits...
 
+            _clipped = false;
             _packetCount = 0;
             _floorBits = 0L;
             _glueBits = 0L;
@@ -792,6 +803,11 @@ namespace NVorbis
         public int TotalPages
         {
             get { return _getTotalPages(); }
+        }
+
+        public bool Clipped
+        {
+            get { return _clipped; }
         }
     }
 }
