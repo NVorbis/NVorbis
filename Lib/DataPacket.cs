@@ -209,15 +209,6 @@ namespace NVorbis
             return ReadBits(1) == 1;
         }
 
-        public float ReadVorbisFloat()
-        {
-            var temp = ReadBits(32);
-            var mantissa = (float)(temp & 0x1fffff);
-            var exponent = (float)((temp & 0x7fe00000) >> 21);
-            if ((temp & 0x80000000) != 0) mantissa *= -1;
-            return (float)((double)mantissa * Math.Pow(2, exponent - 788));
-        }
-
         public short ReadInt16()
         {
             return (short)ReadBits(16);

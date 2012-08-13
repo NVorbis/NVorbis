@@ -180,8 +180,8 @@ namespace NVorbis
             MapType = (int)packet.ReadBits(4);
             if (MapType == 0) return;
 
-            var minValue = packet.ReadVorbisFloat();
-            var deltaValue = packet.ReadVorbisFloat();
+            var minValue = Utils.ConvertFromVorbisFloat32(packet.ReadUInt32());
+            var deltaValue = Utils.ConvertFromVorbisFloat32(packet.ReadUInt32());
             var valueBits = (int)packet.ReadBits(4) + 1;
             var sequence_p = packet.ReadBit();
 
