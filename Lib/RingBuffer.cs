@@ -28,8 +28,11 @@ namespace NVorbis
 
         internal void EnsureSize(int size)
         {
-            if (_bufLen < size)
+            // because _end == _start signifies no data, and _end is always 1 more than the data we have, we must make the buffer {channels} entries bigger than requested
+            if (_bufLen < size + Channels)
             {
+                size += Channels;
+
                 var temp = new T[size];
                 Array.Copy(_buffer, _start, temp, 0, _bufLen - _start);
                 if (_end < _start)
@@ -74,6 +77,8 @@ namespace NVorbis
                     if (idx >= _bufLen) throw new IndexOutOfRangeException();
 
                     idx = (idx + _start) % _bufLen;
+
+
                     if (idx >= _end)    // this will catch wrap-around naturally (doesn't matter where start is...)
                     {
                         _end = idx + 1;
@@ -97,9 +102,7 @@ namespace NVorbis
             RemoveItems(count);
 
             // this is used to pull data out of the buffer, so we'll update the start position too...
-            var len = _end - start;
-            if (len < 0) len += _bufLen;
-
+            var len = (_end - start + _bufLen) % _bufLen;
             if (count > len) throw new ArgumentOutOfRangeException("count");
 
             var cnt = Math.Min(count, _bufLen - start);

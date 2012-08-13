@@ -12,7 +12,7 @@ namespace NVorbis
 {
     class VorbisMode
     {
-        const float M_PI = (float)Math.PI;
+        const float M_PI = 3.1415926539f; //(float)Math.PI;
         const float M_PI2 = M_PI / 2;
 
         internal static VorbisMode Init(VorbisStreamDecoder vorbis, DataPacket packet)
@@ -61,8 +61,8 @@ namespace NVorbis
         void CalcWindows()
         {
             // 0: prev = s, next = s || BlockFlag = false
-            // 1: prev = s, next = l
-            // 2: prev = l, next = s
+            // 1: prev = l, next = s
+            // 2: prev = s, next = l
             // 3: prev = l, next = l
 
             for (int idx = 0; idx < _windows.Length; idx++)
