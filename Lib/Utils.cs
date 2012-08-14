@@ -44,40 +44,23 @@ namespace NVorbis
             public uint Bits;
         }
 
-        static internal float fabs(float x)
-        {
-            // bit-tricks...
-            FloatBits fb;
-            fb.Bits = 0;
-            fb.Float = x;
-            fb.Bits &= 0x7FFFFFFFU;   // for a float, we only have to mess with the sign bit
-            return fb.Float;
-        }
-
-        static internal float fmax(float x, float a)
+        // clamp the value to the given range. set clipped as appropriate.
+        // clipped is an int to make the math as fast as possible...
+        static internal float ClipValue(float val, float max, float min, ref int clipped)
         {
             FloatBits fb;
             fb.Bits = 0;
-            fb.Float = x - a;
+            fb.Float = val - max;
 
             // if x >= a, the sign bit will be cleared...  If not, it will be set
             var sign = (fb.Bits >> 31) & 1;
-
-            // use the sign bit to give the correct answer...
-            return (a * sign) + (x * (1 - sign));
-        }
-
-        static internal float fmin(float x, float b)
-        {
-            FloatBits fb;
-            fb.Bits = 0;
-            fb.Float = b - x;
+            clipped |= (int)sign & 1;
+            fb.Float = min - ((max * sign) + (val * (sign ^ 1)));
 
             // if x <= b, the sign bit will be cleared...  If not, it will be set
-            var sign = (fb.Bits >> 31) & 1;
-
-            // use the sign bit to give the correct answer...
-            return (b * sign) + (x * (1 - sign));
+            sign = (fb.Bits >> 31) & 1;
+            clipped |= (int)sign & 1;
+            return (min * sign) + (val * (sign ^ 1));
         }
 
         static internal float ConvertFromVorbisFloat32(uint bits)
@@ -87,7 +70,7 @@ namespace NVorbis
             var exponent = (double)((int)((bits & 0x7fe00000) >> 21) - 788);  // grab the exponent, remove the bias, store as double (for the call to System.Math.Pow(...))
             var mantissa = (float)(((bits & 0x1fffff) ^ sign) + (sign & 1));  // grab the mantissa and apply the sign bit.  store as float
 
-            // NB: We could use bit tricks to calc the exponent, but if can't be more than 63 in either direction.
+            // NB: We could use bit tricks to calc the exponent, but it can't be more than 63 in either direction.
             //     This creates an issue, since the exponent field allows for a *lot* more than that.
             //     On the flip side, larger exponent values don't seem to be used by the Vorbis codebooks...
             //     Either way, we'll play it safe and let the BCL calculate it.

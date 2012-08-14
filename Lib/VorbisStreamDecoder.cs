@@ -254,6 +254,7 @@ namespace NVorbis
         Queue<int> _bitsPerPacketHistory;
         Queue<int> _sampleCountHistory;
         int _preparedLength;
+        int _clipped = 0;
 
         Stack<DataPacket> _resyncQueue;
 
@@ -509,7 +510,8 @@ namespace NVorbis
                 int i = left, idx = lastLength + begin;
                 for (; i < center; i++)
                 {
-                    ClipAcc(c, idx + i, pcmChan[i] * window[i]);
+                    // add the new windowed value to the appropriate buffer index.  clamp to range -1 to 1 and set _clipped appropriately
+                    _outputBuffer[c, idx + i] = Utils.ClipValue(_outputBuffer[c, idx + i] + pcmChan[i] * window[i], -1f, 1f, ref _clipped);
                 }
                 for (; i < right; i++)
                 {
@@ -522,16 +524,6 @@ namespace NVorbis
             _preparedLength = newPrepLen;
 
             return samplesDecoded;
-        }
-
-        bool _clipped = false;
-
-        void ClipAcc(int chan, int idx, float addend)
-        {
-            var temp = _outputBuffer[chan, idx] + addend;
-            var temp2 = Utils.fmin(Utils.fmax(temp, -1f), 1f);
-            _clipped |= temp2 != temp;
-            _outputBuffer[chan, idx] = temp2;
         }
 
         void UpdatePosition(int samplesDecoded, DataPacket packet)
@@ -717,7 +709,7 @@ namespace NVorbis
         {
             // only reset the stream info...  don't mess with the container, book, and hdr bits...
 
-            _clipped = false;
+            _clipped = 0;//false;
             _packetCount = 0;
             _floorBits = 0L;
             _glueBits = 0L;
@@ -807,7 +799,7 @@ namespace NVorbis
 
         public bool Clipped
         {
-            get { return _clipped; }
+            get { return _clipped != 0; }
         }
     }
 }

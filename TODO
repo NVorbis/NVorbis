@@ -11,7 +11,7 @@
 * Matroska support
 	- Needs a base EBML reader
 
-* More optimization
+* More optimization?  Currently running at 113x realtime on a Core i7 M 620
 	- look for places where we can move logic into header decode
 	- more profiling
 
