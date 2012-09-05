@@ -256,20 +256,8 @@ namespace NVorbis
                                         var t = offset / channels;
 
                                         for (int c = 0; c < _partitionSize / channels; )
-                                        {
-                                            codebook.DecodeVQ(
-                                                packet,
-                                                f =>
-                                                {
-                                                    residue[chPtr++][t + c] += f;
-                                                    if (chPtr == channels)
-                                                    {
-                                                        chPtr = 0;
-                                                        c++;
-                                                    }
-                                                }
-                                            );
-                                        }
+                                            codebook.DecodeVQ_Residue2(packet, residue, channels, ref chPtr, ref t,
+                                                                       ref c);
                                     }
                                     ++i;
                                     offset += _partitionSize;

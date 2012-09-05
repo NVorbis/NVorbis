@@ -224,6 +224,7 @@ namespace NVorbis
             VorbisCodebook[] _classMasterbooks;
             VorbisCodebook[][] _subclassBooks;
             int[][] _subclassBookIndex;
+            List<int> y = new List<int>(29); 
 
             static int[] _rangeLookup = { 256, 128, 86, 64 };
             static int[] _yBitsLookup = { 8, 7, 7, 6 };
@@ -398,7 +399,7 @@ namespace NVorbis
 
                 try
                 {
-                    var y = new List<int>();
+                    y.Clear();
                     y.Add((int)packet.ReadBits(_yBits));
                     y.Add((int)packet.ReadBits(_yBits));
 

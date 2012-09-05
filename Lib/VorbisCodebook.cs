@@ -270,6 +270,21 @@ namespace NVorbis
                 writeValue(LookupTable[ofs]);
             }
         }
+        internal void DecodeVQ_Residue2(DataPacket packet, float[][] residue, int channels, ref int chPtr, ref int t, ref int c)
+        {
+            var entry = DecodeScalar(packet);
+            for (int ofs = entry * Dimensions, i = 0; i < Dimensions; ofs++, i++)
+            {
+                var f = LookupTable[ofs];
+
+                residue[chPtr++][t + c] += f;
+                if (chPtr == channels)
+                {
+                    chPtr = 0;
+                    c++;
+                }
+            }
+        }
 
         internal int DecodeScalar(DataPacket packet)
         {
