@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Diagnostics;
+using System.IO;
 using System.Threading;
 using NVorbis;
 using OpenTK.Audio.OpenAL;
@@ -45,10 +46,10 @@ namespace OggStream
         ThreadFlow currentFlow;
         Thread currentThread;
 
+        Stream underlyingStream;
         VorbisReader reader;
         bool ready;
 
-        public string Filename { get; private set; }
         public bool IsLooped { get; set; }
 
         static OggStream()
@@ -57,10 +58,9 @@ namespace OggStream
             fxe = new EffectsExtension();
         }
 
-        public OggStream(string filename)
+        public OggStream(string filename) : this(File.OpenRead(filename)) { }
+        public OggStream(Stream stream)
         {
-            Filename = filename;
-
             alBufferIds = AL.GenBuffers(BufferCount);
             alSourceId = AL.GenSource();
             Volume = 1;
@@ -82,12 +82,14 @@ namespace OggStream
                 LowPassHFGain = 1;
             }
 
-            Open(precache: true);            
+            underlyingStream = stream;
+            Open(precache: true);
         }
 
         void Open(bool precache = false)
         {
-            reader = new VorbisReader(Filename);
+            underlyingStream.Seek(0, SeekOrigin.Begin);
+            reader = new VorbisReader(underlyingStream, false);
 
             if (precache)
             {
@@ -213,6 +215,8 @@ namespace OggStream
                 Empty();
 
             Close();
+
+            underlyingStream.Dispose();
 
             AL.DeleteSource(alSourceId);
             AL.DeleteBuffers(alBufferIds);
