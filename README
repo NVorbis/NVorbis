@@ -1,0 +1,51 @@
+﻿NVorbis
+-------
+
+NVorbis is a .Net library for decoding Xiph.org Vorbis files.  It is purely
+managed code, and should run correctly in partial-trust environments.
+
+This implementation is based on the Vorbis specification found on xiph.org.
+The MDCT and Huffman codeword generator were borrowed from public domain
+implementations at http://nothings.org/stb_vorbis/.
+
+Currently the only container supported is Xiph.org Ogg.  Matroska and RTP
+are planned.
+
+To use:
+
+- Create an instance of NVorbis.VorbisReader (pass the Ogg Vorbis filename in)
+- Use these properties to gather data about the logical stream:
+	- Channels
+	- SampleRate
+	- TotalTime		- A TimeSpan indicating the total length of the audio data
+	- DecodedTime	- A TimeSpan indicating the last returned sample's timestamp
+	- NominalBitrate, UpperBitrate, and LowerBitrate
+		- These are the encoder's reported bitrates
+	- Vendor	- The encoder's vendor string
+	- Comments	- An array of comments in the file (usually tags)
+- Call "int ReadSamples(float[], int, int)" to retrieve the next batch of
+  samples.  It will return 0 when the logical Vorbis stream is done.
+
+
+- For NAudio support:
+	- Reference NVorbis.NAudioSupport.dll
+	- Create an instance of NVorbis.NAudioSupport.VorbisWaveReader
+	- VorbisWaveReader implements NAudio.Wave.WaveStream.
+
+History
+-------
+0.1	- 08/03/2012
+	* Initial Release
+0.2 - 08/07/2012
+	* Swapped out LGPL code for public domain implementations
+	* Relicensed under Ms-PL
+	* Added NAudio support project
+	* Added test files & app
+	* Performance improvements
+0.3 - 08/08/2012
+	* Fixed Page / Packet decode (packets overlapping 2 pages)
+	* Fixed "no energy" packet handling
+	* Fixed packet reader not merging when unsolicited packets are added
+	* Added .gitignore
+	* Added initial multi-stream support
+	* Added statistics (see VorbisReader.Stats)
