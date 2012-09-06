@@ -262,12 +262,11 @@ namespace NVorbis
         HuffmanListNode<int> LTree;
         int MaxBits;
 
-        internal void DecodeVQ(DataPacket packet, Action<float> writeValue)
+        internal float this[int entry, int dim]
         {
-            var entry = DecodeScalar(packet);
-            for (int ofs = entry * Dimensions, i = 0; i < Dimensions; ofs++, i++)
+            get
             {
-                writeValue(LookupTable[ofs]);
+                return LookupTable[entry * Dimensions + dim];
             }
         }
 

@@ -129,7 +129,12 @@ namespace NVorbis
 
                         for (int i = 0; i < _order; i++)
                         {
-                            book.DecodeVQ(packet, t => coefficients.Add(t));
+                            var entry = book.DecodeScalar(packet);
+                            for (int d = 0; d < book.Dimensions; d++)
+                            {
+                                coefficients.Add(book[entry, d]);
+                            }
+                            //book.DecodeVQ(packet, t => coefficients.Add(t));
                         }
 
                         data.Coeff = coefficients.ToArray();
