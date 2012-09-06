@@ -342,30 +342,29 @@ namespace NVorbis
                 }
 
                 public int[] Posts;
-                public int PostCount;
             }
 
             internal override PacketData UnpackPacket(DataPacket packet, int blockSize)
             {
-                var data = ReadPosts(packet);
-                data.BlockSize = blockSize;
+                var data = new PacketData1 { BlockSize = blockSize };
+                data.Posts = ReadPosts(packet);
                 return data;
             }
 
             internal override void Apply(PacketData packetData, float[] residue)
             {
-                if (packetData != null)
-                {
-                    var data = packetData as PacketData1;
-                    if (data == null) throw new InvalidDataException("Incorrect packet data!");
+                var data = packetData as PacketData1;
+                if (data == null) throw new InvalidDataException("Incorrect packet data!");
 
-                    var stepFlags = UnwrapPosts(data);
+                if (data.Posts != null)
+                {
+                    var stepFlags = UnwrapPosts(data.Posts);
 
                     var n = data.BlockSize / 2;
 
                     var lx = 0;
                     var ly = data.Posts[0] * _multiplier;
-                    for (int i = 1; i < data.PostCount; i++)
+                    for (int i = 1; i < data.Posts.Length; i++)
                     {
                         var idx = _sortIdx[i];
 
@@ -386,21 +385,18 @@ namespace NVorbis
                     {
                         RenderLineMulti(lx, ly, n, ly, residue);
                     }
-
-                    ACache.Return(ref data.Posts);
                 }
             }
 
-            PacketData1 ReadPosts(DataPacket packet)
+            int[] ReadPosts(DataPacket packet)
             {
                 if (!packet.ReadBit()) return null;
 
                 try
                 {
-                    var postCount = 2;
-                    var posts = ACache.Get<int>(64);
-                    posts[0] = (int)packet.ReadBits(_yBits);
-                    posts[1] = (int)packet.ReadBits(_yBits);
+                    var y = new List<int>();
+                    y.Add((int)packet.ReadBits(_yBits));
+                    y.Add((int)packet.ReadBits(_yBits));
 
                     for (int i = 0; i < _partitionClass.Length; i++)
                     {
@@ -419,17 +415,16 @@ namespace NVorbis
                             cval >>= cbits;
                             if (book != null)
                             {
-                                posts[postCount] = (int)book.DecodeScalar(packet);
+                                y.Add((int)book.DecodeScalar(packet));
                             }
                             else
                             {
-                                posts[postCount] = 0;
+                                y.Add(0);
                             }
-                            ++postCount;
                         }
                     }
 
-                    return new PacketData1 { Posts = posts, PostCount = postCount };
+                    return y.ToArray();
                 }
                 catch (EndOfStreamException)
                 {
@@ -437,24 +432,24 @@ namespace NVorbis
                 }
             }
 
-            bool[] UnwrapPosts(PacketData1 data)
+            bool[] UnwrapPosts(int[] posts)
             {
-                var stepFlags = ACache.Get<bool>(data.PostCount, false);
+                var stepFlags = ACache.Get<bool>(posts.Length, false);
                 stepFlags[0] = true;
                 stepFlags[1] = true;
 
-                var finalY = ACache.Get<int>(data.PostCount);
-                finalY[0] = data.Posts[0];
-                finalY[1] = data.Posts[1];
+                var finalY = ACache.Get<int>(posts.Length);
+                finalY[0] = posts[0];
+                finalY[1] = posts[1];
 
-                for (int i = 2; i < data.PostCount; i++)
+                for (int i = 2; i < posts.Length; i++)
                 {
                     var lowOfs = _lNeigh[i];
                     var highOfs = _hNeigh[i];
 
                     var predicted = RenderPoint(_xList[lowOfs], finalY[lowOfs], _xList[highOfs], finalY[highOfs], _xList[i]);
 
-                    var val = data.Posts[i];
+                    var val = posts[i];
                     var highroom = _range - predicted;
                     var lowroom = predicted;
                     int room;
@@ -504,9 +499,9 @@ namespace NVorbis
                     }
                 }
 
-                for (int i = 0; i < data.PostCount; i++)
+                for (int i = 0; i < posts.Length; i++)
                 {
-                    data.Posts[i] = finalY[i];
+                    posts[i] = finalY[i];
                 }
 
                 ACache.Return(ref finalY);
