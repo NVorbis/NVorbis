@@ -254,7 +254,7 @@ namespace NVorbis
         Queue<int> _bitsPerPacketHistory;
         Queue<int> _sampleCountHistory;
         int _preparedLength;
-        int _clipped = 0;
+        bool _clipped = false;
 
         Stack<DataPacket> _resyncQueue;
 
@@ -511,7 +511,7 @@ namespace NVorbis
                 for (; i < center; i++)
                 {
                     // add the new windowed value to the appropriate buffer index.  clamp to range -1 to 1 and set _clipped appropriately
-                    _outputBuffer[c, idx + i] = Utils.ClipValue(_outputBuffer[c, idx + i] + pcmChan[i] * window[i], -1f, 1f, ref _clipped);
+                    _outputBuffer[c, idx + i] = Utils.ClipValue(_outputBuffer[c, idx + i] + pcmChan[i] * window[i], ref _clipped);
                 }
                 for (; i < right; i++)
                 {
@@ -709,7 +709,7 @@ namespace NVorbis
         {
             // only reset the stream info...  don't mess with the container, book, and hdr bits...
 
-            _clipped = 0;//false;
+            _clipped = false;
             _packetCount = 0;
             _floorBits = 0L;
             _glueBits = 0L;
@@ -799,7 +799,7 @@ namespace NVorbis
 
         public bool Clipped
         {
-            get { return _clipped != 0; }
+            get { return _clipped; }
         }
     }
 }

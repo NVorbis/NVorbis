@@ -44,23 +44,26 @@ namespace NVorbis
             public uint Bits;
         }
 
-        // clamp the value to the given range. set clipped as appropriate.
-        // clipped is an int to make the math as fast as possible...
-        static internal float ClipValue(float val, float max, float min, ref int clipped)
+        static internal float ClipValue(float value, ref bool clipped)
         {
+            /************
+             * There is some magic happening here... IEEE 754 single precision floats are built such that:
+             *   1) The only difference between x and -x is the sign bit (31)
+             *   2) If x is further from 0 than y, the bitwise value of x is greater than the bitwise value of y (ignoring the sign bit)
+             * 
+             * With those assumptions, we can just look for the bitwise magnitude to be too large...
+             */
+
             FloatBits fb;
             fb.Bits = 0;
-            fb.Float = val - max;
+            fb.Float = value;
 
-            // if x >= a, the sign bit will be cleared...  If not, it will be set
-            var sign = (fb.Bits >> 31) & 1;
-            clipped |= (int)sign & 1;
-            fb.Float = min - ((max * sign) + (val * (sign ^ 1)));
-
-            // if x <= b, the sign bit will be cleared...  If not, it will be set
-            sign = (fb.Bits >> 31) & 1;
-            clipped |= (int)sign & 1;
-            return (min * sign) + (val * (sign ^ 1));
+            if ((fb.Bits & 0x7FFFFFFF) > 0x3f800000)
+            {
+                clipped = true;
+                fb.Bits = 0x3f800000 | (fb.Bits & 0x80000000);
+            }
+            return fb.Float;
         }
 
         static internal float ConvertFromVorbisFloat32(uint bits)
