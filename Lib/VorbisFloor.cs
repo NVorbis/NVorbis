@@ -229,7 +229,6 @@ namespace NVorbis
             VorbisCodebook[] _classMasterbooks;
             VorbisCodebook[][] _subclassBooks;
             int[][] _subclassBookIndex;
-            List<int> y = new List<int>(29); 
 
             static int[] _rangeLookup = { 256, 128, 86, 64 };
             static int[] _yBitsLookup = { 8, 7, 7, 6 };
@@ -343,12 +342,54 @@ namespace NVorbis
                 }
 
                 public int[] Posts;
+                public int PostCount;
             }
 
             internal override PacketData UnpackPacket(DataPacket packet, int blockSize)
             {
                 var data = new PacketData1 { BlockSize = blockSize };
-                data.Posts = ReadPosts(packet);
+
+                // hoist ReadPosts to here since that's all we're doing...
+                if (packet.ReadBit())
+                {
+                    try
+                    {
+                        var postCount = 2;
+                        var posts = ACache.Get<int>(64);
+                        posts[0] = (int)packet.ReadBits(_yBits);
+                        posts[1] = (int)packet.ReadBits(_yBits);
+
+                        for (int i = 0; i < _partitionClass.Length; i++)
+                        {
+                            var clsNum = _partitionClass[i];
+                            var cdim = _classDimensions[clsNum];
+                            var cbits = _classSubclasses[clsNum];
+                            var csub = (1 << cbits) - 1;
+                            var cval = 0U;
+                            if (cbits > 0)
+                            {
+                                cval = (uint)_classMasterbooks[clsNum].DecodeScalar(packet);
+                            }
+                            for (int j = 0; j < cdim; j++)
+                            {
+                                var book = _subclassBooks[clsNum][cval & csub];
+                                cval >>= cbits;
+                                if (book != null)
+                                {
+                                    posts[postCount] = (int)book.DecodeScalar(packet);
+                                }
+                                ++postCount;
+                            }
+                        }
+
+                        data.Posts = posts;
+                        data.PostCount = postCount;
+                    }
+                    catch (EndOfStreamException)
+                    {
+                    }
+                }
+
                 return data;
             }
 
@@ -359,13 +400,13 @@ namespace NVorbis
 
                 if (data.Posts != null)
                 {
-                    var stepFlags = UnwrapPosts(data.Posts);
+                    var stepFlags = UnwrapPosts(data);
 
                     var n = data.BlockSize / 2;
 
                     var lx = 0;
                     var ly = data.Posts[0] * _multiplier;
-                    for (int i = 1; i < data.Posts.Length; i++)
+                    for (int i = 1; i < data.PostCount; i++)
                     {
                         var idx = _sortIdx[i];
 
@@ -386,80 +427,29 @@ namespace NVorbis
                     {
                         RenderLineMulti(lx, ly, n, ly, residue);
                     }
+
+                    ACache.Return(ref data.Posts);
                 }
             }
 
-            //internal override float[] DecodePacket(DataPacket packet, int blockSize)
-            //{
-            //    var posts = ReadPosts(packet);
-            //    if (posts == null) return null;
-
-            //    var stepFlags = UnwrapPosts(posts);
-            //    return ComputeCurve(posts, stepFlags, blockSize);
-            //}
-
-            int[] ReadPosts(DataPacket packet)
+            bool[] UnwrapPosts(PacketData1 data)
             {
-                if (!packet.ReadBit()) return null;
-
-                try
-                {
-                    y.Clear();
-                    y.Add((int)packet.ReadBits(_yBits));
-                    y.Add((int)packet.ReadBits(_yBits));
-
-                    for (int i = 0; i < _partitionClass.Length; i++)
-                    {
-                        var clsNum = _partitionClass[i];
-                        var cdim = _classDimensions[clsNum];
-                        var cbits = _classSubclasses[clsNum];
-                        var csub = (1 << cbits) - 1;
-                        var cval = 0U;
-                        if (cbits > 0)
-                        {
-                            cval = (uint)_classMasterbooks[clsNum].DecodeScalar(packet);
-                        }
-                        for (int j = 0; j < cdim; j++)
-                        {
-                            var book = _subclassBooks[clsNum][cval & csub];
-                            cval >>= cbits;
-                            if (book != null)
-                            {
-                                y.Add((int)book.DecodeScalar(packet));
-                            }
-                            else
-                            {
-                                y.Add(0);
-                            }
-                        }
-                    }
-
-                    return y.ToArray();
-                }
-                catch (EndOfStreamException)
-                {
-                    return null;
-                }
-            }
-
-            bool[] UnwrapPosts(int[] posts)
-            {
-                var stepFlags = ACache.Get<bool>(posts.Length, false);// new bool[posts.Length];
+                var stepFlags = ACache.Get<bool>(data.PostCount, false);
                 stepFlags[0] = true;
                 stepFlags[1] = true;
 
-                var finalY = ACache.Get<int>(posts.Length);// new int[posts.Length];
-                finalY[0] = posts[0];
-                finalY[1] = posts[1];
+                var finalY = ACache.Get<int>(data.PostCount);
+                finalY[0] = data.Posts[0];
+                finalY[1] = data.Posts[1];
 
-                for (int i = 2; i < posts.Length; i++)
+                for (int i = 2; i < data.PostCount; i++)
                 {
                     var lowOfs = _lNeigh[i];
                     var highOfs = _hNeigh[i];
 
                     var predicted = RenderPoint(_xList[lowOfs], finalY[lowOfs], _xList[highOfs], finalY[highOfs], _xList[i]);
-                    
-                    var val = posts[i];
+
+                    var val = data.Posts[i];
                     var highroom = _range - predicted;
                     var lowroom = predicted;
                     int room;
@@ -509,48 +499,15 @@ namespace NVorbis
                     }
                 }
 
-                for (int i = 0; i < posts.Length; i++)
+                for (int i = 0; i < data.PostCount; i++)
                 {
-                    posts[i] = finalY[i];
+                    data.Posts[i] = finalY[i];
                 }
 
                 ACache.Return(ref finalY);
 
                 return stepFlags;
             }
-
-            //float[] ComputeCurve(int[] y, bool[] stepFlags, int blockSize)
-            //{
-            //    var n = blockSize / 2;
-
-            //    var floor = ACache.Get<float>(blockSize, false);
-
-            //    var lx = 0;
-            //    var ly = y[0] * _multiplier;
-            //    for (int i = 1; i < y.Length; i++)
-            //    {
-            //        var idx = _sortIdx[i];
-
-            //        if (stepFlags[idx])
-            //        {
-            //            var hx = _xList[idx];
-            //            var hy = y[idx] * _multiplier;
-            //            if (lx < n) RenderLine(lx, ly, Math.Min(hx, n), hy, floor);
-            //            lx = hx;
-            //            ly = hy;
-            //        }
-            //        if (lx >= n) break;
-            //    }
-
-            //    ACache.Return(ref stepFlags);
-
-            //    if (lx < n)
-            //    {
-            //        RenderLine(lx, ly, n, ly, floor);
-            //    }
-
-            //    return floor;
-            //}
 
             int RenderPoint(int x0, int y0, int x1, int y1, int X)
             {
@@ -568,33 +525,6 @@ namespace NVorbis
                     return y0 + off;
                 }
             }
-
-            //void RenderLine(int x0, int y0, int x1, int y1, float[] v)
-            //{
-            //    var dy = y1 - y0;
-            //    var adx = x1 - x0;
-            //    var ady = Math.Abs(dy);
-            //    var sy = 1 - (((dy >> 31) & 1) * 2);
-            //    var b = dy / adx;
-            //    var x = x0;
-            //    var y = y0;
-            //    var err = -adx;
-                
-            //    v[x0] = inverse_dB_table[y0];
-            //    ady -= Math.Abs(b) * adx;
-                
-            //    while (++x < x1)
-            //    {
-            //        y += b;
-            //        err += ady;
-            //        if (err >= 0)
-            //        {
-            //            err -= adx;
-            //            y += sy;
-            //        }
-            //        v[x] = inverse_dB_table[y];
-            //    }
-            //}
 
             void RenderLineMulti(int x0, int y0, int x1, int y1, float[] v)
             {
