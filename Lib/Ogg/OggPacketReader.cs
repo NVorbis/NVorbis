@@ -41,7 +41,7 @@ namespace NVorbis.Ogg
             if (packet.IsResync)
             {
                 packet.IsContinuation = false;
-                if (_lastAddedPacket != null) packet.IsContinued = false;
+                if (_lastAddedPacket != null) _lastAddedPacket.IsContinued = false;
             }
 
             if (packet.IsContinuation)

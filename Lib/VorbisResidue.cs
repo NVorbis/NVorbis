@@ -188,13 +188,18 @@ namespace NVorbis
                 for (int i = 0; i < step; i++)
                 {
                     var j = 0;
-                    codebook.DecodeVQ(
-                        packet,
-                        f =>
-                        {
-                            residue[offset + i + j++ * step] += f;
-                        }
-                    );
+                    var entry = codebook.DecodeScalar(packet);
+                    for (var d = 0; d < codebook.Dimensions; d++)
+                    {
+                        residue[offset + i + j++ * step] += codebook[entry, d];
+                    }
+                    //codebook.DecodeVQ(
+                    //    packet,
+                    //    f =>
+                    //    {
+                    //        residue[offset + i + j++ * step] += f;
+                    //    }
+                    //);
                 }
             }
         }
@@ -207,13 +212,18 @@ namespace NVorbis
             {
                 for (int i = 0; i < _partitionSize;)
                 {
-                    codebook.DecodeVQ(
-                        packet,
-                        f =>
-                        {
-                            residue[offset + i++] += f;
-                        }
-                    );
+                    var entry = codebook.DecodeScalar(packet);
+                    for (var d = 0; d < codebook.Dimensions; d++)
+                    {
+                        residue[offset + i++] += codebook[entry, d];
+                    }
+                    //codebook.DecodeVQ(
+                    //    packet,
+                    //    f =>
+                    //    {
+                    //        residue[offset + i++] += f;
+                    //    }
+                    //);
                 }
             }
         }
@@ -256,8 +266,30 @@ namespace NVorbis
                                         var t = offset / channels;
 
                                         for (int c = 0; c < _partitionSize / channels; )
-                                            codebook.DecodeVQ_Residue2(packet, residue, channels, ref chPtr, ref t,
-                                                                       ref c);
+                                        {
+                                            var entry = codebook.DecodeScalar(packet);
+                                            for (var d = 0; d < codebook.Dimensions; d++)
+                                            {
+                                                residue[chPtr++][t + c] += codebook[entry, d];
+                                                if (chPtr == channels)
+                                                {
+                                                    chPtr = 0;
+                                                    c++;
+                                                }
+                                            }
+                                            //codebook.DecodeVQ(
+                                            //    packet,
+                                            //    f =>
+                                            //    {
+                                            //        residue[chPtr++][t + c] += f;
+                                            //        if (chPtr == channels)
+                                            //        {
+                                            //            chPtr = 0;
+                                            //            c++;
+                                            //        }
+                                            //    }
+                                            //);
+                                        }
                                     }
                                     ++i;
                                     offset += _partitionSize;
