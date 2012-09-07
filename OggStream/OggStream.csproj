@@ -58,10 +58,6 @@
       <AutoGen>True</AutoGen>
       <DependentUpon>Resources.resx</DependentUpon>
     </Compile>
-    <None Include="..\TestFiles\1test.ogg">
-      <Link>1test.ogg</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
     <None Include="..\TestFiles\2test.ogg">
       <Link>2test.ogg</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

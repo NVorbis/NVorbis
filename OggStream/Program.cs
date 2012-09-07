@@ -35,7 +35,12 @@ namespace OggStream
 
                 for (int i = 0; i < StreamFiles.Length; i++)
                 {
-                    streams[i] = new OggStream(StreamFiles[i]) { logX = 6, logY = 10 + i, LogHandler = Log };
+                    streams[i] = new OggStream(StreamFiles[i])
+                    {
+#if TRACE
+                        logX = 6, logY = 10 + i, LogHandler = Log
+#endif
+                    };
                     Console.SetCursorPosition(1, 10 + i);
                     Console.Write(i);
                 }
@@ -73,7 +78,9 @@ namespace OggStream
                             activeSet.ForEach(s =>
                             {
                                 s.IsLooped = !s.IsLooped;
+#if TRACE
                                 Log(s.IsLooped ? "L" : " ", 3, s.logY);
+#endif
                             });
                             break;
 
@@ -128,7 +135,9 @@ namespace OggStream
                         volumeFades.Remove(stream);
                     }
                 }
+#if TRACE
                 Log(@in ? "V" : "v", 4, stream.logY);
+#endif
 
                 var cts = new CancellationTokenSource();
                 lock (volumeFades) volumeFades.Add(stream, cts);
@@ -149,7 +158,9 @@ namespace OggStream
                     if (!cts.Token.IsCancellationRequested) 
                     {
                         lock (volumeFades) volumeFades.Remove(s);
+#if TRACE
                         Log(" ", 4, s.logY);
+#endif
                     }
                 }, cts.Token);
             }
@@ -174,8 +185,9 @@ namespace OggStream
                         filterFades.Remove(stream);
                     }
                 }
+#if TRACE
                 Log(@in ? "F" : "f", 5, stream.logY);
-
+#endif
                 var cts = new CancellationTokenSource();
                 lock (filterFades) filterFades.Add(stream, cts);
 
@@ -195,7 +207,9 @@ namespace OggStream
                     if (!cts.Token.IsCancellationRequested)
                     {
                         lock (filterFades) filterFades.Remove(s);
+#if TRACE
                         Log(" ", 5, s.logY);
+#endif
                     }
                 }, cts.Token);
             }
