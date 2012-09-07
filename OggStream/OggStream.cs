@@ -1,289 +1,31 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using NVorbis;
 using OpenTK.Audio.OpenAL;
 
 namespace OggStream
 {
-    class OggStream : IDisposable
+    internal static class ALHelper
     {
-        // 2 buffers of 0.5 second (stereo) ready at all times
-        const int BufferCount = 3;
-        const int BufferSize = 44100;
+        public static readonly XRamExtension XRam = new XRamExtension();
+        public static readonly EffectsExtension Efx = new EffectsExtension();
 
-        // in times per second, at most
-        const float StreamingThreadUpdateRate = 10;
-
-        readonly float[] readSampleBuffer = new float[BufferSize];
-        readonly short[] castBuffer = new short[BufferSize];
-
-        readonly int[] alBufferIds;
-        readonly int alSourceId;
-        readonly int alFilterId;
-
-        static readonly XRamExtension xre;
-        static readonly EffectsExtension fxe;
-
-        class ThreadFlow : IDisposable
+        static ALHelper()
         {
-            public bool Cancelled;
-            public bool Finished;
-            public readonly ManualResetEventSlim PauseEvent;
-
-            public ThreadFlow()
-            {
-                PauseEvent = new ManualResetEventSlim(true);
-            }
-
-            public void Dispose()
-            {
-                PauseEvent.Dispose();
-            }
-        }
-
-        ThreadFlow currentFlow;
-        Thread currentThread;
-
-        Stream underlyingStream;
-        VorbisReader reader;
-        bool ready;
-
-        public bool IsLooped { get; set; }
-
-        static OggStream()
-        {
-            xre = new XRamExtension();
-            fxe = new EffectsExtension();
-        }
-
-        public OggStream(string filename) : this(File.OpenRead(filename)) { }
-        public OggStream(Stream stream)
-        {
-            alBufferIds = AL.GenBuffers(BufferCount);
-            alSourceId = AL.GenSource();
-            Volume = 1;
-            Check();
-
-            if (xre.IsInitialized)
-            {
-                Trace.WriteLine("hardware buffers will be used");
-                xre.SetBufferMode(BufferCount, ref alBufferIds[0], XRamExtension.XRamStorage.Hardware);
-                Check();
-            }
-
-            if (fxe.IsInitialized)
-            {
-                Trace.WriteLine("effects will be used");
-                alFilterId = fxe.GenFilter();
-                fxe.Filter(alFilterId, EfxFilteri.FilterType, (int)EfxFilterType.Lowpass);
-                fxe.Filter(alFilterId, EfxFilterf.LowpassGain, 1);
-                LowPassHFGain = 1;
-            }
-
-            underlyingStream = stream;
-            Open(precache: true);
-        }
-
-        void Open(bool precache = false)
-        {
-            underlyingStream.Seek(0, SeekOrigin.Begin);
-            reader = new VorbisReader(underlyingStream, false);
-
-            if (precache)
-            {
-                foreach (var buffer in alBufferIds)
-                    FillBuffer(buffer);
-                AL.SourceQueueBuffers(alSourceId, BufferCount, alBufferIds);
-                Check();
-            }
-
-            ready = true;
-
-            Trace.WriteLine("streaming is ready");
-        }
-
-        public void Play()
-        {
-            if (AL.GetSourceState(alSourceId) == ALSourceState.Playing)
-            {
-                Trace.WriteLine("stream is already playing");
-                return;
-            }
-
-            if (AL.GetSourceState(alSourceId) == ALSourceState.Paused)
-            {
-                Resume();
-                return;
-            }
-
-            if (currentFlow != null && currentFlow.Finished)
-                Stop();
-
-            if (!ready)
-                Open(precache: true);
-
-            Trace.WriteLine("starting playback");
-            AL.SourcePlay(alSourceId);
-            Check();
-
-            currentThread = new Thread(() => EnsureBuffersFilled(currentFlow = new ThreadFlow()));
-            currentThread.Priority = ThreadPriority.Lowest;
-            currentThread.Start();
-        }
-
-        public void Pause()
-        {
-            if (AL.GetSourceState(alSourceId) != ALSourceState.Playing)
-            {
-                Trace.WriteLine("stream is not playing");
-                return;
-            }
-
-            currentFlow.PauseEvent.Reset();
-
-            Trace.WriteLine("pausing playback");
-            AL.SourcePause(alSourceId);
-            Check();
-        }
-
-        public void Resume()
-        {
-            if (AL.GetSourceState(alSourceId) != ALSourceState.Paused)
-            {
-                Trace.WriteLine("stream is not paused");
-                return;
-            }
-
-            currentFlow.PauseEvent.Set();
-
-            Trace.WriteLine("resuming playback");
-            AL.SourcePlay(alSourceId);
-            Check();
-        }
-
-        public void Stop()
-        {
-            var state = AL.GetSourceState(alSourceId);
-            if (state == ALSourceState.Playing || state == ALSourceState.Paused)
-            {
-                Trace.WriteLine("stopping playback");
-                StopPlayback();
-            }
-
-            if (currentFlow != null)
-                StopStreaming();
-
-            if (state != ALSourceState.Initial)
-                Empty();
-            Close();
-        }
-
-        public float LowPassHFGain
-        {
-            set
-            {
-                if (fxe.IsInitialized)
-                {
-                    fxe.Filter(alFilterId, EfxFilterf.LowpassGainHF, value);
-                    fxe.BindFilterToSource(alSourceId, alFilterId);
-                    Check();
-                }
-            }
-        }
-
-        float volume;
-        public float Volume
-        {
-            get { return volume; }
-            set { AL.Source(alSourceId, ALSourcef.Gain, volume = value); }
-        }
-
-        public void Dispose()
-        {
-            Trace.WriteLine("disposing stream");
-
-            var state = AL.GetSourceState(alSourceId);
-            if (state == ALSourceState.Playing || state == ALSourceState.Paused)
-                StopPlayback();
-
-            if (currentFlow != null)
-                StopStreaming(join: true);
-
-            if (state != ALSourceState.Initial)
-                Empty();
-
-            Close();
-
-            underlyingStream.Dispose();
-
-            AL.DeleteSource(alSourceId);
-            AL.DeleteBuffers(alBufferIds);
-
-            if (fxe.IsInitialized)
-                fxe.DeleteFilter(alFilterId);
-
-            Check();
-        }
-
-        void StopPlayback()
-        {
-            AL.SourceStop(alSourceId);
-            Check();
-        }
-
-        void StopStreaming(bool join = false)
-        {
-            currentFlow.Cancelled = true;
-            currentFlow.PauseEvent.Set();
-            currentFlow = null;
-
-            if (join)
-                currentThread.Join();
-
-            currentThread = null;
-        }
-
-        void Empty()
-        {
-            int queued;
-
-            AL.GetSource(alSourceId, ALGetSourcei.BuffersQueued, out queued);
-            if (queued > 0)
-            {
-                AL.SourceUnqueueBuffers(alSourceId, queued);
-                Check();
-            }
-        }
-
-        void Close()
-        {
-            if (reader != null)
-            {
-                reader.Dispose();
-                reader = null;
-            }
-            ready = false;
-        }
-
-        bool FillBuffer(int bufferId)
-        {
-            var readSamples = reader.ReadSamples(readSampleBuffer, 0, BufferSize);
-            CastBuffer(readSampleBuffer, castBuffer, readSamples);
-            AL.BufferData(bufferId, reader.Channels == 1 ? ALFormat.Mono16 : ALFormat.Stereo16, castBuffer,
-                          readSamples * sizeof (short), reader.SampleRate);
-            Check();
-
-            if (readSamples != BufferSize)
-                Trace.WriteLine("eos detected; only " + readSamples + " samples found");
-            TraceMemoryUsage();
-
-            return readSamples != BufferSize;
+#if TRACE
+            Console.SetCursorPosition(0, 5);
+            Console.Write("OpenAL Soft [" + (AL.Get(ALGetString.Version).Contains("SOFT") ? "X" : " ") + "], ");
+            Console.Write("X-RAM [" + (XRam.IsInitialized ? "X" : " ") + "], ");
+            Console.WriteLine("Effect Extensions [" + (Efx.IsInitialized ? "X" : " ") + "]");
+#endif
         }
 
         [Conditional("TRACE")]
-        static void TraceMemoryUsage()
+        public static void TraceMemoryUsage(Action<string, int, int> logHandler)
         {
             var usedHeap = (double)GC.GetTotalMemory(true);
 
@@ -295,97 +37,505 @@ namespace OggStream
                 usedHeap = usedHeap / 1024;
             }
 
-            Trace.WriteLine(String.Format("memory used : {0:0.###} {1}", usedHeap, sizes[order]));
+            logHandler(String.Format("Total memory : {0:0.###} {1}          ", usedHeap, sizes[order]), 0, 6);
         }
 
+        public static void Check()
+        {
+            ALError error;
+            if ((error = AL.GetError()) != ALError.NoError)
+                throw new InvalidOperationException(AL.GetErrorString(error));
+        }
+    }
+
+    public class OggStream : IDisposable
+    {
+        const int DefaultBufferCount = 3;
+
+        internal readonly object stopMutex = new object();
+        internal readonly object prepareMutex = new object();
+
+        internal readonly int alSourceId;
+        internal readonly int[] alBufferIds;
+
+        readonly int alFilterId;
+        readonly Stream underlyingStream;
+
+        internal VorbisReader Reader { get; private set; }
+        internal bool Ready { get; private set; }
+        internal bool Preparing { get; private set; }
+
+        public int BufferCount { get; private set; }
+
+#if TRACE
+        public int logX, logY;
+        public Action<string, int, int> LogHandler;
+#endif
+
+        public OggStream(string filename, int bufferCount = DefaultBufferCount) : this(File.OpenRead(filename), bufferCount) { }
+        public OggStream(Stream stream, int bufferCount = DefaultBufferCount)
+        {
+            BufferCount = bufferCount;
+
+            alBufferIds = AL.GenBuffers(bufferCount);
+            alSourceId = AL.GenSource();
+
+            if (ALHelper.XRam.IsInitialized)
+            {
+                ALHelper.XRam.SetBufferMode(BufferCount, ref alBufferIds[0], XRamExtension.XRamStorage.Hardware);
+                ALHelper.Check();
+            }
+
+            Volume = 1;
+
+            if (ALHelper.Efx.IsInitialized)
+            {
+                alFilterId = ALHelper.Efx.GenFilter();
+                ALHelper.Efx.Filter(alFilterId, EfxFilteri.FilterType, (int)EfxFilterType.Lowpass);
+                ALHelper.Efx.Filter(alFilterId, EfxFilterf.LowpassGain, 1);
+                LowPassHFGain = 1;
+            }
+
+            underlyingStream = stream;
+
+#if TRACE
+            // Set a default null log handler
+            LogHandler = (_, __, ___) => { };
+#endif
+        }
+
+        public void Prepare()
+        {
+            if (Preparing) return;
+
+            var state = AL.GetSourceState(alSourceId);
+
+            lock (stopMutex)
+            {
+                switch (state)
+                {
+                    case ALSourceState.Playing:
+                    case ALSourceState.Paused:
+                        return;
+
+                    case ALSourceState.Stopped:
+                        lock (prepareMutex)
+                        {
+                            Close();
+                            Empty();
+                        }
+                        break;
+                }
+
+                if (!Ready)
+                {
+                    lock (prepareMutex)
+                    {
+                        Preparing = true;
+#if TRACE
+                        logX = 7;
+                        LogHandler("(*", logX, logY);
+                        logX += 2;
+#endif
+                        Open(precache: true);
+#if TRACE
+                        LogHandler(")", logX++, logY);
+#endif
+                    }
+                }
+            }
+        }
+
+        public void Play()
+        {
+            var state = AL.GetSourceState(alSourceId);
+
+            switch (state)
+            {
+                case ALSourceState.Playing: return;
+                case ALSourceState.Paused:
+                    Resume();
+                    return;
+            }
+
+            Prepare();
+
+#if TRACE
+            LogHandler("{", logX++, logY);
+#endif
+            AL.SourcePlay(alSourceId);
+            ALHelper.Check();
+
+            Preparing = false;
+
+            OggStreamer.Instance.AddStream(this);
+        }
+
+        public void Pause()
+        {
+            if (AL.GetSourceState(alSourceId) != ALSourceState.Playing)
+                return;
+
+            OggStreamer.Instance.RemoveStream(this);
+#if TRACE
+            LogHandler("]", logX++, logY);
+#endif
+            AL.SourcePause(alSourceId);
+            ALHelper.Check();
+        }
+
+        public void Resume()
+        {
+            if (AL.GetSourceState(alSourceId) != ALSourceState.Paused)
+                return;
+
+            OggStreamer.Instance.AddStream(this);
+#if TRACE
+            LogHandler("[", logX++, logY);
+#endif
+            AL.SourcePlay(alSourceId);
+            ALHelper.Check();
+        }
+
+        public void Stop()
+        {
+            var state = AL.GetSourceState(alSourceId);
+            if (state == ALSourceState.Playing || state == ALSourceState.Paused)
+            {
+#if TRACE
+                LogHandler("}", logX++, logY);
+#endif
+                StopPlayback();
+            }
+
+            lock (stopMutex)
+            {
+                OggStreamer.Instance.RemoveStream(this);
+            }
+        }
+
+        float lowPassHfGain;
+        public float LowPassHFGain
+        {
+            get { return lowPassHfGain; }
+            set
+            {
+                if (ALHelper.Efx.IsInitialized)
+                {
+                    ALHelper.Efx.Filter(alFilterId, EfxFilterf.LowpassGainHF, lowPassHfGain = value);
+                    ALHelper.Efx.BindFilterToSource(alSourceId, alFilterId);
+                    ALHelper.Check();
+                }
+            }
+        }
+
+        float volume;
+        public float Volume
+        {
+            get { return volume; }
+            set
+            {
+                AL.Source(alSourceId, ALSourcef.Gain, volume = value);
+                ALHelper.Check();
+            }
+        }
+
+        public bool IsLooped { get; set; }
+
+        public void Dispose()
+        {
+            var state = AL.GetSourceState(alSourceId);
+            if (state == ALSourceState.Playing || state == ALSourceState.Paused)
+                StopPlayback();
+
+            lock (prepareMutex)
+            {
+                OggStreamer.Instance.RemoveStream(this);
+
+                if (state != ALSourceState.Initial)
+                    Empty();
+
+                Close();
+
+                underlyingStream.Dispose();
+            }
+
+            AL.DeleteSource(alSourceId);
+            AL.DeleteBuffers(alBufferIds);
+
+            if (ALHelper.Efx.IsInitialized)
+                ALHelper.Efx.DeleteFilter(alFilterId);
+
+            ALHelper.Check();
+#if TRACE
+            ALHelper.TraceMemoryUsage(LogHandler);
+#endif
+        }
+
+        void StopPlayback()
+        {
+            AL.SourceStop(alSourceId);
+            ALHelper.Check();
+        }
+
+        void Empty()
+        {
+            int queued;
+            AL.GetSource(alSourceId, ALGetSourcei.BuffersQueued, out queued);
+            if (queued > 0)
+            {
+                try
+                {
+                    AL.SourceUnqueueBuffers(alSourceId, queued);
+                    ALHelper.Check();
+                }
+                catch (InvalidOperationException)
+                {
+                    // This is a bug in the OpenAL implementation
+                    // Salvage what we can
+                    int processed;
+                    AL.GetSource(alSourceId, ALGetSourcei.BuffersProcessed, out processed);
+                    var salvaged = new int[processed];
+                    if (processed > 0)
+                    {
+                        AL.SourceUnqueueBuffers(alSourceId, processed, salvaged);
+                        ALHelper.Check();
+                    }
+
+                    // Try turning it off again?
+                    AL.SourceStop(alSourceId);
+                    ALHelper.Check();
+
+                    Empty();
+                }
+            }
+#if TRACE
+            logX = 7;
+            LogHandler(new string(Enumerable.Repeat(' ', Console.BufferWidth - 6).ToArray()), logX, logY);
+#endif
+        }
+
+        internal void Open(bool precache = false)
+        {
+            underlyingStream.Seek(0, SeekOrigin.Begin);
+            Reader = new VorbisReader(underlyingStream, false);
+
+            if (precache)
+            {
+                // Fill first buffer synchronously
+                OggStreamer.Instance.FillBuffer(this, alBufferIds[0]);
+                AL.SourceQueueBuffer(alSourceId, alBufferIds[0]);
+                ALHelper.Check();
+
+                // Schedule the others asynchronously
+                OggStreamer.Instance.AddStream(this);
+            }
+
+            Ready = true;
+        }
+
+        internal void Close()
+        {
+            if (Reader != null)
+            {
+                Reader.Dispose();
+                Reader = null;
+            }
+            Ready = false;
+        }
+    }
+
+    public class OggStreamer : IDisposable
+    {
+        const float DefaultUpdateRate = 10;
+        const int DefaultBufferSize = 44100;
+
+        static readonly object singletonMutex = new object();
+
+        readonly object iterationMutex = new object();
+        readonly object readMutex = new object();
+
+        readonly float[] readSampleBuffer;
+        readonly short[] castBuffer;
+
+        readonly HashSet<OggStream> streams = new HashSet<OggStream>();
+        readonly List<OggStream> threadLocalStreams = new List<OggStream>(); 
+
+        readonly Thread underlyingThread;
+        volatile bool cancelled;
+
+        public float UpdateRate { get; private set; }
+        public int BufferSize { get; private set; }
+
+        static OggStreamer instance;
+        public static OggStreamer Instance
+        {
+            get
+            {
+                lock (singletonMutex)
+                {
+                    if (instance == null)
+                        throw new InvalidOperationException("No instance running");
+                    return instance;
+                }
+            }
+            private set { lock (singletonMutex) instance = value; }
+        }
+
+        public OggStreamer(int bufferSize = DefaultBufferSize, float updateRate = DefaultUpdateRate)
+        {
+            lock (singletonMutex)
+            {
+                if (instance != null)
+                    throw new InvalidOperationException("Already running");
+
+                Instance = this;
+                underlyingThread = new Thread(EnsureBuffersFilled) { Priority = ThreadPriority.Lowest };
+                underlyingThread.Start();
+            }
+
+            UpdateRate = updateRate;
+            BufferSize = bufferSize;
+
+            readSampleBuffer = new float[bufferSize];
+            castBuffer = new short[bufferSize];
+        }
+
+        public void Dispose()
+        {
+            lock (singletonMutex)
+            {
+                Debug.Assert(Instance == this, "Two instances running, somehow...?");
+
+                cancelled = true;
+                lock (iterationMutex)
+                    streams.Clear();
+
+                Instance = null;
+            }
+        }
+
+        internal bool AddStream(OggStream stream)
+        {
+            lock (iterationMutex)
+                return streams.Add(stream);
+        }
+        internal bool RemoveStream(OggStream stream)
+        {
+            lock (iterationMutex) 
+                return streams.Remove(stream);
+        }
+
+        public bool FillBuffer(OggStream stream, int bufferId)
+        {
+            int readSamples;
+            lock (readMutex)
+            {
+                readSamples = stream.Reader.ReadSamples(readSampleBuffer, 0, BufferSize);
+                CastBuffer(readSampleBuffer, castBuffer, readSamples);
+            }
+            AL.BufferData(bufferId, stream.Reader.Channels == 1 ? ALFormat.Mono16 : ALFormat.Stereo16, castBuffer,
+                          readSamples * sizeof (short), stream.Reader.SampleRate);
+            ALHelper.Check();
+#if TRACE
+            stream.LogHandler(readSamples == BufferSize ? "." : "|", stream.logX++, stream.logY);
+            ALHelper.TraceMemoryUsage(stream.LogHandler);
+#endif
+
+            return readSamples != BufferSize;
+        }
         static void CastBuffer(float[] inBuffer, short[] outBuffer, int length)
         {
             for (int i = 0; i < length; i++)
             {
-                var temp = (int) (32767f * inBuffer[i]);
+                var temp = (int)(32767f * inBuffer[i]);
                 if (temp > short.MaxValue) temp = short.MaxValue;
                 else if (temp < short.MinValue) temp = short.MinValue;
                 outBuffer[i] = (short)temp;
             }
         }
 
-        static void Check()
+        void EnsureBuffersFilled()
         {
-            ALError error;
-            if ((error = AL.GetError()) != ALError.NoError)
-                throw new InvalidOperationException(AL.GetErrorString(error));
-        }
-
-        void EnsureBuffersFilled(ThreadFlow flow)
-        {
-            bool finished = false;
-
-            while (!finished)
+            while (!cancelled)
             {
-                flow.PauseEvent.Wait();
-                if (flow.Cancelled)
+                Thread.Sleep((int) (1000 / UpdateRate));
+                if (cancelled) break;
+
+                threadLocalStreams.Clear();
+                lock (iterationMutex) threadLocalStreams.AddRange(streams);
+
+                foreach (var stream in threadLocalStreams)
                 {
-                    Trace.WriteLine("streaming cancelled");
-                    flow.Dispose();
-                    return;
-                }
-
-                Thread.Sleep((int) (1000 / StreamingThreadUpdateRate));
-
-                flow.PauseEvent.Wait();
-                if (flow.Cancelled)
-                {
-                    Trace.WriteLine("streaming cancelled");
-                    flow.Dispose();
-                    return;
-                }
-
-                try
-                {
-                    int processed;
-                    AL.GetSource(alSourceId, ALGetSourcei.BuffersProcessed, out processed);
-                    Check();
-
-                    if (processed == 0)
-                        continue;
-
-                    var tempBuffers = AL.SourceUnqueueBuffers(alSourceId, processed);
-
-                    for (int i = 0; i < processed; i++)
+                    lock (stream.prepareMutex)
                     {
-                        finished |= FillBuffer(tempBuffers[i]);
+                        lock (iterationMutex)
+                            if (!streams.Contains(stream))
+                                continue;
 
-                        if (finished && IsLooped)
+                        bool finished = false;
+
+                        int queued;
+                        AL.GetSource(stream.alSourceId, ALGetSourcei.BuffersQueued, out queued);
+                        ALHelper.Check();
+                        int processed;
+                        AL.GetSource(stream.alSourceId, ALGetSourcei.BuffersProcessed, out processed);
+                        ALHelper.Check();
+
+                        if (processed == 0 && queued == stream.BufferCount) continue;
+
+                        int[] tempBuffers;
+                        if (processed > 0)
+                            tempBuffers = AL.SourceUnqueueBuffers(stream.alSourceId, processed);
+                        else
+                            tempBuffers = stream.alBufferIds.Skip(queued).ToArray();
+
+                        for (int i = 0; i < tempBuffers.Length; i++)
                         {
-                            finished = false;
-                            Close();
-                            Open();
+                            finished |= FillBuffer(stream, tempBuffers[i]);
+
+                            if (finished)
+                            {
+                                if (stream.IsLooped)
+                                {
+                                    stream.Close();
+                                    stream.Open();
+                                }
+                                else
+                                {
+                                    streams.Remove(stream);
+                                    i = tempBuffers.Length;
+                                }
+                            }
                         }
 
-                        Trace.WriteLine("buffer " + tempBuffers[i] + " refilled");
+                        AL.SourceQueueBuffers(stream.alSourceId, tempBuffers.Length, tempBuffers);
+                        ALHelper.Check();
+
+                        if (finished && !stream.IsLooped)
+                            continue;
                     }
 
-                    AL.SourceQueueBuffers(alSourceId, processed, tempBuffers);
-                    Check();
-
-                    var state = AL.GetSourceState(alSourceId);
-                    if (state == ALSourceState.Stopped)
+                    lock (stream.stopMutex)
                     {
-                        Trace.WriteLine("buffer underrun detected! restarting playback");
-                        AL.SourcePlay(alSourceId);
-                        Check();
+                        if (stream.Preparing) continue;
+
+                        lock (iterationMutex)
+                            if (!streams.Contains(stream))
+                                continue;
+
+                        var state = AL.GetSourceState(stream.alSourceId);
+                        if (state == ALSourceState.Stopped)
+                        {
+#if TRACE
+                            stream.LogHandler("!", stream.logX++, stream.logY);
+#endif
+                            AL.SourcePlay(stream.alSourceId);
+                            ALHelper.Check();
+                        }
                     }
-                }
-                catch (Exception ex)
-                {
-                    if (!flow.Cancelled)
-                        throw ex;
-                    Trace.WriteLine("cancellation caused an error : " + ex.Message);
                 }
             }
-
-            flow.Finished = true;
-            Trace.WriteLine("streaming complete");
         }
     }
 }
