@@ -261,11 +261,11 @@ namespace NVorbis.Ogg
                     newStream = true;
                 }
 
-                _packetReaders[pageStreamSerial].AddPacket(new Packet(_stream, dataOffset, packetSizes[0]) { PageGranulePosition = granulePosition, IsContinued = false, IsContinuation = (pageFlags & PageFlags.ContinuesPacket) == PageFlags.ContinuesPacket, IsResync = isResync, PageSequenceNumber = seqNo });
+                _packetReaders[pageStreamSerial].AddPacket(new Packet(_stream, dataOffset, packetSizes[0]) { PageGranulePosition = granulePosition, IsContinued = false, IsContinuation = (pageFlags & PageFlags.ContinuesPacket) == PageFlags.ContinuesPacket, IsResync = isResync, IsEndOfStream = (pageFlags & PageFlags.EndOfStream) == PageFlags.EndOfStream, PageSequenceNumber = seqNo });
                 dataOffset += packetSizes[0];
                 for (int i = 1; i < packetSizes.Length - 1; i++)
                 {
-                    _packetReaders[pageStreamSerial].AddPacket(new Packet(_stream, dataOffset, packetSizes[i]) { PageGranulePosition = granulePosition, IsContinued = false, IsContinuation = false, IsResync = false, PageSequenceNumber = seqNo });
+                    _packetReaders[pageStreamSerial].AddPacket(new Packet(_stream, dataOffset, packetSizes[i]) { PageGranulePosition = granulePosition, IsContinued = false, IsContinuation = false, IsResync = false, IsEndOfStream = (pageFlags & PageFlags.EndOfStream) == PageFlags.EndOfStream, PageSequenceNumber = seqNo });
                     dataOffset += packetSizes[i];
                 }
                 if (packetSizes.Length > 1)
