@@ -193,13 +193,6 @@ namespace NVorbis
                     {
                         residue[offset + i + j++ * step] += codebook[entry, d];
                     }
-                    //codebook.DecodeVQ(
-                    //    packet,
-                    //    f =>
-                    //    {
-                    //        residue[offset + i + j++ * step] += f;
-                    //    }
-                    //);
                 }
             }
         }
@@ -217,13 +210,6 @@ namespace NVorbis
                     {
                         residue[offset + i++] += codebook[entry, d];
                     }
-                    //codebook.DecodeVQ(
-                    //    packet,
-                    //    f =>
-                    //    {
-                    //        residue[offset + i++] += f;
-                    //    }
-                    //);
                 }
             }
         }
@@ -236,13 +222,13 @@ namespace NVorbis
             {
                 var residue = ACache.Get<float>(channels, blockSize);
 
-                if (doNotDecode.Any(p => !p))
+                if (doNotDecode.Contains(false))
                 {
                     if (_nToRead > 0)
                     {
                         var cls = ACache.Get<int>(_partWords, _classWordsPerCodeWord);
 
-                        foreach (var pass in Enumerable.Range(0, _maxPasses))
+                        for (int pass = 0; pass < _maxPasses; pass++)
                         {
                             for (int i = 0, l = 0, offset = _begin; i < _partsToRead; l++)
                             {
@@ -277,18 +263,6 @@ namespace NVorbis
                                                     c++;
                                                 }
                                             }
-                                            //codebook.DecodeVQ(
-                                            //    packet,
-                                            //    f =>
-                                            //    {
-                                            //        residue[chPtr++][t + c] += f;
-                                            //        if (chPtr == channels)
-                                            //        {
-                                            //            chPtr = 0;
-                                            //            c++;
-                                            //        }
-                                            //    }
-                                            //);
                                         }
                                     }
                                     ++i;
