@@ -34,7 +34,7 @@ namespace NVorbis
             return ((n >> 16) | (n << 16)) >> (32 - bits);
         }
 
-        // make is so we can twiddle bits in a float...
+        // make it so we can twiddle bits in a float...
         [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Explicit)]
         struct FloatBits
         {
@@ -58,7 +58,7 @@ namespace NVorbis
             fb.Bits = 0;
             fb.Float = value;
 
-            if ((fb.Bits & 0x7FFFFFFF) > 0x3f800000)
+            if ((fb.Bits & 0x7FFFFFFF) > 0x3f800000) // 0x3f800000 == 1.0f
             {
                 clipped = true;
                 fb.Bits = 0x3f800000 | (fb.Bits & 0x80000000);
@@ -80,6 +80,19 @@ namespace NVorbis
 
             // now switch to single-precision and calc the return value
             return mantissa * (float)System.Math.Pow(2.0, exponent);
+        }
+
+        // this is a no-allocation way to sum an int queue
+        static internal int Sum(System.Collections.Generic.Queue<int> queue)
+        {
+            var value = 0;
+            for (int i = 0; i < queue.Count; i++)
+            {
+                var temp = queue.Dequeue();
+                value += temp;
+                queue.Enqueue(temp);
+            }
+            return value;
         }
     }
 }

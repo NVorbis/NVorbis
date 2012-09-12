@@ -340,9 +340,11 @@ namespace NVorbis
 
                 // read the noise floor data (but don't decode yet)
                 pdi.FloorData = ACache.Get<VorbisFloor.PacketData>(_channels);
+                var noExecuteChannel = ACache.Get<bool>(_channels);
                 for (int i = 0; i < _channels; i++)
                 {
                     pdi.FloorData[i] = pdi.Mode.Mapping.ChannelSubmap[i].Floor.UnpackPacket(packet, pdi.Mode.BlockSize);
+                    noExecuteChannel[i] = !pdi.FloorData[i].ExecuteChannel;
                 }
 
                 // make sure we handle no-energy channels correctly given the couplings...
@@ -369,7 +371,7 @@ namespace NVorbis
                         }
                     }
 
-                    var rTemp = subMap.Residue.Decode(packet, pdi.FloorData.Select(d => !d.ExecuteChannel).ToArray(), _channels, pdi.Mode.BlockSize);
+                    var rTemp = subMap.Residue.Decode(packet, noExecuteChannel, _channels, pdi.Mode.BlockSize);
                     for (int c = 0; c < _channels; c++)
                     {
                         var r = pdi.Residue[c];
@@ -381,6 +383,7 @@ namespace NVorbis
                     }
                     ACache.Return(ref rTemp);
                 }
+                ACache.Return(ref noExecuteChannel);
 
                 _glueBits += 1;
                 _modeBits += modeBits;
@@ -620,10 +623,11 @@ namespace NVorbis
                 UpdatePosition(samplesDecoded, packet);
 
                 // a little statistical housekeeping...
+                var sc = Utils.Sum(_sampleCountHistory) + samplesDecoded;
+
                 _bitsPerPacketHistory.Enqueue((int)packet.BitsRead);
                 _sampleCountHistory.Enqueue(samplesDecoded);
 
-                var sc = _sampleCountHistory.Sum();
                 while (sc > _sampleRate)
                 {
                     _bitsPerPacketHistory.Dequeue();
