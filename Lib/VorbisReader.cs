@@ -147,6 +147,8 @@ namespace NVorbis
 
         void SeekTo(long granulePos)
         {
+            if (!_packetProvider.CanSeek) throw new NotSupportedException();
+
             if (granulePos < 0) throw new ArgumentOutOfRangeException("granulePos");
 
             var targetPacketIndex = 3;
@@ -157,7 +159,7 @@ namespace NVorbis
                     granulePos,
                     (prevPacket, curPacket, nextPacket) =>
                     {
-                        // this is not very fast, but it'll work
+                        // ask the decoder...
                         return _decoders[_streamIdx].GetPacketLength(curPacket, prevPacket);
                     }
                 );
@@ -165,18 +167,23 @@ namespace NVorbis
                 targetPacketIndex = idx - 1;  // move to the previous packet to prime the decoder
             }
 
+            // get the data packet for later
             var dataPacket = _packetProvider.GetPacket(_serials[_streamIdx], targetPacketIndex);
 
+            // actually seek the stream
             _packetProvider.SeekToPacket(_serials[_streamIdx], targetPacketIndex);
-            _decoders[_streamIdx].CurrentPosition = dataPacket.GranulePosition - dataPacket.GranuleCount.Value;
 
+            // now read samples until we are exactly at the granule position requested
+            _decoders[_streamIdx].CurrentPosition = dataPacket.GranulePosition;
             var cnt = (int)((granulePos - _decoders[_streamIdx].CurrentPosition) * Channels);
             if (cnt > 0)
             {
                 var seekBuffer = new float[cnt];
                 while (cnt > 0)
                 {
-                    cnt -= _decoders[_streamIdx].ReadSamples(seekBuffer, 0, cnt);
+                    var temp = _decoders[_streamIdx].ReadSamples(seekBuffer, 0, cnt);
+                    if (temp == 0) break;   // we're at the end...
+                    cnt -= temp;
                 }
             }
         }

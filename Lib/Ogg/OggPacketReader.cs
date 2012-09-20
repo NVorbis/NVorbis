@@ -205,15 +205,12 @@ namespace NVorbis.Ogg
             {
                 if (_eosFound)
                 {
-                    // throw the correct exception..
+                    // only throw an exception when our data is no good
                     if (_first == null)
                     {
                         throw new InvalidDataException();
                     }
-                    else
-                    {
-                        throw new ArgumentOutOfRangeException("granulePos");
-                    }
+                    return -1;
                 }
 
                 GetMorePackets();
@@ -241,13 +238,24 @@ namespace NVorbis.Ogg
 
                     // go ask the callback to calculate the granule count for this packet (given the surrounding packets)
                     packet.GranuleCount = packetGranuleCountCallback(packet.Prev, packet, packet.Next);
-                    if (packet.Next == null || packet.Next.IsContinued)
+
+                    // Something to think about...  Every packet that "ends" a page could have its granule position set directly...
+                    //   We don't do that because this does the job just as well, but maybe it would be a good idea?
+
+                    // if it's the last (or second-last in the stream) packet, or it's "Next" is continued, just use the page granule position
+                    if (packet == _last || (_eosFound && packet == _last.Prev) || packet.Next.IsContinued)
                     {
                         // if the page's granule position is -1, something must be horribly wrong... (AddPacket should have addressed this above)
                         if (packet.PageGranulePosition == -1) throw new InvalidDataException();
 
-                        // last full packet...  use the page's granule position
+                        // use the page's granule position
                         packet.GranulePosition = packet.PageGranulePosition;
+
+                        // if it's the last packet in the stream, it's a partial...
+                        if (packet == _last && _eosFound)
+                        {
+                            packet.GranuleCount = packet.PageGranulePosition - packet.Prev.PageGranulePosition;
+                        }
                     }
                     else
                     {
@@ -269,7 +277,7 @@ namespace NVorbis.Ogg
             } while (packet != null);
 
             // if we didn't find the packet, something is wrong
-            if (packet == null) throw new InvalidDataException();
+            if (packet == null) return -1;
 
             // we found the packet, so now we just have to count back to the beginning and see what its index is...
             int idx = 0;

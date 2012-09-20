@@ -626,7 +626,10 @@ namespace NVorbis
                 var samplesDecoded = DecodePacket(pdi);
 
                 // we can do something cool here...  mark down how many samples were decoded in this packet
-                packet.GranuleCount = samplesDecoded;
+                if (packet.GranuleCount.HasValue == false)
+                {
+                    packet.GranuleCount = samplesDecoded;
+                }
 
                 // update our position
 
@@ -665,29 +668,10 @@ namespace NVorbis
             if (modeIdx < 0 || modeIdx >= Modes.Length) return 0;
             var mode = Modes[modeIdx];
 
-            // get the flags (if needed)
-            bool prevFlag = false, nextFlag = false;
-            if (mode.BlockFlag)
-            {
-                prevFlag = curPacket.ReadBit();
-                nextFlag = curPacket.ReadBit();
-            }
-
             // get the last packet's information
             modeIdx = (int)lastPacket.ReadBits(_modeFieldBits);
             if (modeIdx < 0 || modeIdx >= Modes.Length) return 0;
             var prevMode = Modes[modeIdx];
-
-            // get the last packet's "next" flag (if needed)
-            var prevNextFlag = false;
-            if (prevMode.BlockFlag)
-            {
-                lastPacket.ReadBit();    // skip the previous flag
-                prevNextFlag = lastPacket.ReadBit();
-            }
-
-            // now make sure it all lines up
-            if (mode.BlockFlag != prevNextFlag || prevFlag != prevMode.BlockFlag) return 0;
 
             // now calculate the totals...
             return mode.BlockSize / 4 + prevMode.BlockSize / 4;

@@ -1,6 +1,5 @@
 ﻿* Check that Floor0 is implemented correctly
 * Check that Residue0 is implemented correctly
-* Check that seeking is implemented correctly
 
 * RTP support
 	- Put an interface between VorbisReader and OggContainerReader
