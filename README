@@ -49,3 +49,16 @@ History
 	* Added .gitignore
 	* Added initial multi-stream support
 	* Added statistics (see VorbisReader.Stats)
+0.4 - 08/14/2012
+    * Refactoring to clean up code and make room for later improvements
+    * Changed lapping algorithm to be simpler
+    * Switched to higher-performance clipping algorithm
+    * Some cleanup
+0.4.1 - 09/11/2012
+    * Fixed a couple Ogg container bugs
+    * Optimized memory allocations for better performance / memory usage
+0.5 - 09/20/2012
+    * Added seeking support
+    * Changed OggPacketReader to use a doubly-linked list for the packet queue / history
+    * Changed OggPacketReader.GetTotalPageCount() to count pages directly instead of making .AddPacket(...) keep a list
+    * Fixed a few bugs (mostly race conditions in multi-threaded playback scenarios)

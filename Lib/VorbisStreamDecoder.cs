@@ -598,6 +598,13 @@ namespace NVorbis
                 // get the next packet
                 var packet = _getNextPacket();
 
+                // if the packet is null, our packet reader is gone...
+                if (packet == null)
+                {
+                    _eosFound = true;
+                    return;
+                }
+
                 // keep our page count in sync
                 if (!_pagesSeen.Contains((_lastPageSeen = packet.PageSequenceNumber))) _pagesSeen.Add(_lastPageSeen);
 
@@ -617,6 +624,9 @@ namespace NVorbis
                 // we can now safely decode all the data without having to worry about a corrupt or partial packet
 
                 var samplesDecoded = DecodePacket(pdi);
+
+                // we can do something cool here...  mark down how many samples were decoded in this packet
+                packet.GranuleCount = samplesDecoded;
 
                 // update our position
 
@@ -639,6 +649,48 @@ namespace NVorbis
                 ACache.EndScope();
                 _sw.Stop();
             }
+        }
+
+        internal int GetPacketLength(DataPacket curPacket, DataPacket lastPacket)
+        {
+            // if we don't have a previous packet, or we're re-syncing, this packet has no audio data to return
+            if (lastPacket == null || curPacket.IsResync) return 0;
+
+            // make sure they are audio packets
+            if (curPacket.ReadBit()) return 0;
+            if (lastPacket.ReadBit()) return 0;
+
+            // get the current packet's information
+            var modeIdx = (int)curPacket.ReadBits(_modeFieldBits);
+            if (modeIdx < 0 || modeIdx >= Modes.Length) return 0;
+            var mode = Modes[modeIdx];
+
+            // get the flags (if needed)
+            bool prevFlag = false, nextFlag = false;
+            if (mode.BlockFlag)
+            {
+                prevFlag = curPacket.ReadBit();
+                nextFlag = curPacket.ReadBit();
+            }
+
+            // get the last packet's information
+            modeIdx = (int)lastPacket.ReadBits(_modeFieldBits);
+            if (modeIdx < 0 || modeIdx >= Modes.Length) return 0;
+            var prevMode = Modes[modeIdx];
+
+            // get the last packet's "next" flag (if needed)
+            var prevNextFlag = false;
+            if (prevMode.BlockFlag)
+            {
+                lastPacket.ReadBit();    // skip the previous flag
+                prevNextFlag = lastPacket.ReadBit();
+            }
+
+            // now make sure it all lines up
+            if (mode.BlockFlag != prevNextFlag || prevFlag != prevMode.BlockFlag) return 0;
+
+            // now calculate the totals...
+            return mode.BlockSize / 4 + prevMode.BlockSize / 4;
         }
         
         #endregion
@@ -703,6 +755,7 @@ namespace NVorbis
             {
                 _currentPosition = value;
                 _preparedLength = 0;
+                _eosFound = false;
 
                 ResetDecoder();
                 ACache.Return(ref _prevBuffer);

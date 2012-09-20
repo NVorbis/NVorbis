@@ -291,19 +291,9 @@ namespace NVorbis.Ogg
             return _packetReaders[streamSerial].GetNextPacket();
         }
 
-        internal void SetDataStart(int streamSerial)
-        {
-            _packetReaders[streamSerial].SetDataStart();
-        }
-
         long IPacketProvider.GetLastGranulePos(int streamSerial)
         {
             return _packetReaders[streamSerial].GetLastPacket().PageGranulePosition;
-        }
-
-        internal void SeekToSample(int streamSerial, long sampleNum)
-        {
-            _packetReaders[streamSerial].SeekToGranule(sampleNum);
         }
 
         bool IPacketProvider.FindNextStream(int currentStreamSerial)
@@ -357,6 +347,22 @@ namespace NVorbis.Ogg
         long IPacketProvider.ContainerBits
         {
             get { return _containerBits; }
+        }
+
+        int IPacketProvider.FindPacket(int streamSerial, long granulePos, Func<DataPacket, DataPacket, DataPacket, int> packetGranuleCountCallback)
+        {
+            // let the packet reader do the dirty work
+            return _packetReaders[streamSerial].FindPacket(granulePos, packetGranuleCountCallback);
+        }
+
+        void IPacketProvider.SeekToPacket(int streamSerial, int packetIndex)
+        {
+            _packetReaders[streamSerial].SeekToPacket(packetIndex);
+        }
+
+        DataPacket IPacketProvider.GetPacket(int streamSerial, int packetIndex)
+        {
+            return _packetReaders[streamSerial].GetPacket(packetIndex);
         }
     }
 }
