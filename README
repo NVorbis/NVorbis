@@ -62,3 +62,5 @@ History
     * Changed OggPacketReader to use a doubly-linked list for the packet queue / history
     * Changed OggPacketReader.GetTotalPageCount() to count pages directly instead of making .AddPacket(...) keep a list
     * Fixed a few bugs (mostly race conditions in multi-threaded playback scenarios)
+    * Added multi-stream support to VorbisWaveReader
+    * Added several info properties to VorbisWaveReader
