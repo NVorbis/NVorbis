@@ -21,6 +21,9 @@ namespace NVorbis.Ogg
         long _length;
         Packet _mergedPacket;
 
+        internal Packet Next { get; set; }
+        internal Packet Prev { get; set; }
+
         int _curOfs;
 
         internal Packet(Stream stream, long startPos, int length)

@@ -75,8 +75,23 @@ namespace NVorbis
             if (checkByte == VorbisStreamDecoder.InitialPacketMarker)
             {
                 var decoder = new VorbisStreamDecoder(
-                    () => _packetProvider.GetNextPacket(streamSerial),
-                    () => _packetProvider.GetTotalPageCount(streamSerial)
+                    () => {
+                        var provider = _packetProvider;
+                        if (provider != null)
+                        {
+                            return provider.GetNextPacket(streamSerial);
+                        }
+                        return null;
+                    },
+                    () =>
+                    {
+                        var provider = _packetProvider;
+                        if (provider != null)
+                        {
+                            return provider.GetTotalPageCount(streamSerial);
+                        }
+                        return 0;
+                    }
                 );
                 try
                 {
@@ -130,7 +145,48 @@ namespace NVorbis
             _sourceStream = null;
         }
 
-        // TODO: seeking...  we're putting that logic here since we might need to read the container's index...
+        void SeekTo(long granulePos)
+        {
+            if (!_packetProvider.CanSeek) throw new NotSupportedException();
+
+            if (granulePos < 0) throw new ArgumentOutOfRangeException("granulePos");
+
+            var targetPacketIndex = 3;
+            if (granulePos > 0)
+            {
+                var idx = _packetProvider.FindPacket(
+                    _serials[_streamIdx],
+                    granulePos,
+                    (prevPacket, curPacket, nextPacket) =>
+                    {
+                        // ask the decoder...
+                        return _decoders[_streamIdx].GetPacketLength(curPacket, prevPacket);
+                    }
+                );
+                if (idx == -1) throw new ArgumentOutOfRangeException("granulePos");
+                targetPacketIndex = idx - 1;  // move to the previous packet to prime the decoder
+            }
+
+            // get the data packet for later
+            var dataPacket = _packetProvider.GetPacket(_serials[_streamIdx], targetPacketIndex);
+
+            // actually seek the stream
+            _packetProvider.SeekToPacket(_serials[_streamIdx], targetPacketIndex);
+
+            // now read samples until we are exactly at the granule position requested
+            _decoders[_streamIdx].CurrentPosition = dataPacket.GranulePosition;
+            var cnt = (int)((granulePos - _decoders[_streamIdx].CurrentPosition) * Channels);
+            if (cnt > 0)
+            {
+                var seekBuffer = new float[cnt];
+                while (cnt > 0)
+                {
+                    var temp = _decoders[_streamIdx].ReadSamples(seekBuffer, 0, cnt);
+                    if (temp == 0) break;   // we're at the end...
+                    cnt -= temp;
+                }
+            }
+        }
 
         #region Public Interface
 
@@ -239,14 +295,7 @@ namespace NVorbis
             get { return TimeSpan.FromSeconds((double)_decoders[_streamIdx].CurrentPosition / _decoders[_streamIdx]._sampleRate); }
             set
             {
-                throw new NotImplementedException();
-
-                //// get the sample number to look for...
-                //var sampleNum = (int)(value.TotalSeconds * _sampleRate);
-
-                //_packetSource.SeekToSample(_streamSerial, sampleNum);
-
-                //_decoders[_streamIdx].CurrentPosition = sampleNum;
+                SeekTo((long)(value.TotalSeconds * SampleRate));
             }
         }
 

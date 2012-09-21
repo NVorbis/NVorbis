@@ -20,5 +20,11 @@ namespace NVorbis
         bool CanSeek { get; }
 
         long ContainerBits { get; }
+
+        int FindPacket(int streamSerial, long granulePos, Func<DataPacket, DataPacket, DataPacket, int> packetGranuleCountCallback);
+
+        void SeekToPacket(int streamSerial, int packetIndex);
+
+        DataPacket GetPacket(int streamSerial, int packetIndex);
     }
 }

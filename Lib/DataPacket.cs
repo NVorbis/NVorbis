@@ -142,6 +142,8 @@ namespace NVorbis
 
         public long BitsRead { get { return _readBits; } }
 
+        public long? GranuleCount { get; set; }
+
         internal bool IsContinued { get; set; }
         internal bool IsContinuation { get; set; }
         internal int PageSequenceNumber { get; set; }
