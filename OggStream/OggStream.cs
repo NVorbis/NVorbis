@@ -121,7 +121,8 @@ namespace OggStream
                     case ALSourceState.Stopped:
                         lock (prepareMutex)
                         {
-                            Close();
+                            Reader.DecodedTime = TimeSpan.Zero;
+                            Ready = false;
                             Empty();
                         }
                         break;
@@ -497,10 +498,7 @@ namespace OggStream
                             if (finished)
                             {
                                 if (stream.IsLooped)
-                                {
-                                    stream.Close();
-                                    stream.Open();
-                                }
+                                    stream.Reader.DecodedTime = TimeSpan.Zero;
                                 else
                                 {
                                     streams.Remove(stream);
