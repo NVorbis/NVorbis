@@ -5,8 +5,7 @@ msbuild /t:Rebuild /p:Configuration=Release /p:Platform="Any CPU" NVorbis.sln
 del *.nupkg
 
 :: build the nuget packages
-tools\nuget pack NVorbis.nuspec
-tools\nuget pack NVorbis.NAudioSupport.nuspec
+.nuget\nuget pack *.nuspec
 
 :: upload the nuget packages
-tools\nuget push *.nupkg
+.nuget\nuget push *.nupkg
