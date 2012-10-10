@@ -1,0 +1,27 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
+    <metadata>
+        <id>NVorbis</id>
+        <version>0.5.4</version>
+        <title />
+        <authors>Andrew Ward</authors>
+        <owners />
+        <licenseUrl>http://nvorbis.codeplex.com/license</licenseUrl>
+        <projectUrl>http://nvorbis.codeplex.com/</projectUrl>
+        <requireLicenseAcceptance>false</requireLicenseAcceptance>
+        <description>A fully managed implementation of a Xiph.org Foundation Ogg Vorbis decoder.</description>
+        <summary>A managed Xiph.org Foundation Ogg Vorbis decoder</summary>
+        <releaseNotes>Fixes to nuget package</releaseNotes>
+        <language>en-US</language>
+        <tags>ogg vorbis xiph audio c# sound .NET</tags>
+        <frameworkAssemblies>
+            <frameworkAssembly assemblyName="System" />
+        </frameworkAssemblies>
+    </metadata>
+    <files>
+        <file src="bin\NVorbis.dll" target="lib" />
+        <file src="bin\NVorbis.xml" target="lib" />
+        <file src="COPYING" />
+        <file src="README" />
+    </files>
+</package>
