@@ -5,11 +5,11 @@ using System.Runtime.InteropServices;
 // General Information about an assembly is controlled through the following 
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[assembly: AssemblyTitle("OggStream")]
+[assembly: AssemblyTitle("NVorbis.OpenTKSupport")]
 [assembly: AssemblyDescription("OGG Streaming Playback using OpenTK")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("")]
-[assembly: AssemblyProduct("OggStream")]
+[assembly: AssemblyCompany("Renaud Bedard")]
+[assembly: AssemblyProduct("NVorbis.OpenTKSupport")]
 [assembly: AssemblyCopyright("Public Domain")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]

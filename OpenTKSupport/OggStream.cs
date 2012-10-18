@@ -7,7 +7,7 @@ using System.Threading;
 using NVorbis;
 using OpenTK.Audio.OpenAL;
 
-namespace OggStream
+namespace NVorbis.OpenTKSupport
 {
     internal static class ALHelper
     {

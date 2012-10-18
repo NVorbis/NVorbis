@@ -97,6 +97,8 @@ ClientBin
 
 *.[Pp]ublish.xml
 
+*.bak
+
 Generated_Code #added for RIA/Silverlight projects
 
 # Backup & report files from converting an old project file to a newer
@@ -107,6 +109,7 @@ UpgradeLog*.XML
 
 # NuGet
 packages/
+*.nupkg
 
 # Windows image file caches
 Thumbs.db
