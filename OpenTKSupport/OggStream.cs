@@ -9,38 +9,19 @@ using OpenTK.Audio.OpenAL;
 
 namespace NVorbis.OpenTKSupport
 {
-    internal static class ALHelper
+    public static class ALHelper
     {
-        public static readonly XRamExtension XRam = new XRamExtension();
-        public static readonly EffectsExtension Efx = new EffectsExtension();
+        internal static readonly XRamExtension XRam = new XRamExtension();
+        internal static readonly EffectsExtension Efx = new EffectsExtension();
 
-        static ALHelper()
+        public static void CheckCapabilities(ILogger logger)
         {
-#if TRACE
-            Console.SetCursorPosition(0, 5);
-            Console.Write("OpenAL Soft [" + (AL.Get(ALGetString.Version).Contains("SOFT") ? "X" : " ") + "], ");
-            Console.Write("X-RAM [" + (XRam.IsInitialized ? "X" : " ") + "], ");
-            Console.WriteLine("Effect Extensions [" + (Efx.IsInitialized ? "X" : " ") + "]");
-#endif
+            logger.Log(LogEventBoolean.IsOpenAlSoft, AL.Get(ALGetString.Version).Contains("SOFT"));
+            logger.Log(LogEventBoolean.XRamSupport, XRam.IsInitialized);
+            logger.Log(LogEventBoolean.EfxSupport, Efx.IsInitialized);
         }
 
-        [Conditional("TRACE")]
-        public static void TraceMemoryUsage(Action<string, int, int> logHandler)
-        {
-            var usedHeap = (double)GC.GetTotalMemory(true);
-
-            string[] sizes = { "B", "KB", "MB", "GB" };
-            int order = 0;
-            while (usedHeap >= 1024 && order + 1 < sizes.Length)
-            {
-                order++;
-                usedHeap = usedHeap / 1024;
-            }
-
-            logHandler(String.Format("Total memory : {0:0.###} {1}          ", usedHeap, sizes[order]), 0, 6);
-        }
-
-        public static void Check()
+        internal static void Check()
         {
             ALError error;
             if ((error = AL.GetError()) != ALError.NoError)
@@ -67,10 +48,7 @@ namespace NVorbis.OpenTKSupport
 
         public int BufferCount { get; private set; }
 
-#if TRACE
-        public int logX, logY;
-        public Action<string, int, int> LogHandler;
-#endif
+        public ILogger Logger { private get; set; }
 
         public OggStream(string filename, int bufferCount = DefaultBufferCount) : this(File.OpenRead(filename), bufferCount) { }
         public OggStream(Stream stream, int bufferCount = DefaultBufferCount)
@@ -98,10 +76,7 @@ namespace NVorbis.OpenTKSupport
 
             underlyingStream = stream;
 
-#if TRACE
-            // Set a default null log handler
-            LogHandler = (_, __, ___) => { };
-#endif
+            Logger = NullLogger.Default;
         }
 
         public void Prepare()
@@ -133,15 +108,9 @@ namespace NVorbis.OpenTKSupport
                     lock (prepareMutex)
                     {
                         Preparing = true;
-#if TRACE
-                        logX = 7;
-                        LogHandler("(*", logX, logY);
-                        logX += 2;
-#endif
+                        Logger.Log(LogEvent.BeginPrepare, this);
                         Open(precache: true);
-#if TRACE
-                        LogHandler(")", logX++, logY);
-#endif
+                        Logger.Log(LogEvent.EndPrepare, this);
                     }
                 }
             }
@@ -161,9 +130,7 @@ namespace NVorbis.OpenTKSupport
 
             Prepare();
 
-#if TRACE
-            LogHandler("{", logX++, logY);
-#endif
+            Logger.Log(LogEvent.Play, this);
             AL.SourcePlay(alSourceId);
             ALHelper.Check();
 
@@ -178,9 +145,7 @@ namespace NVorbis.OpenTKSupport
                 return;
 
             OggStreamer.Instance.RemoveStream(this);
-#if TRACE
-            LogHandler("]", logX++, logY);
-#endif
+            Logger.Log(LogEvent.Pause, this); 
             AL.SourcePause(alSourceId);
             ALHelper.Check();
         }
@@ -191,9 +156,7 @@ namespace NVorbis.OpenTKSupport
                 return;
 
             OggStreamer.Instance.AddStream(this);
-#if TRACE
-            LogHandler("[", logX++, logY);
-#endif
+            Logger.Log(LogEvent.Resume, this); 
             AL.SourcePlay(alSourceId);
             ALHelper.Check();
         }
@@ -203,9 +166,7 @@ namespace NVorbis.OpenTKSupport
             var state = AL.GetSourceState(alSourceId);
             if (state == ALSourceState.Playing || state == ALSourceState.Paused)
             {
-#if TRACE
-                LogHandler("}", logX++, logY);
-#endif
+                Logger.Log(LogEvent.Stop, this); 
                 StopPlayback();
             }
 
@@ -268,9 +229,8 @@ namespace NVorbis.OpenTKSupport
                 ALHelper.Efx.DeleteFilter(alFilterId);
 
             ALHelper.Check();
-#if TRACE
-            ALHelper.TraceMemoryUsage(LogHandler);
-#endif
+
+            Logger.Log(LogEventSingle.MemoryUsage, () => GC.GetTotalMemory(true));
         }
 
         void StopPlayback()
@@ -310,10 +270,8 @@ namespace NVorbis.OpenTKSupport
                     Empty();
                 }
             }
-#if TRACE
-            logX = 7;
-            LogHandler(new string(Enumerable.Repeat(' ', Console.BufferWidth - 6).ToArray()), logX, logY);
-#endif
+
+            Logger.Log(LogEvent.Empty, this);
         }
 
         internal void Open(bool precache = false)
@@ -368,6 +326,8 @@ namespace NVorbis.OpenTKSupport
         public float UpdateRate { get; private set; }
         public int BufferSize { get; private set; }
 
+        public ILogger Logger { private get; set; }
+
         static OggStreamer instance;
         public static OggStreamer Instance
         {
@@ -400,6 +360,8 @@ namespace NVorbis.OpenTKSupport
 
             readSampleBuffer = new float[bufferSize];
             castBuffer = new short[bufferSize];
+
+            Logger = NullLogger.Default;
         }
 
         public void Dispose()
@@ -431,17 +393,17 @@ namespace NVorbis.OpenTKSupport
         {
             int readSamples;
             lock (readMutex)
-            {
+            {   
                 readSamples = stream.Reader.ReadSamples(readSampleBuffer, 0, BufferSize);
                 CastBuffer(readSampleBuffer, castBuffer, readSamples);
             }
             AL.BufferData(bufferId, stream.Reader.Channels == 1 ? ALFormat.Mono16 : ALFormat.Stereo16, castBuffer,
                           readSamples * sizeof (short), stream.Reader.SampleRate);
             ALHelper.Check();
-#if TRACE
-            stream.LogHandler(readSamples == BufferSize ? "." : "|", stream.logX++, stream.logY);
-            ALHelper.TraceMemoryUsage(stream.LogHandler);
-#endif
+
+            if (readSamples == BufferSize)  Logger.Log(LogEvent.NewPacket, stream);
+            else                            Logger.Log(LogEvent.LastPacket, stream);
+            Logger.Log(LogEventSingle.MemoryUsage, () => GC.GetTotalMemory(true));
 
             return readSamples != BufferSize;
         }
@@ -525,9 +487,7 @@ namespace NVorbis.OpenTKSupport
                         var state = AL.GetSourceState(stream.alSourceId);
                         if (state == ALSourceState.Stopped)
                         {
-#if TRACE
-                            stream.LogHandler("!", stream.logX++, stream.logY);
-#endif
+                            Logger.Log(LogEvent.BufferUnderrun, stream);
                             AL.SourcePlay(stream.alSourceId);
                             ALHelper.Check();
                         }

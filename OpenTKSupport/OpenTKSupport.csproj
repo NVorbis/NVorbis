@@ -60,6 +60,7 @@
     <Reference Include="System" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Logging.cs" />
     <Compile Include="OggStream.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

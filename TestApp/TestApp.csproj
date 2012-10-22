@@ -17,7 +17,7 @@
     <RestorePackages>true</RestorePackages>
   </PropertyGroup>
   <PropertyGroup>
-    <StartupObject />
+    <StartupObject>TestApp.OpenTKStreamingTest</StartupObject>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|AnyCPU'">
     <DebugSymbols>true</DebugSymbols>
@@ -59,6 +59,7 @@
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
+    <Reference Include="System.Drawing" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
     <Reference Include="Microsoft.CSharp" />
@@ -67,7 +68,8 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Program.cs" />
+    <Compile Include="OpenTKStreamingTest.cs" />
+    <Compile Include="NAudioDecodingTests.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
@@ -79,8 +81,20 @@
       <Project>{6FC9AAA7-E7FE-4BD4-B813-582D4B3BDA0C}</Project>
       <Name>NAudioSupport</Name>
     </ProjectReference>
+    <ProjectReference Include="..\OpenTKSupport\OpenTKSupport.csproj">
+      <Project>{7BABE72F-07E3-40E9-A65B-4EF98029AE6B}</Project>
+      <Name>OpenTKSupport</Name>
+    </ProjectReference>
   </ItemGroup>
   <ItemGroup>
+    <None Include="..\TestFiles\1test.ogg">
+      <Link>1test.ogg</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\TestFiles\2test.ogg">
+      <Link>2test.ogg</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Include="packages.config" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
