@@ -81,6 +81,7 @@
     <Compile Include="Ogg\OggPacket.cs" />
     <Compile Include="Ogg\OggPacketReader.cs" />
     <Compile Include="Ogg\OggPageFlags.cs" />
+    <Compile Include="Ogg\ThreadSafeStream.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="RingBuffer.cs" />
     <Compile Include="Utils.cs" />

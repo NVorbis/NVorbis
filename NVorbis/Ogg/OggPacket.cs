@@ -81,8 +81,8 @@ namespace NVorbis.Ogg
                 return _mergedPacket.ReadNextByte();
             }
 
-            var pos = _curOfs + _offset;
-            if (_stream.Position != pos) _stream.Seek(pos, SeekOrigin.Begin);
+            _stream.Seek(_curOfs + _offset, SeekOrigin.Begin);
+
             var b = _stream.ReadByte();
             ++_curOfs;
             return b;

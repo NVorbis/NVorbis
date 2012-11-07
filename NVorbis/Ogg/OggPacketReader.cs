@@ -70,7 +70,10 @@ namespace NVorbis.Ogg
         void GetMorePackets()
         {
             // tell our container we need another page...  unless we've found the end of our stream.
-            if (!_eosFound) _container.GatherNextPage(_streamSerial);
+            using (var prl = _container.TakePageReaderLock())
+            {
+                if (!_eosFound) _container.GatherNextPage(_streamSerial, prl);
+            }
         }
 
         internal DataPacket GetNextPacket()
@@ -151,9 +154,12 @@ namespace NVorbis.Ogg
 
         internal void ReadAllPages()
         {
-            while (!_eosFound)
+            using (var prl = _container.TakePageReaderLock())
             {
-                _container.GatherNextPage(_streamSerial);
+                while (!_eosFound)
+                {
+                    _container.GatherNextPage(_streamSerial, prl);
+                }
             }
         }
 

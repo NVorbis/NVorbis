@@ -37,12 +37,9 @@ namespace NVorbis.Ogg
         int _pageCount;
         Action<int> _newStreamCallback;
 
-        internal long _containerBits;
+        System.Threading.Mutex _pageLock = new System.Threading.Mutex(false);
 
-        internal Stream BaseStream
-        {
-            get { return _stream; }
-        }
+        internal long _containerBits;
 
         internal int[] StreamSerials
         {
@@ -53,7 +50,7 @@ namespace NVorbis.Ogg
         {
             if (!stream.CanSeek) throw new ArgumentException("stream must be seekable!");
 
-            _stream = stream;
+            _stream = new ThreadSafeStream(stream);
 
             _packetReaders = new Dictionary<int, PacketReader>();
             _eosFlags = new Dictionary<int, bool>();
@@ -64,28 +61,7 @@ namespace NVorbis.Ogg
 
         void IPacketProvider.Init()
         {
-            int streamSerial, seqNo;
-            long granulePosition, dataOffset;
-            PageFlags pageFlags;
-            int[] packetSizes;
-            bool lastPacketContinues;
-
-            if (!ReadPageHeader(out streamSerial, out pageFlags, out granulePosition, out seqNo, out dataOffset, out packetSizes, out lastPacketContinues)) throw new InvalidDataException("Not an OGG container!");
-
-            // go ahead and process this first page
-            _packetReaders.Add(streamSerial, new PacketReader(this, streamSerial));
-            _eosFlags.Add(streamSerial, false);
-            _streamSerials.Add(streamSerial);
-
-            for (int i = 0; i < packetSizes.Length - 1; i++)
-            {
-                _packetReaders[streamSerial].AddPacket(new Packet(_stream, dataOffset, packetSizes[i]) { PageGranulePosition = granulePosition, IsContinued = false, IsContinuation = false, IsResync = false, PageSequenceNumber = seqNo });
-                dataOffset += packetSizes[i];
-            }
-            _packetReaders[streamSerial].AddPacket(new Packet(_stream, dataOffset, packetSizes[packetSizes.Length - 1]) { PageGranulePosition = granulePosition, IsContinued = lastPacketContinues, IsContinuation = false, IsResync = false, PageSequenceNumber = seqNo });
-
-            var callback = _newStreamCallback;
-            if (callback != null) callback(streamSerial);
+            GatherNextPage("Not an OGG container!");
         }
 
         void IDisposable.Dispose()
@@ -93,39 +69,51 @@ namespace NVorbis.Ogg
             _packetReaders.Clear();
             _nextPageOffset = 0L;
             _containerBits = 0L;
+
+            _stream.Dispose();
         }
 
-        bool ReadPageHeader(out int streamSerial, out PageFlags flags, out long granulePosition, out int seqNo, out long dataOffset, out int[] packetSizes, out bool lastPacketContinues)
+        class PageHeader
         {
-            streamSerial = -1;
-            flags = PageFlags.None;
-            granulePosition = -1L;
-            seqNo = -1;
-            dataOffset = -1L;
-            packetSizes = null;
-            lastPacketContinues = false;
+            public int StreamSerial { get; set; }
+            public PageFlags Flags { get; set; }
+            public long GranulePosition { get; set; }
+            public int SequenceNumber { get; set; }
+            public long DataOffset { get; set; }
+            public int[] PacketSizes { get; set; }
+            public bool LastPacketContinues { get; set; }
+            public bool IsResync { get; set; }
+        }
+
+        PageHeader ReadPageHeader(long position)
+        {
+            // set the stream's position
+            _stream.Position = position;
 
             // header
             var hdrBuf = new byte[27];
-            if (_stream.Read(hdrBuf, 0, hdrBuf.Length) != hdrBuf.Length) return false;
+            if (_stream.Read(hdrBuf, 0, hdrBuf.Length) != hdrBuf.Length) return null;
 
             // capture signature
-            if (hdrBuf[0] != 0x4f || hdrBuf[1] != 0x67 || hdrBuf[2] != 0x67 || hdrBuf[3] != 0x53) return false;
+            if (hdrBuf[0] != 0x4f || hdrBuf[1] != 0x67 || hdrBuf[2] != 0x67 || hdrBuf[3] != 0x53) return null;
 
             // check the stream version
-            if (hdrBuf[4] != 0) return false;
+            if (hdrBuf[4] != 0) return null;
+
+            // start populating the header
+            var hdr = new PageHeader();
 
             // bit flags
-            flags = (PageFlags)hdrBuf[5];
+            hdr.Flags = (PageFlags)hdrBuf[5];
 
             // granulePosition
-            granulePosition = BitConverter.ToInt64(hdrBuf, 6);
+            hdr.GranulePosition = BitConverter.ToInt64(hdrBuf, 6);
 
             // stream serial
-            streamSerial = BitConverter.ToInt32(hdrBuf, 14);
+            hdr.StreamSerial = BitConverter.ToInt32(hdrBuf, 14);
 
             // sequence number
-            seqNo = BitConverter.ToInt32(hdrBuf, 18);
+            hdr.SequenceNumber = BitConverter.ToInt32(hdrBuf, 18);
 
             // save off the CRC
             var crc = BitConverter.ToUInt32(hdrBuf, 22);
@@ -144,7 +132,7 @@ namespace NVorbis.Ogg
 
             // figure out the length of the page
             var segCnt = (int)hdrBuf[26];
-            packetSizes = new int[segCnt];
+            var packetSizes = new int[segCnt];
             int size = 0, idx = 0;
             for (int i = 0; i < segCnt; i++)
             {
@@ -155,16 +143,16 @@ namespace NVorbis.Ogg
                 if (temp < 255)
                 {
                     ++idx;
-                    lastPacketContinues = false;
+                    hdr.LastPacketContinues = false;
                 }
                 else
                 {
-                    lastPacketContinues = true;
+                    hdr.LastPacketContinues = true;
                 }
 
                 size += temp;
             }
-            if (lastPacketContinues) ++idx;
+            if (hdr.LastPacketContinues) ++idx;
             if (idx < packetSizes.Length)
             {
                 var temp = new int[idx];
@@ -174,8 +162,9 @@ namespace NVorbis.Ogg
                 }
                 packetSizes = temp;
             }
+            hdr.PacketSizes = packetSizes;
 
-            dataOffset = _stream.Position;
+            hdr.DataOffset = position + 27 + segCnt;
 
             // now we have to go through every byte in the page 
             while (--size >= 0)
@@ -183,16 +172,13 @@ namespace NVorbis.Ogg
                 UpdateCRC(_stream.ReadByte(), ref testCRC);
             }
 
-            _nextPageOffset = _stream.Position;
-            
-            _containerBits += 8 * (27 + segCnt);
             if (testCRC == crc)
             {
+                _containerBits += 8 * (27 + segCnt);
                 ++_pageCount;
-                return true;
+                return hdr;
             }
-            _containerBits -= 8 * (27 + segCnt);    // we're going to look for the bits separately...
-            return false;
+            return null;
         }
 
         void UpdateCRC(int nextVal, ref uint crc)
@@ -200,90 +186,168 @@ namespace NVorbis.Ogg
             crc = (crc << 8) ^ crcTable[nextVal ^ (crc >> 24)];
         }
 
+        PageHeader FindNextPageHeader()
+        {
+            var startPos = _nextPageOffset;
+
+            var isResync = false;
+            PageHeader hdr;
+            while ((hdr = ReadPageHeader(startPos)) == null)
+            {
+                isResync = true;
+                _containerBits += 8;
+                _stream.Position = ++startPos;
+
+                var cnt = 0;
+                do
+                {
+                    if (_stream.ReadByte() == 0x4f)
+                    {
+                        if (_stream.ReadByte() == 0x67 && _stream.ReadByte() == 0x67 && _stream.ReadByte() == 0x53)
+                        {
+                            // found it!
+                            startPos += cnt;
+                            break;
+                        }
+                        else
+                        {
+                            _stream.Seek(-3, SeekOrigin.Current);
+                        }
+                    }
+                    _containerBits += 8;
+                } while (++cnt < 65536);    // we will only search through 64KB of data to find the next sync marker.  if it can't be found, we have a badly corrupted stream.
+                if (cnt == 65536) return null;
+            }
+            hdr.IsResync = isResync;
+
+            _nextPageOffset = hdr.DataOffset;
+            for (int i = 0; i < hdr.PacketSizes.Length; i++)
+            {
+                _nextPageOffset += hdr.PacketSizes[i];
+            }
+
+            return hdr;
+        }
+
+        bool AddPage(PageHeader hdr)
+        {
+            // get our packet reader (create one if we have to)
+            PacketReader packetReader;
+            if (!_packetReaders.TryGetValue(hdr.StreamSerial, out packetReader))
+            {
+                packetReader = new PacketReader(this, hdr.StreamSerial);
+            }
+
+            // get our flags prepped
+            var isContinued = false;
+            var isContinuation = (hdr.Flags & PageFlags.ContinuesPacket) == PageFlags.ContinuesPacket;
+            var isEOS = (hdr.Flags & PageFlags.EndOfStream) == PageFlags.EndOfStream;
+            var isResync = hdr.IsResync;
+
+            // add all the packets, making sure to update flags as needed
+            var dataOffset = hdr.DataOffset;
+            var cnt = hdr.PacketSizes.Length;
+            foreach (var size in hdr.PacketSizes)
+            {
+                packetReader.AddPacket(
+                    new Packet(_stream, dataOffset, size)
+                    {
+                        PageGranulePosition = hdr.GranulePosition,
+                        IsEndOfStream = isEOS,
+                        PageSequenceNumber = hdr.SequenceNumber,
+                        IsContinued = isContinued,
+                        IsContinuation = isContinuation,
+                        IsResync = isResync,
+                    }
+                );
+
+                // update the offset into the stream for each packet
+                dataOffset += size;
+
+                // only the first packet in a page can be a continuation or resync
+                isContinuation = false;
+                isResync = false;
+
+                // only the last packet in a page can be continued
+                if (--cnt == 1)
+                {
+                    isContinued = hdr.LastPacketContinues;
+                }
+            }
+
+            // if the packet reader list doesn't include the serial in question, add it to all the collections and indicate a new stream to the caller
+            if (!_packetReaders.ContainsKey(hdr.StreamSerial))
+            {
+                var ss = hdr.StreamSerial;
+                _packetReaders.Add(ss, packetReader);
+                _eosFlags.Add(ss, isEOS);
+                _streamSerials.Add(ss);
+
+                return true;
+            }
+            else
+            {
+                // otherwise, update the end of stream marker for the stream and indicate an existing stream to the caller
+                _eosFlags[hdr.StreamSerial] |= isEOS;
+                return false;
+            }
+        }
+
+        internal class PageReaderLock : IDisposable
+        {
+            System.Threading.Mutex _lock;
+
+            public PageReaderLock(System.Threading.Mutex pageLock)
+            {
+                (_lock = pageLock).WaitOne();
+            }
+
+            public bool Validate(System.Threading.Mutex pageLock)
+            {
+                return object.ReferenceEquals(pageLock, _lock);
+            }
+
+            public void Dispose()
+            {
+                _lock.ReleaseMutex();
+            }
+        }
+
+        internal PageReaderLock TakePageReaderLock()
+        {
+            return new PageReaderLock(_pageLock);
+        }
+
+        int GatherNextPage(string noPageErrorMessage)
+        {
+            var hdr = FindNextPageHeader();
+            if (hdr == null)
+            {
+                throw new InvalidDataException(noPageErrorMessage);
+            }
+            if (AddPage(hdr))
+            {
+                var callback = _newStreamCallback;
+                if (callback != null) callback(hdr.StreamSerial);
+            }
+            return hdr.StreamSerial;
+        }
+
         /// <summary>
         /// Gathers pages until finding a page for the stream indicated
         /// </summary>
-        internal void GatherNextPage(int streamSerial)
+        internal void GatherNextPage(int streamSerial, PageReaderLock pageLock)
         {
-            int pageStreamSerial, seqNo;
-            long granulePosition, dataOffset;
-            PageFlags pageFlags;
-            int[] packetSizes;
-            bool lastPacketContinues;
+            // pageLock is just so we know the caller took a lock... we don't actually need it for anything else
+
+            if (pageLock == null) throw new ArgumentNullException("pageLock");
+            if (!pageLock.Validate(_pageLock)) throw new ArgumentException("pageLock");
+            if (!_eosFlags.ContainsKey(streamSerial)) throw new ArgumentOutOfRangeException("streamSerial");
 
             do
             {
                 if (_eosFlags[streamSerial]) throw new EndOfStreamException();
-
-                _stream.Position = _nextPageOffset;
-                var startPos = _nextPageOffset;
-
-                var isResync = false;
-                while (!ReadPageHeader(out pageStreamSerial, out pageFlags, out granulePosition, out seqNo, out dataOffset, out packetSizes, out lastPacketContinues))
-                {
-                    isResync = true;
-
-                    // gotta find the next sync header...
-                    // start on the next byte...
-                    _containerBits += 8;
-                    _stream.Position++;
-
-                    var cnt = 0;
-                    while (++cnt < 65536)
-                    {
-                        if (_stream.ReadByte() == 0x4f)
-                        {
-                            var checkPos = _stream.Position;
-                            if (_stream.ReadByte() == 'g' && _stream.ReadByte() == 'g' && _stream.ReadByte() == 'S')
-                            {
-                                // found it!
-                                _stream.Position -= 4;
-                                startPos = _stream.Position;
-                            }
-                            else
-                            {
-                                _stream.Position = checkPos;
-                                _containerBits += 8;
-                            }
-                        }
-                    }
-                    if (cnt == 65536) throw new InvalidDataException("Sync lost and could not find next page.");
-                }
-
-                // we now have a parsed header...  generate packets...
-                var newStream = false;
-                if (!_packetReaders.ContainsKey(pageStreamSerial))
-                {
-                    _packetReaders.Add(pageStreamSerial, new PacketReader(this, pageStreamSerial));
-                    _eosFlags.Add(pageStreamSerial, false);
-                    _streamSerials.Add(pageStreamSerial);
-
-                    newStream = true;
-                }
-
-                _packetReaders[pageStreamSerial].AddPacket(new Packet(_stream, dataOffset, packetSizes[0]) { PageGranulePosition = granulePosition, IsContinued = false, IsContinuation = (pageFlags & PageFlags.ContinuesPacket) == PageFlags.ContinuesPacket, IsResync = isResync, IsEndOfStream = (pageFlags & PageFlags.EndOfStream) == PageFlags.EndOfStream, PageSequenceNumber = seqNo });
-                dataOffset += packetSizes[0];
-                for (int i = 1; i < packetSizes.Length - 1; i++)
-                {
-                    _packetReaders[pageStreamSerial].AddPacket(new Packet(_stream, dataOffset, packetSizes[i]) { PageGranulePosition = granulePosition, IsContinued = false, IsContinuation = false, IsResync = false, IsEndOfStream = (pageFlags & PageFlags.EndOfStream) == PageFlags.EndOfStream, PageSequenceNumber = seqNo });
-                    dataOffset += packetSizes[i];
-                }
-                if (packetSizes.Length > 1)
-                {
-                    _packetReaders[pageStreamSerial].AddPacket(new Packet(_stream, dataOffset, packetSizes[packetSizes.Length - 1]) { PageGranulePosition = granulePosition, IsContinued = lastPacketContinues, IsContinuation = false, IsResync = false, IsEndOfStream = (pageFlags & PageFlags.EndOfStream) == PageFlags.EndOfStream, PageSequenceNumber = seqNo });
-                }
-
-                if ((pageFlags & PageFlags.EndOfStream) == PageFlags.EndOfStream)
-                {
-                    _eosFlags[pageStreamSerial] = true;
-                }
-
-                if (newStream)
-                {
-                    var callback = _newStreamCallback;
-                    if (callback != null) callback(pageStreamSerial);
-                }
-            } while (pageStreamSerial != streamSerial);
+            } while (GatherNextPage("Could not find next page.") != streamSerial);
         }
 
         DataPacket IPacketProvider.GetNextPacket(int streamSerial)
@@ -299,19 +363,29 @@ namespace NVorbis.Ogg
         bool IPacketProvider.FindNextStream(int currentStreamSerial)
         {
             // goes through all the pages until the serial count increases
-            
+
             // if the index is less than the highest, go ahead and return true
             var idx = Array.IndexOf(StreamSerials, currentStreamSerial);
             var cnt = this._packetReaders.Count;
             if (idx < cnt - 1) return true;
 
-            // read pages until we're done...
-            while (cnt == this._packetReaders.Count)
+            using (var pageLock = TakePageReaderLock())
             {
-                GatherNextPage(currentStreamSerial);
-            }
+                // read pages until we're done...
+                while (this._packetReaders.Count == cnt)
+                {
+                    try
+                    {
+                        GatherNextPage(string.Empty);
+                    }
+                    catch (InvalidDataException)
+                    {
+                        break;
+                    }
+                }
 
-            return cnt > this._packetReaders.Count;
+                return cnt > this._packetReaders.Count;
+            }
         }
 
         internal int GetReadPageCount()
@@ -326,7 +400,10 @@ namespace NVorbis.Ogg
             // there cannot possibly be another page less than 28 bytes from the end of the file
             while (_stream.Position < _stream.Length - 28)
             {
-                GatherNextPage(-1);
+                using (var pageLock = TakePageReaderLock())
+                {
+                    GatherNextPage(-1, pageLock);
+                }
             }
 
             _eosFlags.Remove(-1);
