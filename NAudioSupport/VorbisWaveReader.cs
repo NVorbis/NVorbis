@@ -28,6 +28,13 @@ namespace NVorbis.NAudioSupport
             _waveFormat = NAudio.Wave.WaveFormat.CreateIeeeFloatWaveFormat(_reader.SampleRate, _reader.Channels);
         }
 
+        public VorbisWaveReader(System.IO.Stream sourceStream)
+        {
+            _reader = new NVorbis.VorbisReader(sourceStream, false);
+
+            _waveFormat = NAudio.Wave.WaveFormat.CreateIeeeFloatWaveFormat(_reader.SampleRate, _reader.Channels);
+        }
+
         protected override void Dispose(bool disposing)
         {
             if (disposing && _reader != null)
