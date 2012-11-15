@@ -29,10 +29,10 @@ namespace NVorbis
         internal void EnsureSize(int size)
         {
             // because _end == _start signifies no data, and _end is always 1 more than the data we have, we must make the buffer {channels} entries bigger than requested
-            if (_bufLen < size + Channels)
-            {
-                size += Channels;
+            size += Channels;
 
+            if (_bufLen < size)
+            {
                 var temp = new T[size];
                 Array.Copy(_buffer, _start, temp, 0, _bufLen - _start);
                 if (_end < _start)

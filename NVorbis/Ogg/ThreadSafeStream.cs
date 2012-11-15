@@ -21,7 +21,7 @@ namespace NVorbis.Ogg
         long _length;
 
         object _streamLock;
-        ReaderWriterLockSlim _rwls;
+        ReaderWriterLockSlim _nodeLock;
 
         internal ThreadSafeStream(Stream baseStream)
         {
@@ -34,7 +34,7 @@ namespace NVorbis.Ogg
             _positions = new LinkedList<Node>();
 
             _streamLock = new object();
-            _rwls = new ReaderWriterLockSlim();
+            _nodeLock = new ReaderWriterLockSlim();
 
             _length = baseStream.Length;
         }
@@ -45,10 +45,10 @@ namespace NVorbis.Ogg
             {
                 _positions.Clear();
 
-                if (_rwls != null)
+                if (_nodeLock != null)
                 {
-                    _rwls.Dispose();
-                    _rwls = null;
+                    _nodeLock.Dispose();
+                    _nodeLock = null;
                 }
             }
 
@@ -91,7 +91,7 @@ namespace NVorbis.Ogg
             {
                 // try to sort...
                 var upgraded = false;
-                _rwls.EnterUpgradeableReadLock();
+                _nodeLock.EnterUpgradeableReadLock();
                 try
                 {
                     var curNode = _positions.First;
@@ -107,7 +107,7 @@ namespace NVorbis.Ogg
                             var temp = curNode.Next;
                             if (!upgraded)
                             {
-                                _rwls.EnterWriteLock();
+                                _nodeLock.EnterWriteLock();
                                 upgraded = true;
                             }
                             _positions.Remove(curNode);
@@ -124,17 +124,17 @@ namespace NVorbis.Ogg
                 {
                     if (upgraded)
                     {
-                        _rwls.ExitWriteLock();
+                        _nodeLock.ExitWriteLock();
                     }
 
-                    _rwls.ExitUpgradeableReadLock();
+                    _nodeLock.ExitUpgradeableReadLock();
                 }
             }
 
             LinkedListNode<Node> node;
 
             var thread = Thread.CurrentThread;
-            _rwls.EnterReadLock();
+            _nodeLock.EnterReadLock();
             try
             {
                 node = _positions.First;
@@ -151,7 +151,7 @@ namespace NVorbis.Ogg
             }
             finally
             {
-                _rwls.ExitReadLock();
+                _nodeLock.ExitReadLock();
             }
 
             // not found, create a new node and add it
@@ -164,14 +164,14 @@ namespace NVorbis.Ogg
                 }
             );
 
-            _rwls.EnterWriteLock();
+            _nodeLock.EnterWriteLock();
             try
             {
                 _positions.AddLast(node);
             }
             finally
             {
-                _rwls.ExitWriteLock();
+                _nodeLock.ExitWriteLock();
             }
 
             return node.Value;
@@ -186,6 +186,24 @@ namespace NVorbis.Ogg
             set
             {
                 Seek(value, SeekOrigin.Begin);
+            }
+        }
+
+        public override int ReadByte()
+        {
+            var buf = ACache.Get<byte>(1);
+            try
+            {
+                int cnt = Read(buf, 0, 1);
+                if (cnt == 0)
+                {
+                    return -1;
+                }
+                return (int)buf[0];
+            }
+            finally
+            {
+                ACache.Return(ref buf);
             }
         }
 

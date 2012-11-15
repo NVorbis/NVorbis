@@ -19,8 +19,6 @@ namespace NVorbis.NAudioSupport
         NVorbis.VorbisReader _reader;
         NAudio.Wave.WaveFormat _waveFormat;
 
-        long _position;
-
         public VorbisWaveReader(string fileName)
         {
             _reader = new NVorbis.VorbisReader(fileName);
@@ -53,38 +51,58 @@ namespace NVorbis.NAudioSupport
 
         public override long Length
         {
-            get { return (long)(_reader.TotalTime.TotalSeconds * _waveFormat.SampleRate * _waveFormat.Channels * 4); }
+            get { return (long)(_reader.TotalTime.TotalSeconds * _waveFormat.SampleRate * _waveFormat.Channels * sizeof(float)); }
         }
 
         public override long Position
         {
             get
             {
-                return _position;
+                return (long)(_reader.DecodedTime.TotalMilliseconds * _reader.SampleRate * _reader.Channels * sizeof(float));
             }
             set
             {
                 if (value < 0 || value > Length) throw new ArgumentOutOfRangeException("value");
 
-                _reader.DecodedTime = TimeSpan.FromSeconds((double)value / _reader.SampleRate / _reader.Channels / 4);
-
-                _position = value;
+                _reader.DecodedTime = TimeSpan.FromSeconds((double)value / _reader.SampleRate / _reader.Channels / sizeof(float));
             }
         }
 
+        // This buffer can be static because it can only be used by 1 instance per thread
+        [ThreadStatic]
+        static float[] _conversionBuffer = null;
+
         public override int Read(byte[] buffer, int offset, int count)
         {
-            var buf = new float[count / 4];
-            int cnt = Read(buf, 0, buf.Length);
+            // adjust count so it is in floats instead of bytes
+            count /= sizeof(float);
 
-            Buffer.BlockCopy(buf, 0, buffer, offset, cnt * 4);
+            // make sure we don't have an odd count
+            count -= count % _reader.Channels;
 
-            return cnt * 4;
+            // get the buffer, creating a new one if none exists or the existing one is too small
+            var cb = _conversionBuffer ?? (_conversionBuffer = new float[count]);
+            if (cb.Length < count)
+            {
+                cb = (_conversionBuffer = new float[count]);
+            }
+
+            // let Read(float[], int, int) do the actual reading; adjust count back to bytes
+            int cnt = Read(cb, 0, count) * sizeof(float);
+
+            // move the data back to the request buffer
+            Buffer.BlockCopy(cb, 0, buffer, offset, cnt);
+
+            // done!
+            return cnt;
         }
 
         public int Read(float[] buffer, int offset, int count)
         {
-            var readCount = _reader.ReadSamples(buffer, offset, count);
+            return _reader.ReadSamples(buffer, offset, count);
+
+            // This is for "ConcatenateStreams" support (which we're not doing currently)
+            //var readCount = _reader.ReadSamples(buffer, offset, count);
 
             //if (readCount < count)
             //{
@@ -94,17 +112,11 @@ namespace NVorbis.NAudioSupport
             //        if (_reader.SwitchStreams(_reader.StreamIndex))
             //        {
             //            readCount += Read(buffer, offset + readCount, count - readCount);
-
-            //            _position = (long)(_reader.DecodedTime.TotalSeconds * _waveFormat.SampleRate * _waveFormat.Channels * 4);
             //        }
             //    }
             //}
-            //else
-            {
-                _position += readCount * 4;
-            }
 
-            return readCount;
+            //return readCount;
         }
 
         public int StreamCount
@@ -123,7 +135,6 @@ namespace NVorbis.NAudioSupport
                 {
                     throw new System.IO.InvalidDataException("The selected stream is not a valid Vorbis stream!");
                 }
-                _position = (long)(_reader.DecodedTime.TotalSeconds * _waveFormat.SampleRate * _waveFormat.Channels * 4);
             }
         }
 
