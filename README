@@ -64,3 +64,9 @@ History
     * Fixed a few bugs (mostly race conditions in multi-threaded playback scenarios)
     * Added multi-stream support to VorbisWaveReader
     * Added several info properties to VorbisWaveReader
+0.5.5 - 11/15/2012
+    * Added OpenTK support
+    * Added makefiles for Mono
+    * Added constructor to NAudioSupport for already opened Stream instances
+    * Made Ogg container logic thread-safe
+    * Cleanup & Optimization
