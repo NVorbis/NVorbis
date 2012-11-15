@@ -1,8 +1,8 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<package xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
+<package xmlns="http://schemas.microsoft.com/packaging/2011/08/nuspec.xsd">
     <metadata>
         <id>NVorbis</id>
-        <version>0.5.4</version>
+        <version>0.5.5</version>
         <title />
         <authors>Andrew Ward</authors>
         <owners />
@@ -11,7 +11,9 @@
         <requireLicenseAcceptance>false</requireLicenseAcceptance>
         <description>A fully managed implementation of a Xiph.org Foundation Ogg Vorbis decoder.</description>
         <summary>A managed Xiph.org Foundation Ogg Vorbis decoder</summary>
-        <releaseNotes>Fixes to nuget package</releaseNotes>
+        <releaseNotes>- Make Ogg container code thread-safe
+- Cleanup & Optimizations
+- Change seek to use page's GranulePosition on every page instead of continuing previous count (this is only an issue in broken files)</releaseNotes>
         <language>en-US</language>
         <tags>ogg vorbis xiph audio c# sound .NET</tags>
         <frameworkAssemblies>
