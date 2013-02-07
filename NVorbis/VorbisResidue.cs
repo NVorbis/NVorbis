@@ -137,7 +137,7 @@ namespace NVorbis
                 {
                     var cls = ACache.Get<int>(channels, _partsToRead, _classWordsPerCodeWord);
 
-                    foreach (var pass in Enumerable.Range(0, _maxPasses))
+                    for (var pass = 0; pass < _maxPasses; pass++)
                     {
                         for (int i = 0, l = 0, offset = _begin; i < _partsToRead; l++)
                         {
