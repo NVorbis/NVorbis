@@ -68,7 +68,7 @@ namespace NVorbis
 
         static internal float ConvertFromVorbisFloat32(uint bits)
         {
-            // do as much as possible with bit tricks
+            // do as much as possible with bit tricks in integer math
             var sign = ((int)bits >> 31);   // sign-extend to the full 32-bits
             var exponent = (double)((int)((bits & 0x7fe00000) >> 21) - 788);  // grab the exponent, remove the bias, store as double (for the call to System.Math.Pow(...))
             var mantissa = (float)(((bits & 0x1fffff) ^ sign) + (sign & 1));  // grab the mantissa and apply the sign bit.  store as float

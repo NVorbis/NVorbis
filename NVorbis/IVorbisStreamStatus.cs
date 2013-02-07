@@ -12,7 +12,7 @@ namespace NVorbis
     public interface IVorbisStreamStatus
     {
         /// <summary>
-        /// Gets the counters for latency & bitrate calculations, as well as overall bit counts
+        /// Gets the counters for latency and bitrate calculations, as well as overall bit counts
         /// </summary>
         void ResetStats();
 

@@ -12,7 +12,7 @@
         <description>NAudio support for NVorbis</description>
         <summary>NAudio support for NVorbis</summary>
         <releaseNotes>- Added new constructor for Stream
-- Cleanup & Optimizations</releaseNotes>
+- Cleanup and Optimizations</releaseNotes>
         <language>en-US</language>
         <tags>audio c# .NET sound vorbis</tags>
         <dependencies>

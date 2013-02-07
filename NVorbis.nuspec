@@ -12,7 +12,7 @@
         <description>A fully managed implementation of a Xiph.org Foundation Ogg Vorbis decoder.</description>
         <summary>A managed Xiph.org Foundation Ogg Vorbis decoder</summary>
         <releaseNotes>- Make Ogg container code thread-safe
-- Cleanup & Optimizations
+- Cleanup and Optimizations
 - Change seek to use page's GranulePosition on every page instead of continuing previous count (this is only an issue in broken files)</releaseNotes>
         <language>en-US</language>
         <tags>ogg vorbis xiph audio c# sound .NET</tags>
