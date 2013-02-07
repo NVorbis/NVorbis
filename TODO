@@ -1,6 +1,10 @@
 ﻿* Check that Floor0 is implemented correctly
 * Check that Residue0 is implemented correctly
 
+* Put an interface between the decoder and the container reader (needed for RTP / Matroska / Ogg Skeleton)
+
+* MAYBE: Re-write the Ogg container reader to make use of more intelligent buffering
+
 * RTP support
 	- Put an interface between VorbisReader and OggContainerReader
 	- Implement the same interface for RTP (non-seekable)
@@ -15,5 +19,3 @@
 	- more profiling
 
 * Test with a lot more Vorbis streams
-
-* Test / Add support for Mono & Unix (including makefile!)

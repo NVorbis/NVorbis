@@ -15,40 +15,40 @@ To use:
 
 - Create an instance of NVorbis.VorbisReader (pass the Ogg Vorbis filename in)
 - Use these properties to gather data about the logical stream:
-	- Channels
-	- SampleRate
-	- TotalTime		- A TimeSpan indicating the total length of the audio data
-	- DecodedTime	- A TimeSpan indicating the last returned sample's timestamp
-	- NominalBitrate, UpperBitrate, and LowerBitrate
-		- These are the encoder's reported bitrates
-	- Vendor	- The encoder's vendor string
-	- Comments	- An array of comments in the file (usually tags)
+    - Channels
+    - SampleRate
+    - TotalTime		- A TimeSpan indicating the total length of the audio data
+    - DecodedTime	- A TimeSpan indicating the last returned sample's timestamp
+    - NominalBitrate, UpperBitrate, and LowerBitrate
+        - These are the encoder's reported bitrates
+    - Vendor	- The encoder's vendor string
+    - Comments	- An array of comments in the file (usually tags)
 - Call "int ReadSamples(float[], int, int)" to retrieve the next batch of
   samples.  It will return 0 when the logical Vorbis stream is done.
 
 
 - For NAudio support:
-	- Reference NVorbis.NAudioSupport.dll
-	- Create an instance of NVorbis.NAudioSupport.VorbisWaveReader
-	- VorbisWaveReader implements NAudio.Wave.WaveStream.
+    - Reference NVorbis.NAudioSupport.dll
+    - Create an instance of NVorbis.NAudioSupport.VorbisWaveReader
+    - VorbisWaveReader implements NAudio.Wave.WaveStream.
 
 History
 -------
 0.1	- 08/03/2012
-	* Initial Release
+    * Initial Release
 0.2 - 08/07/2012
-	* Swapped out LGPL code for public domain implementations
-	* Relicensed under Ms-PL
-	* Added NAudio support project
-	* Added test files & app
-	* Performance improvements
+    * Swapped out LGPL code for public domain implementations
+    * Relicensed under Ms-PL
+    * Added NAudio support project
+    * Added test files & app
+    * Performance improvements
 0.3 - 08/08/2012
-	* Fixed Page / Packet decode (packets overlapping 2 pages)
-	* Fixed "no energy" packet handling
-	* Fixed packet reader not merging when unsolicited packets are added
-	* Added .gitignore
-	* Added initial multi-stream support
-	* Added statistics (see VorbisReader.Stats)
+    * Fixed Page / Packet decode (packets overlapping 2 pages)
+    * Fixed "no energy" packet handling
+    * Fixed packet reader not merging when unsolicited packets are added
+    * Added .gitignore
+    * Added initial multi-stream support
+    * Added statistics (see VorbisReader.Stats)
 0.4 - 08/14/2012
     * Refactoring to clean up code and make room for later improvements
     * Changed lapping algorithm to be simpler
@@ -70,3 +70,5 @@ History
     * Added constructor to NAudioSupport for already opened Stream instances
     * Made Ogg container logic thread-safe
     * Cleanup & Optimization
+0.6.0 - 
+    * Rework ACache to be truly thread-safe

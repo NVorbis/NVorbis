@@ -7,96 +7,261 @@
  ***************************************************************************/
 using System;
 using System.Collections.Generic;
+using System.Threading;
 
 namespace NVorbis
 {
     static class ACache
     {
-        [ThreadStatic]
-        static bool InScope = false;
-
-        static List<Action> ScopeCallbacks = new List<Action>();
-
-        static class BufferStorage<T>
+        class Scope : IDisposable
         {
-            class Item
-            {
-                internal T[] Array;
-                internal bool InUse;
-            }
-
-            static List<Item> _backingStore = new List<Item>();
+            static Scope _global = new Scope(false);
 
             [ThreadStatic]
-            static List<Item> _scopeItems = new List<Item>();
+            static Scope _current;
 
-            static BufferStorage()
+            internal static Scope Current
             {
-                ACache.ScopeCallbacks.Add(CloseScope);
+                get { return _current ?? _global; }
             }
 
-            static List<Item> ScopeItems
+            internal static bool IsInScope
             {
-                get
+                get { return _current != null; }
+            }
+
+            #region Sub-Classes
+
+            abstract class BufferStorage
+            {
+                abstract internal void CloseScope();
+
+                abstract internal Type BufferType { get; }
+            }
+
+            class BufferStorage<T> : BufferStorage
+            {
+                class Item
                 {
-                    return _scopeItems ?? (_scopeItems = new List<Item>());
+                    internal T[] Array;
+                    internal int Length;
+                    internal Item Next;
                 }
-            }
 
-            internal static T[] Get(int elements, bool clearFirst)
-            {
-                Item item;
-
-                for (int i = 0; i < _backingStore.Count; i++)
+                class ItemList
                 {
-                    if (!_backingStore[i].InUse && _backingStore[i].Array.Length == elements)
+                    Item _head;
+
+                    internal void Add(Item item)
                     {
-                        item = _backingStore[i];
-                        item.InUse = true;
-                        
-                        if (clearFirst) Array.Clear(item.Array, 0, elements);
+                        do
+                        {
+                            item.Next = _head;
+                        } while (Interlocked.CompareExchange(ref _head, item, item.Next) != item.Next);
+                    }
 
-                        if (ACache.InScope) ScopeItems.Add(item);
+                    internal Item Get(int length)
+                    {
+                        Item node, nextNode;
 
-                        return item.Array;
+                        // if the node is the head, try to rotate it off
+                        while ((node = _head) != null && node.Length == length)
+                        {
+                            if (Interlocked.CompareExchange(ref _head, node.Next, node) == node)
+                            {
+                                node.Next = null;
+                                return node;
+                            }
+                        }
+
+                        // the node wasn't the head, so look through the list until we find it
+                        while (node != null && (nextNode = node.Next) != null)
+                        {
+                            if (nextNode.Length == length)
+                            {
+                                if ((node = Interlocked.CompareExchange(ref node.Next, nextNode.Next, nextNode)) == nextNode)
+                                {
+                                    nextNode.Next = null;
+                                    return nextNode;
+                                }
+                                else
+                                {
+                                    // try again
+                                    continue;
+                                }
+                            }
+
+                            node = node.Next;
+                        }
+
+                        return null;
+                    }
+
+                    internal Item Get(T[] array)
+                    {
+                        Item node, nextNode;
+
+                        // if the node is the head, try to rotate it off
+                        while ((node = _head) != null && node.Array == array)
+                        {
+                            if (Interlocked.CompareExchange(ref _head, node.Next, node) == node)
+                            {
+                                node.Next = null;
+                                return node;
+                            }
+                        }
+
+                        // the node wasn't the head, so look through the list until we find it
+                        while (node != null && (nextNode = node.Next) != null)
+                        {
+                            if (nextNode.Array == array)
+                            {
+                                if ((node = Interlocked.CompareExchange(ref node.Next, nextNode.Next, nextNode)) == nextNode)
+                                {
+                                    nextNode.Next = null;
+                                    return nextNode;
+                                }
+                                else
+                                {
+                                    // try again
+                                    continue;
+                                }
+                            }
+
+                            node = node.Next;
+                        }
+
+                        return null;
+                    }
+
+                    internal void ForEach(Action<Item> callback)
+                    {
+                        var node = _head;
+                        while (node != null)
+                        {
+                            var next = node.Next;
+                            callback(node);
+                            node = next;
+                        }
+                    }
+
+                    internal void Clear()
+                    {
+                        _head = null;
                     }
                 }
 
-                item = new Item { Array = new T[elements], InUse = true };
-                _backingStore.Add(item);
+                ItemList _allocList = new ItemList();
+                ItemList _freeList = new ItemList();
 
-                if (ACache.InScope) ScopeItems.Add(item);
-
-                return item.Array;
-            }
-
-            internal static void Return(ref T[] buffer)
-            {
-                var array = buffer;
-
-                for (int i = 0; i < _backingStore.Count; i++)
+                internal T[] Get(int elements, bool clearFirst)
                 {
-                    if (_backingStore[i].Array == buffer)
+                    var node = _freeList.Get(elements);
+                    if (node == null)
                     {
-                        _backingStore[i].InUse = false;
-
-                        if (ACache.InScope) ScopeItems.Remove(_backingStore[i]);
-
-                        break;
+                        // create a new one
+                        node = new Item
+                        {
+                            Array = new T[elements],
+                            Length = elements
+                        };
                     }
+                    else if (clearFirst)
+                    {
+                        Array.Clear(node.Array, 0, node.Length);
+                    }
+                    _allocList.Add(node);
+                    return node.Array;
                 }
 
-                buffer = null;
-            }
-
-            internal static void CloseScope()
-            {
-                foreach (var item in ScopeItems)
+                internal void Return(ref T[] buffer)
                 {
-                    if (item != null) item.InUse = false;
+                    var node = _allocList.Get(buffer);
+                    if (node == null)
+                    {
+                        node = new Item
+                        {
+                            Array = buffer,
+                            Length = buffer.Length
+                        };
+                    }
+                    _freeList.Add(node);
+                    buffer = null;
                 }
-                ScopeItems.Clear();
+
+                override internal void CloseScope()
+                {
+                    var temp = new Action<Item>(CloseScopeForItem);
+                    _allocList.ForEach(temp);
+                    _freeList.ForEach(temp);
+
+                    _allocList.Clear();
+                    _freeList.Clear();
+                }
+
+                void CloseScopeForItem(Item node)
+                {
+                    _global.GetStorage<T>(true)._freeList.Add(node);
+                }
+
+                internal override Type BufferType
+                {
+                    get { return typeof(T); }
+                }
             }
+
+            #endregion
+
+            #region Instance Members
+
+            List<BufferStorage> _storage;
+
+            internal Scope(bool setScope)
+            {
+                _storage = new List<BufferStorage>();
+                if (setScope)
+                {
+                    _current = this;
+                }
+            }
+
+            BufferStorage<T> GetStorage<T>(bool firstTry)
+            {
+                while (true)
+                {
+                    for (int i = 0; i < _storage.Count; i++)
+                    {
+                        var s = _storage[i];
+                        if (s.BufferType == typeof(T))
+                        {
+                            return (BufferStorage<T>)s;
+                        }
+                    }
+                    _storage.Add(new BufferStorage<T>());
+                }
+            }
+
+            internal T[] Get<T>(int elements, bool clearFirst)
+            {
+                return GetStorage<T>(true).Get(elements, clearFirst);
+            }
+
+            internal void Return<T>(ref T[] buffer)
+            {
+                GetStorage<T>(true).Return(ref buffer);
+            }
+
+            public void Dispose()
+            {
+                foreach (var buffer in _storage)
+                {
+                    buffer.CloseScope();
+                }
+                _storage.Clear();
+                _current = null;
+            }
+
+            #endregion
         }
 
         internal static T[] Get<T>(int elements)
@@ -106,22 +271,22 @@ namespace NVorbis
 
         internal static T[] Get<T>(int elements, bool clearFirst)
         {
-            return BufferStorage<T>.Get(elements, clearFirst);
+            return Scope.Current.Get<T>(elements, clearFirst);
         }
 
         internal static T[][] Get<T>(int firstRankSize, int secondRankSize)
         {
-            var temp = BufferStorage<T[]>.Get(firstRankSize, true);
+            var temp = Scope.Current.Get<T[]>(firstRankSize, false);
             for (int i = 0; i < firstRankSize; i++)
             {
-                temp[i] = BufferStorage<T>.Get(secondRankSize, true);
+                temp[i] = Scope.Current.Get<T>(secondRankSize, true);
             }
             return temp;
         }
 
         internal static T[][][] Get<T>(int firstRankSize, int secondRankSize, int thirdRankSize)
         {
-            var temp = BufferStorage<T[][]>.Get(firstRankSize, true);
+            var temp = Scope.Current.Get<T[][]>(firstRankSize, false);
             for (int i = 0; i < firstRankSize; i++)
             {
                 temp[i] = Get<T>(secondRankSize, thirdRankSize);
@@ -131,7 +296,7 @@ namespace NVorbis
 
         internal static void Return<T>(ref T[] buffer)
         {
-            BufferStorage<T>.Return(ref buffer);
+            Scope.Current.Return<T>(ref buffer);
         }
 
         internal static void Return<T>(ref T[][] buffer)
@@ -140,7 +305,7 @@ namespace NVorbis
             {
                 if (buffer[i] != null) Return<T>(ref buffer[i]);
             }
-            BufferStorage<T[]>.Return(ref buffer);
+            Scope.Current.Return<T[]>(ref buffer);
         }
 
         internal static void Return<T>(ref T[][][] buffer)
@@ -149,21 +314,23 @@ namespace NVorbis
             {
                 if (buffer[i] != null) Return<T>(ref buffer[i]);
             }
-            BufferStorage<T[][]>.Return(ref buffer);
+            Scope.Current.Return<T[][]>(ref buffer);
         }
 
-        internal static void BeginScope()
+        internal static IDisposable BeginScope()
         {
-            InScope = true;
+            if (!Scope.IsInScope)
+            {
+                return new Scope(true);
+            }
+            return null;
         }
 
         internal static void EndScope()
         {
-            InScope = false;
-
-            foreach (var action in ScopeCallbacks)
+            if (Scope.IsInScope)
             {
-                action();
+                Scope.Current.Dispose();
             }
         }
     }
