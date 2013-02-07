@@ -12,16 +12,16 @@ using System.Text;
 
 namespace NVorbis
 {
-    class RingBuffer<T>
+    class RingBuffer
     {
-        T[] _buffer;
+        float[] _buffer;
         int _start;
         int _end;
         int _bufLen;
 
         internal RingBuffer(int size)
         {
-            _buffer = new T[size];
+            _buffer = new float[size];
             _start = _end = 0;
             _bufLen = size;
         }
@@ -33,7 +33,7 @@ namespace NVorbis
 
             if (_bufLen < size)
             {
-                var temp = new T[size];
+                var temp = new float[size];
                 Array.Copy(_buffer, _start, temp, 0, _bufLen - _start);
                 if (_end < _start)
                 {
@@ -50,51 +50,7 @@ namespace NVorbis
 
         internal int Channels;
 
-        internal T this[int rawIndex]
-        {
-            get { return this[rawIndex % Channels, rawIndex / Channels]; }
-            set { this[rawIndex % Channels, rawIndex / Channels] = value; }
-        }
-
-        internal T this[int channel, int index]
-        {
-            get
-            {
-                if (index >= 0)
-                {
-                    var idx = index * Channels + channel;
-                    if (idx >= _bufLen) throw new IndexOutOfRangeException();
-
-                    return _buffer[(idx + _start) % _bufLen];
-                }
-                return default(T);
-            }
-            set
-            {
-                if (index >= 0)
-                {
-                    var idx = index * Channels + channel;
-                    if (idx >= _bufLen) throw new IndexOutOfRangeException();
-
-                    idx = (idx + _start) % _bufLen;
-
-
-                    if (idx >= _end)    // this will catch wrap-around naturally (doesn't matter where start is...)
-                    {
-                        _end = idx + 1;
-                        if (_end == _bufLen) _end = 0;
-                    }
-                    else if (idx < _start)  // catch the case where the idx has wrapped, but _end hasn't...
-                    {
-                        _end = idx + 1;
-                    }
-
-                    _buffer[idx] = value;
-                }
-            }
-        }
-
-        internal void CopyTo(T[] buffer, int index, int count)
+        internal void CopyTo(float[] buffer, int index, int count)
         {
             if (index < 0 || index + count > buffer.Length) throw new ArgumentOutOfRangeException("index");
 
@@ -143,6 +99,54 @@ namespace NVorbis
                 if (temp < 0) temp += _bufLen;
                 return temp;
             }
+        }
+
+        internal void Write(int channel, int index, int start, int switchPoint, int end, float[] pcm, float[] window)
+        {
+            // this is the index of the first sample to merge
+            var idx = (index + start) * Channels + channel + _start;
+            while (idx >= _bufLen)
+            {
+                idx -= _bufLen;
+            }
+
+            // blech...  gotta fix the first packet's pointers
+            if (idx < 0)
+            {
+                start -= index;
+                idx = 0;
+            }
+
+            // go through and do the overlap
+            for (; idx < _bufLen && start < switchPoint; idx += Channels, ++start)
+            {
+                _buffer[idx] += pcm[start] * window[start];
+            }
+            if (idx >= _bufLen)
+            {
+                idx -= _bufLen;
+                for (; start < switchPoint; idx += Channels, ++start)
+                {
+                    _buffer[idx] += pcm[start] * window[start];
+                }
+            }
+
+            // go through and write the rest
+            for (; idx < _bufLen && start < end; idx += Channels, ++start)
+            {
+                _buffer[idx] = pcm[start] * window[start];
+            }
+            if (idx >= _bufLen)
+            {
+                idx -= _bufLen;
+                for (; start < end; idx += Channels, ++start)
+                {
+                    _buffer[idx] = pcm[start] * window[start];
+                }
+            }
+
+            // finally, make sure the buffer end is set correctly
+            _end = idx;
         }
     }
 }

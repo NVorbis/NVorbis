@@ -221,6 +221,7 @@ namespace NVorbis
             internal override float[][] Decode(DataPacket packet, bool[] doNotDecode, int channels, int blockSize)
             {
                 var residue = ACache.Get<float>(channels, blockSize);
+                var elementsPerChannel = _partitionSize / channels;
 
                 if (doNotDecode.Contains(false))
                 {
@@ -249,18 +250,19 @@ namespace NVorbis
                                     if (codebook != null && codebook.MapType != 0)
                                     {
                                         var chPtr = 0;
-                                        var t = offset / channels;
+                                        var dim = codebook.Dimensions;
 
-                                        for (int c = 0; c < _partitionSize / channels; )
+                                        for (int c = 0, t = offset / channels; c < elementsPerChannel; )
                                         {
                                             var entry = codebook.DecodeScalar(packet);
-                                            for (var d = 0; d < codebook.Dimensions; d++)
+                                            for (var d = 0; d < dim; d++)
                                             {
-                                                residue[chPtr++][t + c] += codebook[entry, d];
-                                                if (chPtr == channels)
+                                                residue[chPtr][t] += codebook[entry, d];
+                                                if (++chPtr == channels)
                                                 {
                                                     chPtr = 0;
                                                     c++;
+                                                    t++;
                                                 }
                                             }
                                         }

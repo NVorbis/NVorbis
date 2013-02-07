@@ -83,6 +83,7 @@ namespace NVorbis.Ogg
             public int[] PacketSizes { get; set; }
             public bool LastPacketContinues { get; set; }
             public bool IsResync { get; set; }
+            public byte[] SavedBuffer { get; set; }
         }
 
         PageHeader ReadPageHeader(long position)
@@ -165,11 +166,16 @@ namespace NVorbis.Ogg
             hdr.PacketSizes = packetSizes;
 
             hdr.DataOffset = position + 27 + segCnt;
+            hdr.SavedBuffer = new byte[size];
 
-            // now we have to go through every byte in the page 
-            while (--size >= 0)
+            // load the page data
+            if (_stream.Read(hdr.SavedBuffer, 0, size) != size) return null;
+
+            // now we have to go through every byte in the page
+            idx = -1;
+            while (++idx < size)
             {
-                UpdateCRC(_stream.ReadByte(), ref testCRC);
+                UpdateCRC(hdr.SavedBuffer[idx], ref testCRC);
             }
 
             if (testCRC == crc)
@@ -245,12 +251,11 @@ namespace NVorbis.Ogg
             var isResync = hdr.IsResync;
 
             // add all the packets, making sure to update flags as needed
-            var dataOffset = hdr.DataOffset;
+            var dataOffset = 0;
             var cnt = hdr.PacketSizes.Length;
             foreach (var size in hdr.PacketSizes)
             {
-                packetReader.AddPacket(
-                    new Packet(_stream, dataOffset, size)
+                var packet = new Packet(_stream, hdr.DataOffset + dataOffset, size)
                     {
                         PageGranulePosition = hdr.GranulePosition,
                         IsEndOfStream = isEOS,
@@ -258,8 +263,9 @@ namespace NVorbis.Ogg
                         IsContinued = isContinued,
                         IsContinuation = isContinuation,
                         IsResync = isResync,
-                    }
-                );
+                    };
+                packet.SetBuffer(hdr.SavedBuffer, dataOffset);
+                packetReader.AddPacket(packet);
 
                 // update the offset into the stream for each packet
                 dataOffset += size;

@@ -21,19 +21,28 @@ namespace NVorbis.Ogg
         long _length;
         Packet _mergedPacket;
 
+        byte[] _savedBuffer;
+        int _bufOffset;
+
         internal Packet Next { get; set; }
         internal Packet Prev { get; set; }
 
         int _curOfs;
 
-        internal Packet(Stream stream, long startPos, int length)
+        internal Packet(Stream stream, long streamOffset, int length)
             : base(length)
         {
             _stream = stream;
 
-            _offset = startPos;
+            _offset = streamOffset;
             _length = length;
             _curOfs = 0;
+        }
+
+        internal void SetBuffer(byte[] savedBuf, int offset)
+        {
+            _savedBuffer = savedBuf;
+            _bufOffset = offset;
         }
 
         protected override void DoMergeWith(NVorbis.DataPacket continuation)
@@ -66,6 +75,7 @@ namespace NVorbis.Ogg
         protected override void DoReset()
         {
             _curOfs = 0;
+
             if (_mergedPacket != null)
             {
                 _mergedPacket.DoReset();
@@ -81,11 +91,24 @@ namespace NVorbis.Ogg
                 return _mergedPacket.ReadNextByte();
             }
 
+            if (_savedBuffer != null)
+            {
+                return _savedBuffer[_bufOffset + _curOfs++];
+            }
+
             _stream.Seek(_curOfs + _offset, SeekOrigin.Begin);
 
             var b = _stream.ReadByte();
             ++_curOfs;
             return b;
+        }
+
+        public override void Done()
+        {
+            if (_savedBuffer != null)
+            {
+                _savedBuffer = null;
+            }
         }
     }
 }

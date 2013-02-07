@@ -250,7 +250,7 @@ namespace NVorbis
         #region Data Decode
 
         float[] _prevBuffer;
-        RingBuffer<float> _outputBuffer;
+        RingBuffer _outputBuffer;
         Queue<int> _bitsPerPacketHistory;
         Queue<int> _sampleCountHistory;
         int _preparedLength;
@@ -267,7 +267,7 @@ namespace NVorbis
                 SaveBuffer();
             }
 
-            _outputBuffer = new RingBuffer<float>(Block1Size * 2 * _channels);
+            _outputBuffer = new RingBuffer(Block1Size * 2 * _channels);
             _outputBuffer.Channels = _channels;
 
             _preparedLength = 0;
@@ -403,22 +403,23 @@ namespace NVorbis
                 pdi = null;
             }
 
+            packet.Done();
+
             return pdi;
         }
 
         int DecodePacket(PacketDecodeInfo pdi)
         {
-            var sizeW = pdi.Mode.BlockSize;
-
             // inverse coupling
             var steps = pdi.Mode.Mapping.CouplingSteps;
+            var halfSizeW = pdi.Mode.BlockSize / 2;
             for (int i = steps.Length - 1; i >= 0; i--)
             {
                 var magnitude = pdi.Residue[steps[i].Magnitude];
                 var angle = pdi.Residue[steps[i].Angle];
 
                 // we only have to do the first half; MDCT ignores the last half
-                for (int j = 0; j < sizeW / 2; j++)
+                for (int j = 0; j < halfSizeW; j++)
                 {
                     float newM, newA;
 
@@ -455,7 +456,6 @@ namespace NVorbis
             }
 
             // apply floor / dot product / MDCT (only run if we have sound energy in that channel)
-            var pcm = ACache.Get<float[]>(_channels);
             for (int c = 0; c < _channels; c++)
             {
                 var floorData = pdi.FloorData[c];
@@ -463,22 +463,23 @@ namespace NVorbis
                 if (floorData.ExecuteChannel)
                 {
                     pdi.Mode.Mapping.ChannelSubmap[c].Floor.Apply(floorData, res);
-                    pcm[c] = Mdct.Reverse(res);
-                }
-                else
-                {
-                    // Mdct.Reverse does an in-place transform, then returns the input buffer... mimic that
-                    pcm[c] = res;
+                    Mdct.Reverse(res);
                 }
             }
 
+            // technically we're done decoding at this point...  the rest is just overlapping the packets
+            return WindowSamples(pdi);
+        }
+
+        int WindowSamples(PacketDecodeInfo pdi)
+        {
             // window
             var window = pdi.Mode.GetWindow(pdi.PrevFlag, pdi.NextFlag);
             // this is applied as part of the lapping operation
 
             // now lap the data into the buffer...
-            
-            // var sizeW = pdi.Mode.BlockSize
+
+            var sizeW = pdi.Mode.BlockSize;
             var right = sizeW;
             var center = right >> 1;
             var left = 0;
@@ -506,20 +507,10 @@ namespace NVorbis
             }
             // short blocks don't need any adjustments
 
-            var lastLength = _outputBuffer.Length / _channels;
+            var idx = _outputBuffer.Length / _channels + begin;
             for (var c = 0; c < _channels; c++)
             {
-                var pcmChan = pcm[c];
-                int i = left, idx = lastLength + begin;
-                for (; i < center; i++)
-                {
-                    // add the new windowed value to the appropriate buffer index.  clamp to range -1 to 1 and set _clipped appropriately
-                    _outputBuffer[c, idx + i] = Utils.ClipValue(_outputBuffer[c, idx + i] + pcmChan[i] * window[i], ref _clipped);
-                }
-                for (; i < right; i++)
-                {
-                    _outputBuffer[c, idx + i] = pcmChan[i] * window[i];
-                }
+                _outputBuffer.Write(c, idx, left, center, right, pdi.Residue[c], window);
             }
 
             var newPrepLen = _outputBuffer.Length / _channels - end;

@@ -44,6 +44,10 @@ namespace NVorbis
             _readBits = 0L;
         }
 
+        virtual public void Done()
+        {
+        }
+
         public ulong TryPeekBits(int count, out int bitsRead)
         {
             ulong value = 0;
