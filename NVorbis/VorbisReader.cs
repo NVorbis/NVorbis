@@ -31,6 +31,8 @@ namespace NVorbis
 
         public VorbisReader(Stream stream, bool closeStreamOnDispose)
         {
+            ClipSamples = true;
+
             _decoders = new List<VorbisStreamDecoder>();
             _serials = new List<int>();
 
@@ -231,6 +233,11 @@ namespace NVorbis
         public long ContainerOverheadBits { get { return _packetProvider.ContainerBits; } }
 
         /// <summary>
+        /// Gets or sets whether to automatically apply clipping to samples returned by <see cref="VorbisReader.ReadSamples"/>.
+        /// </summary>
+        public bool ClipSamples { get; set; }
+
+        /// <summary>
         /// Gets stats from each decoder stream available
         /// </summary>
         public IVorbisStreamStatus[] Stats
@@ -258,7 +265,17 @@ namespace NVorbis
             if (offset < 0) throw new ArgumentOutOfRangeException("offset");
             if (count < 0 || offset + count > buffer.Length) throw new ArgumentOutOfRangeException("count");
 
-            return _decoders[_streamIdx].ReadSamples(buffer, offset, count);
+            count = _decoders[_streamIdx].ReadSamples(buffer, offset, count);
+
+            if (ClipSamples)
+            {
+                for (int i = 0; i < count; i++, offset++)
+                {
+                    buffer[offset] = Utils.ClipValue(buffer[offset], ref _decoders[_streamIdx]._clipped);
+                }
+            }
+
+            return count;
         }
 
         /// <summary>

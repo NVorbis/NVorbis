@@ -94,12 +94,6 @@ namespace NVorbis
                     x *= x;
                     array[rightbegin + i] = (float)Math.Sin(x * M_PI2);
                 }
-
-                // apply a scaling factor to the window so we don't have to clip the output
-                for (int i = 0; i < wnd; i++)
-                {
-                    array[i] /= 1.38396f;
-                }
             }
         }
 
