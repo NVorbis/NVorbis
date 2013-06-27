@@ -2,7 +2,7 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2011/08/nuspec.xsd">
     <metadata>
         <id>NVorbis</id>
-        <version>0.5.5</version>
+        <version>0.6.0</version>
         <title />
         <authors>Andrew Ward</authors>
         <owners />
@@ -11,9 +11,11 @@
         <requireLicenseAcceptance>false</requireLicenseAcceptance>
         <description>A fully managed implementation of a Xiph.org Foundation Ogg Vorbis decoder.</description>
         <summary>A managed Xiph.org Foundation Ogg Vorbis decoder</summary>
-        <releaseNotes>- Make Ogg container code thread-safe
-- Cleanup and Optimizations
-- Change seek to use page's GranulePosition on every page instead of continuing previous count (this is only an issue in broken files)</releaseNotes>
+        <releaseNotes>- Remove ACache from project
+- Make clipping optional (default: on)
+- Set clipping to clamp at +/-.99999994 instead of +/-1 as a courtesy to those not outputing float samples
+- Performance improvements for RingBuffer
+- Performance improvements in ThreadSafeStream</releaseNotes>
         <language>en-US</language>
         <tags>ogg vorbis xiph audio c# sound .NET</tags>
         <frameworkAssemblies>

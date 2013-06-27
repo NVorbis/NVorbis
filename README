@@ -70,5 +70,9 @@ History
     * Added constructor to NAudioSupport for already opened Stream instances
     * Made Ogg container logic thread-safe
     * Cleanup & Optimization
-0.6.0 - 
-    * Rework ACache to be truly thread-safe
+0.6.0 - 06/27/2013
+    * Remove ACache from project
+    * Make clipping optional (default: on)
+    * Set clipping to clamp at +/-.99999994 instead of +/-1 as a courtesy to those not outputing float samples
+    * Performance improvements for RingBuffer
+    * Performance improvements in ThreadSafeStream

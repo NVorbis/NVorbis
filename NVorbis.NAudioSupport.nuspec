@@ -2,7 +2,7 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
     <metadata>
         <id>NVorbis.NAudioSupport</id>
-        <version>0.5.5</version>
+        <version>0.5.6</version>
         <title />
         <authors>Andrew Ward</authors>
         <owners />
@@ -11,13 +11,12 @@
         <requireLicenseAcceptance>false</requireLicenseAcceptance>
         <description>NAudio support for NVorbis</description>
         <summary>NAudio support for NVorbis</summary>
-        <releaseNotes>- Added new constructor for Stream
-- Cleanup and Optimizations</releaseNotes>
+        <releaseNotes>- Bugfix: Position getter was using milliseconds instead of seconds</releaseNotes>
         <language>en-US</language>
         <tags>audio c# .NET sound vorbis</tags>
         <dependencies>
             <dependency id="NAudio" version="1.5" />
-            <dependency id="NVorbis" version="0.5.5" />
+            <dependency id="NVorbis" version="0.6.0" />
         </dependencies>
         <frameworkAssemblies>
             <frameworkAssembly assemblyName="System" />
