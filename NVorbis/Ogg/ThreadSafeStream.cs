@@ -83,11 +83,19 @@ namespace NVorbis.Ogg
             get { return _length; }
         }
 
-        int _totalHitCounter;
+        int _threadChangeCounter;
+        Node _lastNode;
 
         Node GetNode()
         {
-            if (Interlocked.Increment(ref _totalHitCounter) % 50 == 0)
+            // try to short-circuit the expensive operations below
+            var nodeVal = _lastNode;
+            if (nodeVal != null && nodeVal.Thread == Thread.CurrentThread)
+            {
+                return nodeVal;
+            }
+
+            if (Interlocked.Increment(ref _threadChangeCounter) % 50 == 0)
             {
                 // try to sort...
                 var upgraded = false;
@@ -144,7 +152,7 @@ namespace NVorbis.Ogg
                     {
                         // found it!
                         ++node.Value.HitCount;
-                        return node.Value;
+                        return (_lastNode = node.Value);
                     }
                     node = node.Next;
                 }
