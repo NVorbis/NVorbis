@@ -83,7 +83,6 @@ namespace NVorbis.Ogg
             public int[] PacketSizes { get; set; }
             public bool LastPacketContinues { get; set; }
             public bool IsResync { get; set; }
-            public byte[] SavedBuffer { get; set; }
         }
 
         PageHeader ReadPageHeader(long position)
@@ -166,16 +165,11 @@ namespace NVorbis.Ogg
             hdr.PacketSizes = packetSizes;
 
             hdr.DataOffset = position + 27 + segCnt;
-            hdr.SavedBuffer = new byte[size];
-
-            // load the page data
-            if (_stream.Read(hdr.SavedBuffer, 0, size) != size) return null;
 
             // now we have to go through every byte in the page
-            idx = -1;
-            while (++idx < size)
+            while (--size >= 0)
             {
-                UpdateCRC(hdr.SavedBuffer[idx], ref testCRC);
+                UpdateCRC(_stream.ReadByte(), ref testCRC);
             }
 
             if (testCRC == crc)
@@ -251,11 +245,11 @@ namespace NVorbis.Ogg
             var isResync = hdr.IsResync;
 
             // add all the packets, making sure to update flags as needed
-            var dataOffset = 0;
+            var dataOffset = hdr.DataOffset;
             var cnt = hdr.PacketSizes.Length;
             foreach (var size in hdr.PacketSizes)
             {
-                var packet = new Packet(_stream, hdr.DataOffset + dataOffset, size)
+                var packet = new Packet(_stream, dataOffset, size)
                     {
                         PageGranulePosition = hdr.GranulePosition,
                         IsEndOfStream = isEOS,
@@ -264,7 +258,6 @@ namespace NVorbis.Ogg
                         IsContinuation = isContinuation,
                         IsResync = isResync,
                     };
-                packet.SetBuffer(hdr.SavedBuffer, dataOffset);
                 packetReader.AddPacket(packet);
 
                 // update the offset into the stream for each packet
