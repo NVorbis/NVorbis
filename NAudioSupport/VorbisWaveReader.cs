@@ -58,7 +58,7 @@ namespace NVorbis.NAudioSupport
         {
             get
             {
-                return (long)(_reader.DecodedTime.TotalMilliseconds * _reader.SampleRate * _reader.Channels * sizeof(float));
+                return (long)(_reader.DecodedTime.TotalSeconds * _reader.SampleRate * _reader.Channels * sizeof(float));
             }
             set
             {
