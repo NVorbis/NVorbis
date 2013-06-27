@@ -260,11 +260,26 @@ namespace NVorbis
 
         long _currentPosition;
 
+        VorbisMode _mode;
+        bool _prevFlag, _nextFlag;
+        bool[] _noExecuteChannel;
+        VorbisFloor.PacketData[] _floorData;
+        float[][] _residue;
+
         void InitDecoder()
         {
             if (_outputBuffer != null)
             {
                 SaveBuffer();
+            }
+
+            _noExecuteChannel = new bool[_channels];
+            _floorData = new VorbisFloor.PacketData[_channels];
+
+            _residue = new float[_channels][];
+            for (int i = 0; i < _channels; i++)
+            {
+                _residue[i] = new float[Block1Size];
             }
 
             _outputBuffer = new RingBuffer(Block1Size * 2 * _channels);
@@ -285,53 +300,47 @@ namespace NVorbis
             // it is also called when a seek happens
 
             // save off the existing "good" data
-            SaveBuffer();
+            if (_preparedLength > 0)
+            {
+                SaveBuffer();
+            }
             _outputBuffer.Clear();
             _preparedLength = 0;
         }
 
         void SaveBuffer()
         {
-            var buf = ACache.Get<float>(_preparedLength * _channels, false);
+            var buf = new float[_preparedLength * _channels];
             ReadSamples(buf, 0, buf.Length);
             _prevBuffer = buf;
         }
 
-        class PacketDecodeInfo
-        {
-            public VorbisMode Mode;
-            public bool PrevFlag;
-            public bool NextFlag;
-            public VorbisFloor.PacketData[] FloorData;
-            public float[][] Residue;
-        }
-
-        PacketDecodeInfo UnpackPacket(DataPacket packet)
+        bool UnpackPacket(DataPacket packet)
         {
             // make sure we're on an audio packet
             if (packet.ReadBit())
             {
                 // we really can't do anything... count the bits as waste
-                return null;
+                packet.Done();
+                return false;
             }
-
-            var pdi = new PacketDecodeInfo();
 
             // get mode and prev/next flags
             var modeBits = _modeFieldBits;
             try
             {
-                pdi.Mode = Modes[(int)packet.ReadBits(_modeFieldBits)];
-                if (pdi.Mode.BlockFlag)
+                _mode = Modes[(int)packet.ReadBits(_modeFieldBits)];
+                if (_mode.BlockFlag)
                 {
-                    pdi.PrevFlag = packet.ReadBit();
-                    pdi.NextFlag = packet.ReadBit();
+                    _prevFlag = packet.ReadBit();
+                    _nextFlag = packet.ReadBit();
                     modeBits += 2;
                 }
             }
             catch (EndOfStreamException)
             {
-                return null;
+                packet.Done();
+                return false;
             }
 
             try
@@ -339,51 +348,49 @@ namespace NVorbis
                 var startBits = packet.BitsRead;
 
                 // read the noise floor data (but don't decode yet)
-                pdi.FloorData = ACache.Get<VorbisFloor.PacketData>(_channels);
-                var noExecuteChannel = ACache.Get<bool>(_channels);
                 for (int i = 0; i < _channels; i++)
                 {
-                    pdi.FloorData[i] = pdi.Mode.Mapping.ChannelSubmap[i].Floor.UnpackPacket(packet, pdi.Mode.BlockSize);
-                    noExecuteChannel[i] = !pdi.FloorData[i].ExecuteChannel;
+                    _floorData[i] = _mode.Mapping.ChannelSubmap[i].Floor.UnpackPacket(packet, _mode.BlockSize, i);
+                    _noExecuteChannel[i] = !_floorData[i].ExecuteChannel;
+
+                    // go ahead and clear the residue buffers
+                    Array.Clear(_residue[i], 0, _mode.BlockSize);
                 }
 
                 // make sure we handle no-energy channels correctly given the couplings...
-                foreach (var step in pdi.Mode.Mapping.CouplingSteps)
+                foreach (var step in _mode.Mapping.CouplingSteps)
                 {
-                    if (pdi.FloorData[step.Angle].ExecuteChannel || pdi.FloorData[step.Magnitude].ExecuteChannel)
+                    if (_floorData[step.Angle].ExecuteChannel || _floorData[step.Magnitude].ExecuteChannel)
                     {
-                        pdi.FloorData[step.Angle].ForceEnergy = true;
-                        pdi.FloorData[step.Magnitude].ForceEnergy = true;
+                        _floorData[step.Angle].ForceEnergy = true;
+                        _floorData[step.Magnitude].ForceEnergy = true;
                     }
                 }
 
                 var floorBits = packet.BitsRead - startBits;
                 startBits = packet.BitsRead;
 
-                pdi.Residue = ACache.Get<float>(_channels, pdi.Mode.BlockSize);
-                foreach (var subMap in pdi.Mode.Mapping.Submaps)
+                foreach (var subMap in _mode.Mapping.Submaps)
                 {
                     for (int j = 0; j < _channels; j++)
                     {
-                        if (pdi.Mode.Mapping.ChannelSubmap[j] != subMap)
+                        if (_mode.Mapping.ChannelSubmap[j] != subMap)
                         {
-                            pdi.FloorData[j].ForceNoEnergy = true;
+                            _floorData[j].ForceNoEnergy = true;
                         }
                     }
 
-                    var rTemp = subMap.Residue.Decode(packet, noExecuteChannel, _channels, pdi.Mode.BlockSize);
+                    var rTemp = subMap.Residue.Decode(packet, _noExecuteChannel, _channels, _mode.BlockSize);
                     for (int c = 0; c < _channels; c++)
                     {
-                        var r = pdi.Residue[c];
+                        var r = _residue[c];
                         var rt = rTemp[c];
-                        for (int i = 0; i < pdi.Mode.BlockSize; i++)
+                        for (int i = 0; i < _mode.BlockSize; i++)
                         {
                             r[i] += rt[i];
                         }
                     }
-                    ACache.Return(ref rTemp);
                 }
-                ACache.Return(ref noExecuteChannel);
 
                 _glueBits += 1;
                 _modeBits += modeBits;
@@ -392,31 +399,33 @@ namespace NVorbis
                 _wasteBits += 8 * packet.Length - packet.BitsRead;
 
                 _packetCount += 1;
+
+                return true;
             }
             catch (EndOfStreamException)
             {
                 ResetDecoder();
-                pdi = null;
             }
             catch (InvalidDataException)
             {
-                pdi = null;
+            }
+            finally
+            {
+                packet.Done();
             }
 
-            packet.Done();
-
-            return pdi;
+            return false;
         }
 
-        int DecodePacket(PacketDecodeInfo pdi)
+        void DecodePacket()
         {
             // inverse coupling
-            var steps = pdi.Mode.Mapping.CouplingSteps;
-            var halfSizeW = pdi.Mode.BlockSize / 2;
+            var steps = _mode.Mapping.CouplingSteps;
+            var halfSizeW = _mode.BlockSize / 2;
             for (int i = steps.Length - 1; i >= 0; i--)
             {
-                var magnitude = pdi.Residue[steps[i].Magnitude];
-                var angle = pdi.Residue[steps[i].Angle];
+                var magnitude = _residue[steps[i].Magnitude];
+                var angle = _residue[steps[i].Angle];
 
                 // we only have to do the first half; MDCT ignores the last half
                 for (int j = 0; j < halfSizeW; j++)
@@ -458,39 +467,36 @@ namespace NVorbis
             // apply floor / dot product / MDCT (only run if we have sound energy in that channel)
             for (int c = 0; c < _channels; c++)
             {
-                var floorData = pdi.FloorData[c];
-                var res = pdi.Residue[c];
+                var floorData = _floorData[c];
+                var res = _residue[c];
                 if (floorData.ExecuteChannel)
                 {
-                    pdi.Mode.Mapping.ChannelSubmap[c].Floor.Apply(floorData, res);
-                    Mdct.Reverse(res);
+                    _mode.Mapping.ChannelSubmap[c].Floor.Apply(floorData, res);
+                    Mdct.Reverse(res, _mode.BlockSize);
                 }
             }
-
-            // technically we're done decoding at this point...  the rest is just overlapping the packets
-            return WindowSamples(pdi);
         }
 
-        int WindowSamples(PacketDecodeInfo pdi)
+        int OverlapSamples()
         {
             // window
-            var window = pdi.Mode.GetWindow(pdi.PrevFlag, pdi.NextFlag);
+            var window = _mode.GetWindow(_prevFlag, _nextFlag);
             // this is applied as part of the lapping operation
 
             // now lap the data into the buffer...
 
-            var sizeW = pdi.Mode.BlockSize;
+            var sizeW = _mode.BlockSize;
             var right = sizeW;
             var center = right >> 1;
             var left = 0;
             var begin = -center;
             var end = center;
 
-            if (pdi.Mode.BlockFlag)
+            if (_mode.BlockFlag)
             {
                 // if the flag is true, it's a long block
                 // if the flag is false, it's a short block
-                if (!pdi.PrevFlag)
+                if (!_prevFlag)
                 {
                     // previous block was short
                     left = Block1Size / 4 - Block0Size / 4;  // where to start in pcm[][]
@@ -498,7 +504,7 @@ namespace NVorbis
                     begin = Block0Size / -2 - left;     // where to start in _outputBuffer[,]
                 }
 
-                if (!pdi.NextFlag)
+                if (!_nextFlag)
                 {
                     // next block is short
                     right -= sizeW / 4 - Block0Size / 4;
@@ -510,7 +516,7 @@ namespace NVorbis
             var idx = _outputBuffer.Length / _channels + begin;
             for (var c = 0; c < _channels; c++)
             {
-                _outputBuffer.Write(c, idx, left, center, right, pdi.Residue[c], window);
+                _outputBuffer.Write(c, idx, left, center, right, _residue[c], window);
             }
 
             var newPrepLen = _outputBuffer.Length / _channels - end;
@@ -582,7 +588,6 @@ namespace NVorbis
         void DecodeNextPacket()
         {
             _sw.Start();
-            ACache.BeginScope();
 
             try
             {
@@ -605,8 +610,7 @@ namespace NVorbis
                     ResetDecoder(); // if we're a resync, our current decoder state is invalid...
                 }
 
-                var pdi = UnpackPacket(packet);
-                if (pdi == null)
+                if (!UnpackPacket(packet))
                 {
                     _wasteBits += 8 * packet.Length;
                     return;
@@ -614,7 +618,8 @@ namespace NVorbis
 
                 // we can now safely decode all the data without having to worry about a corrupt or partial packet
 
-                var samplesDecoded = DecodePacket(pdi);
+                DecodePacket();
+                var samplesDecoded = OverlapSamples();
 
                 // we can do something cool here...  mark down how many samples were decoded in this packet
                 if (packet.GranuleCount.HasValue == false)
@@ -640,7 +645,6 @@ namespace NVorbis
             }
             finally
             {
-                ACache.EndScope();
                 _sw.Stop();
             }
         }
@@ -683,10 +687,14 @@ namespace NVorbis
                 // if we have samples left over, rebuild the previous buffer array...
                 if (cnt < _prevBuffer.Length)
                 {
-                    var buf = ACache.Get<float>(_prevBuffer.Length - cnt, false);
+                    var buf = new float[_prevBuffer.Length - cnt];
                     Buffer.BlockCopy(_prevBuffer, cnt * sizeof(float), buf, 0, (_prevBuffer.Length - cnt) * sizeof(float));
-                    ACache.Return(ref _prevBuffer);
                     _prevBuffer = buf;
+                }
+                else
+                {
+                    // if no samples left over, clear the previous buffer
+                    _prevBuffer = null;
                 }
 
                 // reduce the desired sample count & increase the desired sample offset
@@ -703,6 +711,13 @@ namespace NVorbis
                 try
                 {
                     DecodeNextPacket();
+
+                    // we can safely assume the _prevBuffer was null when we entered this loop
+                    if (_prevBuffer != null)
+                    {
+                        // uh-oh... something is wrong...
+                        return ReadSamples(buffer, offset, _prevBuffer.Length);
+                    }
                 }
                 catch (EndOfStreamException)
                 {
@@ -733,7 +748,7 @@ namespace NVorbis
                 _eosFound = false;
 
                 ResetDecoder();
-                ACache.Return(ref _prevBuffer);
+                _prevBuffer = null;
             }
         }
 

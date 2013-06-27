@@ -72,7 +72,6 @@
     <Reference Include="System" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="ACache.cs" />
     <Compile Include="Huffman.cs" />
     <Compile Include="IPacketProvider.cs" />
     <Compile Include="Mdct.cs" />

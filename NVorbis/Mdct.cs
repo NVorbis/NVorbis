@@ -18,11 +18,9 @@ namespace NVorbis
 
         static Dictionary<int, Mdct> _setupCache = new Dictionary<int, Mdct>(2);
 
-        public static float[] Reverse(float[] samples)
+        public static void Reverse(float[] samples, int sampleCount)
         {
-            var setup = GetSetup(samples.Length);
-            setup.CalcReverse(samples);
-            return samples;
+            GetSetup(sampleCount).CalcReverse(samples);
         }
 
         static Mdct GetSetup(int n)
@@ -43,7 +41,7 @@ namespace NVorbis
 
         int n, n2, n4, n8, ld;
 
-        float[] A, B, C;
+        float[] A, B, C, buf2;
         ushort[] bitrev;
 
         private Mdct(int n)
@@ -59,6 +57,7 @@ namespace NVorbis
             A = new float[n2];
             B = new float[n2];
             C = new float[n4];
+            buf2 = new float[n2];
             int k, k2;
             for (k = k2 = 0; k < n4; ++k, k2 += 2)
             {
@@ -77,14 +76,12 @@ namespace NVorbis
             bitrev = new ushort[n8];
             for (int i = 0; i < n8; ++i)
             {
-                //bitrev[i] = (ushort)((Utils.BitReverse((uint)i) >> (32 - ld + 3)) << 2);
                 bitrev[i] = (ushort)(Utils.BitReverse((uint)i, ld - 3) << 2);
             }
         }
 
         void CalcReverse(float[] buffer)
         {
-            float[] buf2 = ACache.Get<float>(n2);
             float[] u, v;
 
             // copy and reflect spectral data
@@ -329,8 +326,6 @@ namespace NVorbis
                     d3 -= 4;
                 }
             }
-
-            ACache.Return(ref buf2);
         }
 
         void step3_iter0_loop(int n, float[] e, int i_off, int k_off)
@@ -562,11 +557,9 @@ namespace NVorbis
 
         static Dictionary<int, Mdct> _setupCache = new Dictionary<int, Mdct>(2);
 
-        public static float[] Reverse(float[] samples)
+        public static void Reverse(float[] samples, int sampleCount)
         {
-            var setup = GetSetup(samples.Length);
-            setup.CalcReverse(samples);
-            return samples;
+            GetSetup(sampleCount).CalcReverse(samples);
         }
 
         static Mdct GetSetup(int n)
@@ -587,7 +580,7 @@ namespace NVorbis
 
         int n, n2, n4, n8, ld;
 
-        float[] A, B, C;
+        float[] A, B, C, buf2Temp;
         ushort[] bitrev;
 
         private Mdct(int n)
@@ -603,6 +596,7 @@ namespace NVorbis
             A = new float[n2];
             B = new float[n2];
             C = new float[n4];
+            buf2Temp = new float[n2];
             int k, k2;
             for (k = k2 = 0; k < n4; ++k, k2 += 2)
             {
@@ -629,8 +623,6 @@ namespace NVorbis
         unsafe void CalcReverse(float[] buf)
         {
             // we can get away with a lot of fixed statements here since no allocations happen after this line...
-            var buf2Temp = ACache.Get<float>(n2);
-
             fixed (float* buffer = buf)
             fixed (float* buf2 = buf2Temp)
             {
@@ -868,8 +860,6 @@ namespace NVorbis
                     }
                 }
             }
-
-            ACache.Return(ref buf2Temp);
         }
 
         unsafe void imdct_step3_iter0_loop(int n, float* e, int i_off, int k_off, float* A)

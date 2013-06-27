@@ -98,6 +98,14 @@ namespace NVorbis
                 _nToRead = _end - _begin;
                 _partsToRead = _nToRead / _partitionSize;
                 _partWords = (_partsToRead + _classWordsPerCodeWord - 1) / _classWordsPerCodeWord;
+
+                _residue = new float[_vorbis._channels][];
+                for (int i = 0; i < _vorbis._channels; i++)
+                {
+                    _residue[i] = new float[_vorbis.Block1Size];
+                }
+
+                _cls = new int[_vorbis._channels, _partsToRead, _classWordsPerCodeWord];
             }
 
             static int icount(int v)
@@ -129,13 +137,32 @@ namespace NVorbis
             protected int _partsToRead;
             protected int _partWords;
 
+            float[][] _residue;
+            protected int[,,] _cls;
+
+            protected float[][] GetResidueBuffer(int channels)
+            {
+                var temp = _residue;
+                if (channels < _vorbis._channels)
+                {
+                    temp = new float[channels][];
+                    Array.Copy(_residue, temp, channels);
+                }
+                for (int i = 0; i < channels; i++)
+                {
+                    Array.Clear(temp[i], 0, temp[i].Length);
+                }
+                return temp;
+            }
+
             internal override float[][] Decode(DataPacket packet, bool[] doNotDecode, int channels, int blockSize)
             {
-                var residue = ACache.Get<float>(doNotDecode.Length, blockSize);
+                var residue = GetResidueBuffer(doNotDecode.Length);
 
                 if (_nToRead > 0)
                 {
-                    var cls = ACache.Get<int>(channels, _partsToRead, _classWordsPerCodeWord);
+                    // if we don't clear, Bad Things(tm) happen!
+                    Array.Clear(_cls, 0, _cls.Length);
 
                     for (var pass = 0; pass < _maxPasses; pass++)
                     {
@@ -150,7 +177,7 @@ namespace NVorbis
                                         var temp = _classBook.DecodeScalar(packet);
                                         for (int pi = _classWordsPerCodeWord - 1; pi >= 0; pi--)
                                         {
-                                            cls[j][l][pi] = temp % _classifications;
+                                            _cls[j, l, pi] = temp % _classifications;
                                             temp /= _classifications;
                                         }
                                     }
@@ -163,7 +190,7 @@ namespace NVorbis
                                 {
                                     if (!doNotDecode[j])
                                     {
-                                        var vqclass = cls[j][l][k];
+                                        var vqclass = _cls[j, l, k];
                                         var codebook = _books[vqclass][pass];
                                         if (codebook != null && codebook.MapType != 0)
                                         {
@@ -174,8 +201,6 @@ namespace NVorbis
                             }
                         }
                     }
-
-                    ACache.Return(ref cls);
                 }
 
                 return residue;
@@ -220,14 +245,15 @@ namespace NVorbis
 
             internal override float[][] Decode(DataPacket packet, bool[] doNotDecode, int channels, int blockSize)
             {
-                var residue = ACache.Get<float>(channels, blockSize);
+                var residue = GetResidueBuffer(channels);
                 var elementsPerChannel = _partitionSize / channels;
 
                 if (doNotDecode.Contains(false))
                 {
                     if (_nToRead > 0)
                     {
-                        var cls = ACache.Get<int>(_partWords, _classWordsPerCodeWord);
+                        // if we don't clear, Bad Things(tm) happen!
+                        Array.Clear(_cls, 0, _partWords * _classWordsPerCodeWord);
 
                         for (int pass = 0; pass < _maxPasses; pass++)
                         {
@@ -238,14 +264,14 @@ namespace NVorbis
                                     var temp = _classBook.DecodeScalar(packet);
                                     for (int c = _classWordsPerCodeWord - 1; c >= 0 && temp > 0; c--)
                                     {
-                                        cls[l][c] = temp % _classifications;
+                                        _cls[0, l, c] = temp % _classifications;
                                         temp /= _classifications;
                                     }
                                 }
 
                                 for (int k = 0; k < _classWordsPerCodeWord && i < _partsToRead; k++)
                                 {
-                                    var vqclass = cls[l][k];
+                                    var vqclass = _cls[0, l, k];
                                     var codebook = _books[vqclass][pass];
                                     if (codebook != null && codebook.MapType != 0)
                                     {
@@ -272,8 +298,6 @@ namespace NVorbis
                                 }
                             }
                         }
-
-                        ACache.Return(ref cls);
                     }
                 }
 

@@ -189,22 +189,28 @@ namespace NVorbis.Ogg
             }
         }
 
+        byte[] _singleByteReadBuffer = new byte[1];
         public override int ReadByte()
         {
-            var buf = ACache.Get<byte>(1);
-            try
+            // ugh... this gets called *a lot*, so reimplement the stream lock and use a shared buffer
+            var node = GetNode();
+            int val = -1;
+
+            lock (_streamLock)
             {
-                int cnt = Read(buf, 0, 1);
-                if (cnt == 0)
+                if (_baseStream.Position != node.Position) _baseStream.Position = node.Position;
+                if (_baseStream.Read(_singleByteReadBuffer, 0, 1) == 1)
                 {
-                    return -1;
+                    val = _singleByteReadBuffer[0];
                 }
-                return (int)buf[0];
             }
-            finally
+
+            if (val > -1)
             {
-                ACache.Return(ref buf);
+                node.Position++;
             }
+
+            return val;
         }
 
         public override int Read(byte[] buffer, int offset, int count)
