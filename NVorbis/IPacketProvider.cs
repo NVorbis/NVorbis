@@ -7,7 +7,7 @@ namespace NVorbis
 {
     interface IPacketProvider : IDisposable
     {
-        void Init();
+        bool Init();
 
         bool FindNextStream(int currentStreamSerial);
 

@@ -36,21 +36,15 @@ namespace NVorbis
             _decoders = new List<VorbisStreamDecoder>();
             _serials = new List<int>();
 
-            if (stream.CanSeek)
+            var wrappedStream = new BufferedReadStream(stream);
+            
+            _packetProvider = new Ogg.ContainerReader(wrappedStream, NewStream);
+            if (!_packetProvider.Init())
             {
-                // TODO: need to check the first byte(s) for Matroska
-
-                _packetProvider = new Ogg.ContainerReader(stream, NewStream);
-
-                // NewStream will populate our decoder list...
+                // not a valid Ogg stream...  Try something else (RTP? Matroska?)
+                // until we have the other containers ready, just throw
+                throw new InvalidDataException("No supported containers found!");
             }
-            else
-            {
-                // RTP???
-                throw new NotSupportedException("The specified stream is not seekable.");
-            }
-
-            _packetProvider.Init();
 
             _sourceStream = stream;
             _closeSourceOnDispose = closeStreamOnDispose;
@@ -59,7 +53,7 @@ namespace NVorbis
             //       to start decoding
 
             // by this point, the container init should have found at least one vorbis stream...
-            if (_decoders.Count == 0) throw new InvalidDataException("No Vorbis data is available in the specified file.");
+            if (_decoders.Count == 0) throw new InvalidDataException("No Vorbis data is available in the specified stream.");
 
             _streamIdx = 0;
         }
@@ -95,22 +89,14 @@ namespace NVorbis
                         return 0;
                     }
                 );
-                try
+                if (decoder.TryInit(initialPacket))
                 {
-                    if (decoder.TryInit(initialPacket))
-                    {
-                        // the init worked, so we have a valid stream...
+                    // the init worked, so we have a valid stream...
 
-                        _decoders.Add(decoder);
-                        _serials.Add(streamSerial);
-                    }
-                    // else: the initial packet wasn't for Vorbis...
+                    _decoders.Add(decoder);
+                    _serials.Add(streamSerial);
                 }
-                catch (InvalidDataException)
-                {
-                    // there was an error loading the headers... problem is, we're past the first packet, so we can't go back and try again...
-                    // TODO: log the error
-                }
+                // else: the initial packet wasn't for Vorbis...
             }
             // we're not supporting Skeleton yet...
             //else if (checkByte == Ogg.SkeletonDecoder.InitialPacketMarker)

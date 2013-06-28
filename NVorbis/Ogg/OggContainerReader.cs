@@ -31,11 +31,9 @@ namespace NVorbis.Ogg
             get { return _streamSerials.ToArray(); }
         }
 
-        internal ContainerReader(Stream stream, Action<int> newStreamCallback)
+        internal ContainerReader(BufferedReadStream stream, Action<int> newStreamCallback)
         {
-            if (!stream.CanSeek) throw new ArgumentException("stream must be seekable!");
-
-            _stream = new BufferedReadStream(stream);
+            _stream = stream;
 
             _packetReaders = new Dictionary<int, PacketReader>();
             _eosFlags = new Dictionary<int, bool>();
@@ -44,9 +42,9 @@ namespace NVorbis.Ogg
             _newStreamCallback = newStreamCallback;
         }
 
-        void IPacketProvider.Init()
+        bool IPacketProvider.Init()
         {
-            GatherNextPage("Not an OGG container!");
+            return GatherNextPage() != -1;
         }
 
         void IDisposable.Dispose()
@@ -297,12 +295,12 @@ namespace NVorbis.Ogg
             return new PageReaderLock(_pageLock);
         }
 
-        int GatherNextPage(string noPageErrorMessage)
+        int GatherNextPage()
         {
             var hdr = FindNextPageHeader();
             if (hdr == null)
             {
-                throw new InvalidDataException(noPageErrorMessage);
+                return -1;
             }
             if (AddPage(hdr))
             {
@@ -323,10 +321,14 @@ namespace NVorbis.Ogg
             if (!pageLock.Validate(_pageLock)) throw new ArgumentException("pageLock");
             if (!_eosFlags.ContainsKey(streamSerial)) throw new ArgumentOutOfRangeException("streamSerial");
 
+            int nextSerial;
             do
             {
                 if (_eosFlags[streamSerial]) throw new EndOfStreamException();
-            } while (GatherNextPage("Could not find next page.") != streamSerial);
+                
+                nextSerial = GatherNextPage();
+                if (nextSerial == -1) throw new InvalidDataException("Could not find next page.");
+            } while (nextSerial != streamSerial);
         }
 
         DataPacket IPacketProvider.GetNextPacket(int streamSerial)
@@ -353,11 +355,7 @@ namespace NVorbis.Ogg
                 // read pages until we're done...
                 while (this._packetReaders.Count == cnt)
                 {
-                    try
-                    {
-                        GatherNextPage(string.Empty);
-                    }
-                    catch (InvalidDataException)
+                    if (GatherNextPage() == -1)
                     {
                         break;
                     }

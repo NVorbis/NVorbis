@@ -9,7 +9,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 
-namespace NVorbis.Ogg
+namespace NVorbis
 {
     /// <summary>
     /// A thread-safe, read-only, buffering stream wrapper.
@@ -330,7 +330,7 @@ namespace NVorbis.Ogg
                 startIdx -= moveCount;
                 endIdx -= moveCount;
                 _end -= moveCount;
-
+                
                 #endregion
 
                 #region Buffer Filling
