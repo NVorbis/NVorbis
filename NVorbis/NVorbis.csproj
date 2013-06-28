@@ -75,12 +75,12 @@
     <Compile Include="Huffman.cs" />
     <Compile Include="IPacketProvider.cs" />
     <Compile Include="Mdct.cs" />
+    <Compile Include="Ogg\BufferedReadStream.cs" />
     <Compile Include="Ogg\OggContainerReader.cs" />
     <Compile Include="DataPacket.cs" />
     <Compile Include="Ogg\OggPacket.cs" />
     <Compile Include="Ogg\OggPacketReader.cs" />
     <Compile Include="Ogg\OggPageFlags.cs" />
-    <Compile Include="Ogg\ThreadSafeStream.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="RingBuffer.cs" />
     <Compile Include="Utils.cs" />

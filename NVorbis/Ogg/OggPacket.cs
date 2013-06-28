@@ -15,7 +15,7 @@ namespace NVorbis.Ogg
 {
     class Packet : DataPacket
     {
-        Stream _stream;
+        BufferedReadStream _stream;
 
         long _offset;
         long _length;
@@ -26,7 +26,7 @@ namespace NVorbis.Ogg
 
         int _curOfs;
 
-        internal Packet(Stream stream, long streamOffset, int length)
+        internal Packet(BufferedReadStream stream, long streamOffset, int length)
             : base(length)
         {
             _stream = stream;
@@ -87,6 +87,18 @@ namespace NVorbis.Ogg
             var b = _stream.ReadByte();
             ++_curOfs;
             return b;
+        }
+
+        public override void Done()
+        {
+            if (_mergedPacket != null)
+            {
+                _mergedPacket.Done();
+            }
+            else
+            {
+                _stream.DiscardThrough(_offset + _length);
+            }
         }
     }
 }

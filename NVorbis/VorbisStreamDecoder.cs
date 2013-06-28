@@ -135,6 +135,8 @@ namespace NVorbis
             Block0Size = 1 << (int)packet.ReadBits(4);
             Block1Size = 1 << (int)packet.ReadBits(4);
 
+            packet.Done();
+
             if (_nominalBitrate == 0)
             {
                 if (_upperBitrate > 0 && _lowerBitrate > 0)
@@ -162,6 +164,8 @@ namespace NVorbis
             {
                 _comments[i] = Encoding.UTF8.GetString(packet.ReadBytes(packet.ReadInt32()));
             }
+
+            packet.Done();
 
             _metaBits += packet.BitsRead - 56;
             _wasteHdrBits += 8 * packet.Length - packet.BitsRead;
@@ -237,6 +241,8 @@ namespace NVorbis
 
             // check the framing bit
             if (!packet.ReadBit()) throw new InvalidDataException();
+
+            packet.Done();
 
             ++_glueBits;
 

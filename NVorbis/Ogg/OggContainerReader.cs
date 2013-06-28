@@ -29,7 +29,7 @@ namespace NVorbis.Ogg
             }
         }
 
-        Stream _stream;
+        BufferedReadStream _stream;
         Dictionary<int, PacketReader> _packetReaders;
         Dictionary<int, bool> _eosFlags;
         List<int> _streamSerials;
@@ -50,7 +50,7 @@ namespace NVorbis.Ogg
         {
             if (!stream.CanSeek) throw new ArgumentException("stream must be seekable!");
 
-            _stream = new ThreadSafeStream(stream);
+            _stream = new BufferedReadStream(stream);
 
             _packetReaders = new Dictionary<int, PacketReader>();
             _eosFlags = new Dictionary<int, bool>();
