@@ -269,9 +269,10 @@ namespace NVorbis
 
             if (ClipSamples)
             {
+                var decoder = _decoders[_streamIdx];
                 for (int i = 0; i < count; i++, offset++)
                 {
-                    buffer[offset] = Utils.ClipValue(buffer[offset], ref _decoders[_streamIdx]._clipped);
+                    buffer[offset] = Utils.ClipValue(buffer[offset], ref decoder._clipped);
                 }
             }
 

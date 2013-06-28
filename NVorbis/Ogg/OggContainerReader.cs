@@ -13,22 +13,7 @@ namespace NVorbis.Ogg
 {
     class ContainerReader : IPacketProvider
     {
-        const uint CRC32_POLY = 0x04c11db7;
-        static uint[] crcTable = new uint[256];
-
-        static ContainerReader()
-        {
-            for (uint i = 0; i < 256; i++)
-            {
-                uint s = i << 24;
-                for (int j = 0; j < 8; ++j)
-                {
-                    s = (s << 1) ^ (s >= (1U << 31) ? CRC32_POLY : 0);
-                }
-                crcTable[i] = s;
-            }
-        }
-
+        Crc _crc = new Crc();
         BufferedReadStream _stream;
         Dictionary<int, PacketReader> _packetReaders;
         Dictionary<int, bool> _eosFlags;
@@ -119,16 +104,16 @@ namespace NVorbis.Ogg
             var crc = BitConverter.ToUInt32(hdrBuf, 22);
 
             // start calculating the CRC value for this page
-            var testCRC = 0U;
+            _crc.Reset();
             for (int i = 0; i < 22; i++)
             {
-                UpdateCRC(hdrBuf[i], ref testCRC);
+                _crc.Update(hdrBuf[i]);
             }
-            UpdateCRC(0, ref testCRC);
-            UpdateCRC(0, ref testCRC);
-            UpdateCRC(0, ref testCRC);
-            UpdateCRC(0, ref testCRC);
-            UpdateCRC(hdrBuf[26], ref testCRC);
+            _crc.Update(0);
+            _crc.Update(0);
+            _crc.Update(0);
+            _crc.Update(0);
+            _crc.Update(hdrBuf[26]);
 
             // figure out the length of the page
             var segCnt = (int)hdrBuf[26];
@@ -137,7 +122,7 @@ namespace NVorbis.Ogg
             for (int i = 0; i < segCnt; i++)
             {
                 var temp = _stream.ReadByte();
-                UpdateCRC(temp, ref testCRC);
+                _crc.Update(temp);
 
                 packetSizes[idx] += temp;
                 if (temp < 255)
@@ -169,21 +154,16 @@ namespace NVorbis.Ogg
             // now we have to go through every byte in the page
             while (--size >= 0)
             {
-                UpdateCRC(_stream.ReadByte(), ref testCRC);
+                _crc.Update(_stream.ReadByte());
             }
 
-            if (testCRC == crc)
+            if (_crc.Test(crc))
             {
                 _containerBits += 8 * (27 + segCnt);
                 ++_pageCount;
                 return hdr;
             }
             return null;
-        }
-
-        void UpdateCRC(int nextVal, ref uint crc)
-        {
-            crc = (crc << 8) ^ crcTable[nextVal ^ (crc >> 24)];
         }
 
         PageHeader FindNextPageHeader()
