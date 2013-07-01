@@ -62,7 +62,6 @@ namespace NVorbis
             int _discardCount;
 
             bool _minimalRead;
-            object _localLock = new object();
 
             /// <summary>
             /// Gets or Sets whether to limit reads to the smallest size possible.
@@ -83,23 +82,22 @@ namespace NVorbis
                 {
                     if (value < 1) throw new ArgumentOutOfRangeException("Must be greater than zero.");
 
-                    lock (_localLock)
-                    {
-                        if (_maxSize < _end)
-                        {
-                            if (_maxSize < _end - _discardCount)
-                            {
-                                // we can't discard enough bytes to satisfy the buffer request...
-                                throw new ArgumentOutOfRangeException("Must be greater than or equal to the number of bytes currently buffered.");
-                            }
+                    var newMaxSize = 1 << (int)Math.Ceiling(Math.Log(value, 2));
 
-                            CommitDiscard();
-                            var newBuf = new byte[value];
-                            Buffer.BlockCopy(_data, 0, newBuf, 0, _end);
-                            _data = newBuf;
+                    if (newMaxSize < _end)
+                    {
+                        if (newMaxSize < _end - _discardCount)
+                        {
+                            // we can't discard enough bytes to satisfy the buffer request...
+                            throw new ArgumentOutOfRangeException("Must be greater than or equal to the number of bytes currently buffered.");
                         }
-                        _maxSize = value;
+
+                        CommitDiscard();
+                        var newBuf = new byte[newMaxSize];
+                        Buffer.BlockCopy(_data, 0, newBuf, 0, _end);
+                        _data = newBuf;
                     }
+                    _maxSize = newMaxSize;
                 }
             }
 
@@ -156,12 +154,10 @@ namespace NVorbis
                 if (index < 0 || index + count > buffer.Length) throw new ArgumentOutOfRangeException("index");
                 if (count < 0) throw new ArgumentOutOfRangeException("count");
 
-                lock (_localLock)
-                {
-                    var startIdx = EnsureAvailable(offset, ref count);
+                var startIdx = EnsureAvailable(offset, ref count);
 
-                    Buffer.BlockCopy(_data, startIdx, buffer, index, count);
-                }
+                Buffer.BlockCopy(_data, startIdx, buffer, index, count);
+
                 return count;
             }
 
@@ -169,14 +165,11 @@ namespace NVorbis
             {
                 if (offset < 0L || offset >= _wrapper.EofOffset) throw new ArgumentOutOfRangeException("offset");
 
-                lock (_localLock)
+                int count = 1;
+                var startIdx = EnsureAvailable(offset, ref count);
+                if (count == 1)
                 {
-                    int count = 1;
-                    var startIdx = EnsureAvailable(offset, ref count);
-                    if (count == 1)
-                    {
-                        return _data[startIdx];
-                    }
+                    return _data[startIdx];
                 }
 
                 return -1;
@@ -252,7 +245,7 @@ namespace NVorbis
                     else if (endIdx - _discardCount < _data.Length)
                     {
                         moveCount = _discardCount;
-                        readStart = _data.Length;
+                        readStart = _end;
                         readCount = endIdx - readStart;
                         readOffset = _baseOffset + readStart;
                     }
@@ -261,8 +254,8 @@ namespace NVorbis
                     {
                         // by definition, we discard
                         moveCount = _discardCount;
-                        readStart = _data.Length;
-                        readCount = endIdx - _data.Length;
+                        readStart = _end;
+                        readCount = endIdx - _end;
                         readOffset = _baseOffset + readStart;
                     }
                     // 4) We have to throw away some data that hasn't been discarded
@@ -273,6 +266,7 @@ namespace NVorbis
 
                         // set up our read parameters
                         _baseOffset = offset;
+                        readOffset = offset;
                         startIdx = 0;
                         endIdx = count;
 
@@ -287,11 +281,17 @@ namespace NVorbis
 
                 if (endIdx - moveCount > _data.Length || readStart + readCount - moveCount > _data.Length)
                 {
-                    var newBuf = new byte[_data.Length * 2];
+                    var newSize = _data.Length * 2;
+                    while (newSize < endIdx - moveCount)
+                    {
+                        newSize *= 2;
+                    }
+
+                    var newBuf = new byte[newSize];
                     if (moveCount < 0)
                     {
                         // reverse copy
-                        Buffer.BlockCopy(_data, 0, newBuf, -moveCount, _end);
+                        Buffer.BlockCopy(_data, 0, newBuf, -moveCount, _end + moveCount);
 
                         _discardCount = 0;
                     }
@@ -335,6 +335,8 @@ namespace NVorbis
 
                 #region Buffer Filling
 
+                // This lock is for sitations where more than one BufferedReadStream instance are wrapping the same stream.
+                //    Otherwise it is redundant.
                 lock (_wrapper.LockObject)
                 {
                     if (readCount > 0 && _wrapper.Source.Position != readOffset && readOffset < _wrapper.EofOffset)
@@ -408,13 +410,10 @@ namespace NVorbis
             /// <param name="offset">The offset to discard through.</param>
             public void DiscardThrough(long offset)
             {
-                lock (_localLock)
-                {
-                    var count = (int)(offset - _baseOffset);
-                    _discardCount = Math.Max(count, _discardCount);
+                var count = (int)(offset - _baseOffset);
+                _discardCount = Math.Max(count, _discardCount);
 
-                    if (_discardCount >= _data.Length) CommitDiscard();
-                }
+                if (_discardCount >= _data.Length) CommitDiscard();
             }
 
             void Truncate()
@@ -486,7 +485,13 @@ namespace NVorbis
         public int MaxBufferSize
         {
             get { return _buffer.MaxSize; }
-            set { _buffer.MaxSize = value; }
+            set
+            {
+                lock (_localLock)
+                {
+                    _buffer.MaxSize = value;
+                }
+            }
         }
 
         public long BufferBaseOffset
@@ -501,12 +506,18 @@ namespace NVorbis
 
         public void Discard(int bytes)
         {
-            _buffer.DiscardThrough(_buffer.BaseOffset + bytes);
+            lock (_localLock)
+            {
+                _buffer.DiscardThrough(_buffer.BaseOffset + bytes);
+            }
         }
 
         public void DiscardThrough(long offset)
         {
-            _buffer.DiscardThrough(offset);
+            lock (_localLock)
+            {
+                _buffer.DiscardThrough(offset);
+            }
         }
 
         public override bool CanRead
@@ -537,19 +548,7 @@ namespace NVorbis
         public override long Position
         {
             get { return _readPosition; }
-            set
-            {
-                lock (_localLock)
-                {
-                    if (!_baseStream.CanSeek)
-                    {
-                        if (value < _buffer.BaseOffset) throw new InvalidOperationException("Cannot seek to before the start of the buffer!");
-                        if (value >= _buffer.BufferEndOffset) throw new InvalidOperationException("Cannot seek to beyond the end of the buffer!  Discard some bytes.");
-                    }
-
-                    _readPosition = value;
-                }
-            }
+            set { Seek(value, SeekOrigin.Begin); }
         }
 
         public override int ReadByte()
@@ -577,21 +576,29 @@ namespace NVorbis
 
         public override long Seek(long offset, SeekOrigin origin)
         {
-            switch (origin)
+            lock (_localLock)
             {
-                case SeekOrigin.Begin:
-                    // no-op
-                    break;
-                case SeekOrigin.Current:
-                    offset += _readPosition;
-                    break;
-                case SeekOrigin.End:
-                    offset += _baseStream.Length;
-                    break;
-            }
+                switch (origin)
+                {
+                    case SeekOrigin.Begin:
+                        // no-op
+                        break;
+                    case SeekOrigin.Current:
+                        offset += _readPosition;
+                        break;
+                    case SeekOrigin.End:
+                        offset += _baseStream.Length;
+                        break;
+                }
 
-            Position = offset;
-            return _readPosition;
+                if (!_baseStream.CanSeek)
+                {
+                    if (offset < _buffer.BaseOffset) throw new InvalidOperationException("Cannot seek to before the start of the buffer!");
+                    if (offset >= _buffer.BufferEndOffset) throw new InvalidOperationException("Cannot seek to beyond the end of the buffer!  Discard some bytes.");
+                }
+
+                return (_readPosition = offset);
+            }
         }
 
         public override void SetLength(long value)
