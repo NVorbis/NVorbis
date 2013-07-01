@@ -22,6 +22,8 @@ namespace NVorbis.Ogg
         int _pageCount;
         Action<int> _newStreamCallback;
 
+        byte[] _readBuffer = new byte[65025];   // up to a full page of data (but no more!)
+
         System.Threading.Mutex _pageLock = new System.Threading.Mutex(false);
 
         internal long _containerBits;
@@ -71,57 +73,60 @@ namespace NVorbis.Ogg
         PageHeader ReadPageHeader(long position)
         {
             // set the stream's position
-            _stream.Position = position;
+            _stream.Seek(position, SeekOrigin.Begin);
 
             // header
-            var hdrBuf = new byte[27];
-            if (_stream.Read(hdrBuf, 0, hdrBuf.Length) != hdrBuf.Length) return null;
+            if (_stream.Read(_readBuffer, 0, 27) != 27) return null;
 
             // capture signature
-            if (hdrBuf[0] != 0x4f || hdrBuf[1] != 0x67 || hdrBuf[2] != 0x67 || hdrBuf[3] != 0x53) return null;
+            if (_readBuffer[0] != 0x4f || _readBuffer[1] != 0x67 || _readBuffer[2] != 0x67 || _readBuffer[3] != 0x53) return null;
 
             // check the stream version
-            if (hdrBuf[4] != 0) return null;
+            if (_readBuffer[4] != 0) return null;
 
             // start populating the header
             var hdr = new PageHeader();
 
             // bit flags
-            hdr.Flags = (PageFlags)hdrBuf[5];
+            hdr.Flags = (PageFlags)_readBuffer[5];
 
             // granulePosition
-            hdr.GranulePosition = BitConverter.ToInt64(hdrBuf, 6);
+            hdr.GranulePosition = BitConverter.ToInt64(_readBuffer, 6);
 
             // stream serial
-            hdr.StreamSerial = BitConverter.ToInt32(hdrBuf, 14);
+            hdr.StreamSerial = BitConverter.ToInt32(_readBuffer, 14);
 
             // sequence number
-            hdr.SequenceNumber = BitConverter.ToInt32(hdrBuf, 18);
+            hdr.SequenceNumber = BitConverter.ToInt32(_readBuffer, 18);
 
             // save off the CRC
-            var crc = BitConverter.ToUInt32(hdrBuf, 22);
+            var crc = BitConverter.ToUInt32(_readBuffer, 22);
 
             // start calculating the CRC value for this page
             _crc.Reset();
             for (int i = 0; i < 22; i++)
             {
-                _crc.Update(hdrBuf[i]);
+                _crc.Update(_readBuffer[i]);
             }
             _crc.Update(0);
             _crc.Update(0);
             _crc.Update(0);
             _crc.Update(0);
-            _crc.Update(hdrBuf[26]);
+            _crc.Update(_readBuffer[26]);
 
             // figure out the length of the page
-            var segCnt = (int)hdrBuf[26];
-            var packetSizes = new int[segCnt];
+            var segCnt = (int)_readBuffer[26];
+            if (_stream.Read(_readBuffer, 0, segCnt) != segCnt) throw new EndOfStreamException();
+
+            var packetSizes = new List<int>(segCnt);
+
             int size = 0, idx = 0;
             for (int i = 0; i < segCnt; i++)
             {
-                var temp = _stream.ReadByte();
+                var temp = _readBuffer[i];
                 _crc.Update(temp);
 
+                if (idx == packetSizes.Count) packetSizes.Add(0);
                 packetSizes[idx] += temp;
                 if (temp < 255)
                 {
@@ -135,24 +140,14 @@ namespace NVorbis.Ogg
 
                 size += temp;
             }
-            if (hdr.LastPacketContinues) ++idx;
-            if (idx < packetSizes.Length)
-            {
-                var temp = new int[idx];
-                for (int i = 0; i < idx; i++)
-                {
-                    temp[i] = packetSizes[i];
-                }
-                packetSizes = temp;
-            }
-            hdr.PacketSizes = packetSizes;
-
+            hdr.PacketSizes = packetSizes.ToArray();
             hdr.DataOffset = position + 27 + segCnt;
 
             // now we have to go through every byte in the page
-            while (--size >= 0)
+            if (_stream.Read(_readBuffer, 0, size) != size) throw new EndOfStreamException();
+            for (int i = 0; i < size; i++)
             {
-                _crc.Update(_stream.ReadByte());
+                _crc.Update(_readBuffer[i]);
             }
 
             if (_crc.Test(crc))

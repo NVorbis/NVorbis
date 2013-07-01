@@ -36,7 +36,7 @@ namespace NVorbis
             _decoders = new List<VorbisStreamDecoder>();
             _serials = new List<int>();
 
-            var wrappedStream = new BufferedReadStream(stream);
+            var wrappedStream = new BufferedReadStream(stream, true);
             
             _packetProvider = new Ogg.ContainerReader(wrappedStream, NewStream);
             if (!_packetProvider.Init())
