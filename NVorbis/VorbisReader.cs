@@ -15,14 +15,20 @@ namespace NVorbis
 {
     public class VorbisReader : IDisposable
     {
-        IPacketProvider _packetProvider;
         int _streamIdx;
 
-        Stream _sourceStream;
-        bool _closeSourceOnDispose;
-
+        IContainerReader _containerReader;
         List<VorbisStreamDecoder> _decoders;
         List<int> _serials;
+
+        VorbisReader()
+        {
+            ClipSamples = true;
+
+            _decoders = new List<VorbisStreamDecoder>();
+            _serials = new List<int>();
+
+        }
 
         public VorbisReader(string fileName)
             : this(File.Open(fileName, FileMode.Open, FileAccess.Read, FileShare.Read), true)
@@ -30,149 +36,100 @@ namespace NVorbis
         }
 
         public VorbisReader(Stream stream, bool closeStreamOnDispose)
+            : this()
         {
-            ClipSamples = true;
+            var bufferedStream = new BufferedReadStream(stream);
+            bufferedStream.CloseBaseStream = closeStreamOnDispose;
 
-            _decoders = new List<VorbisStreamDecoder>();
-            _serials = new List<int>();
-
-            var wrappedStream = new BufferedReadStream(stream, true);
-            
-            _packetProvider = new Ogg.ContainerReader(wrappedStream, NewStream);
-            if (!_packetProvider.Init())
+            // try Ogg first
+            var oggContainer = new Ogg.ContainerReader(bufferedStream, closeStreamOnDispose);
+            if (!LoadContainer(oggContainer))
             {
-                // not a valid Ogg stream...  Try something else (RTP? Matroska?)
-                // until we have the other containers ready, just throw
-                throw new InvalidDataException("No supported containers found!");
+                // oops, not Ogg!
+                // we don't support any other container types yet, so error out
+                bufferedStream.Close();
+                throw new InvalidDataException("Could not determine container type!");
             }
+            _containerReader = oggContainer;
 
-            _sourceStream = stream;
-            _closeSourceOnDispose = closeStreamOnDispose;
-
-            // TODO: check the skeleton to see if we need to find a particular stream serial
-            //       to start decoding
-
-            // by this point, the container init should have found at least one vorbis stream...
-            if (_decoders.Count == 0) throw new InvalidDataException("No Vorbis data is available in the specified stream.");
-
-            _streamIdx = 0;
+            if (_decoders.Count == 0) throw new InvalidDataException("No Vorbis data found!");
         }
 
-        void NewStream(int streamSerial)
+        public VorbisReader(IContainerReader containerReader)
+            : this()
         {
-            var initialPacket = _packetProvider.GetNextPacket(streamSerial);
-            var checkByte = (byte)initialPacket.PeekByte();
-
-            // TODO: determine what type of stream this is, load the correct decoder (or ignore
-            //       it), then keep going.  If it's a skeleton stream, try to load it.  Only
-            //       allow one instance.  Then force another page to be read.
-
-            // for now, we only support the Vorbis decoder; Skeleton will happen later
-            if (checkByte == VorbisStreamDecoder.InitialPacketMarker)
+            if (!LoadContainer(containerReader))
             {
-                var decoder = new VorbisStreamDecoder(
-                    () => {
-                        var provider = _packetProvider;
-                        if (provider != null)
-                        {
-                            return provider.GetNextPacket(streamSerial);
-                        }
-                        return null;
-                    },
-                    () =>
-                    {
-                        var provider = _packetProvider;
-                        if (provider != null)
-                        {
-                            return provider.GetTotalPageCount(streamSerial);
-                        }
-                        return 0;
-                    }
-                );
-                if (decoder.TryInit(initialPacket))
-                {
-                    // the init worked, so we have a valid stream...
-
-                    _decoders.Add(decoder);
-                    _serials.Add(streamSerial);
-                }
-                // else: the initial packet wasn't for Vorbis...
+                throw new InvalidDataException("Container did not initialize!");
             }
-            // we're not supporting Skeleton yet...
-            //else if (checkByte == Ogg.SkeletonDecoder.InitialPacketMarker)
-            //{
-            //    // load it
-            //    if (_skeleton != null) throw new InvalidDataException("Second skeleton stream found!");
-            //    _skeleton = new Ogg.SkeletonDecoder(() => _packetProvider.GetNextPacket(streamSerial));
+            _containerReader = containerReader;
 
-            //    if (_skeleton.Init(initialPacket))
-            //    {
-            //        // force the next stream to load
-            //        _packetProvider.FindNextStream(streamSerial);
-            //    }
-            //    else
-            //    {
-            //        _skeleton = null;
-            //    }
-            //}
+            if (_decoders.Count == 0) throw new InvalidDataException("No Vorbis data found!");
+        }
+
+        public VorbisReader(IPacketProvider packetProvider)
+            : this()
+        {
+            var ea = new NewStreamEventArgs(packetProvider);
+            NewStream(this, ea);
+            if (ea.IgnoreStream) throw new InvalidDataException("No Vorbis data found!");
+        }
+
+        bool LoadContainer(IContainerReader containerReader)
+        {
+            containerReader.NewStream += NewStream;
+            if (!containerReader.Init())
+            {
+                containerReader.NewStream -= NewStream;
+                return false;
+            }
+            return true;
+        }
+
+        void NewStream(object sender, NewStreamEventArgs ea)
+        {
+            var packetProvider = ea.PacketProvider;
+            var decoder = new VorbisStreamDecoder(packetProvider);
+            if (decoder.TryInit())
+            {
+                _decoders.Add(decoder);
+                _serials.Add(packetProvider.StreamSerial);
+            }
+            else
+            {
+                // NB: This could be an Ogg Skeleton stream...  We should check that, just in case
+                // NB: This could be a RTP stream...  We should check that, just in case
+
+                ea.IgnoreStream = true;
+            }
         }
 
         public void Dispose()
         {
-            if (_packetProvider != null)
+            if (_decoders != null)
             {
-                _packetProvider.Dispose();
-                _packetProvider = null;
+                foreach (var decoder in _decoders)
+                {
+                    decoder.Dispose();
+                }
+                _decoders.Clear();
+                _decoders = null;
             }
 
-            if (_closeSourceOnDispose)
+            if (_containerReader != null)
             {
-                _sourceStream.Close();
+                _containerReader.NewStream -= NewStream;
+                _containerReader.Dispose();
+                _containerReader = null;
             }
-
-            _sourceStream = null;
         }
 
-        void SeekTo(long granulePos)
+        VorbisStreamDecoder ActiveDecoder
         {
-            if (!_packetProvider.CanSeek) throw new NotSupportedException();
-
-            if (granulePos < 0) throw new ArgumentOutOfRangeException("granulePos");
-
-            var targetPacketIndex = 3;
-            if (granulePos > 0)
+            get
             {
-                var idx = _packetProvider.FindPacket(
-                    _serials[_streamIdx],
-                    granulePos,
-                    (prevPacket, curPacket, nextPacket) =>
-                    {
-                        // ask the decoder...
-                        return _decoders[_streamIdx].GetPacketLength(curPacket, prevPacket);
-                    }
-                );
-                if (idx == -1) throw new ArgumentOutOfRangeException("granulePos");
-                targetPacketIndex = idx - 1;  // move to the previous packet to prime the decoder
-            }
-
-            // get the data packet for later
-            var dataPacket = _packetProvider.GetPacket(_serials[_streamIdx], targetPacketIndex);
-
-            // actually seek the stream
-            _packetProvider.SeekToPacket(_serials[_streamIdx], targetPacketIndex);
-
-            // now read samples until we are exactly at the granule position requested
-            _decoders[_streamIdx].CurrentPosition = dataPacket.GranulePosition;
-            var cnt = (int)((granulePos - _decoders[_streamIdx].CurrentPosition) * Channels);
-            if (cnt > 0)
-            {
-                var seekBuffer = new float[cnt];
-                while (cnt > 0)
-                {
-                    var temp = _decoders[_streamIdx].ReadSamples(seekBuffer, 0, cnt);
-                    if (temp == 0) break;   // we're at the end...
-                    cnt -= temp;
-                }
+                if (_decoders == null) throw new ObjectDisposedException("VorbisReader");
+                return _decoders[_streamIdx];
             }
         }
 
@@ -181,42 +138,42 @@ namespace NVorbis
         /// <summary>
         /// Gets the number of channels in the current selected Vorbis stream
         /// </summary>
-        public int Channels { get { return _decoders[_streamIdx]._channels; } }
+        public int Channels { get { return ActiveDecoder._channels; } }
 
         /// <summary>
         /// Gets the sample rate of the current selected Vorbis stream
         /// </summary>
-        public int SampleRate { get { return _decoders[_streamIdx]._sampleRate; } }
+        public int SampleRate { get { return ActiveDecoder._sampleRate; } }
 
         /// <summary>
         /// Gets the encoder's upper bitrate of the current selected Vorbis stream
         /// </summary>
-        public int UpperBitrate { get { return _decoders[_streamIdx]._upperBitrate; } }
+        public int UpperBitrate { get { return ActiveDecoder._upperBitrate; } }
 
         /// <summary>
         /// Gets the encoder's nominal bitrate of the current selected Vorbis stream
         /// </summary>
-        public int NominalBitrate { get { return _decoders[_streamIdx]._nominalBitrate; } }
+        public int NominalBitrate { get { return ActiveDecoder._nominalBitrate; } }
 
         /// <summary>
         /// Gets the encoder's lower bitrate of the current selected Vorbis stream
         /// </summary>
-        public int LowerBitrate { get { return _decoders[_streamIdx]._lowerBitrate; } }
+        public int LowerBitrate { get { return ActiveDecoder._lowerBitrate; } }
 
         /// <summary>
         /// Gets the encoder's vendor string for the current selected Vorbis stream
         /// </summary>
-        public string Vendor { get { return _decoders[_streamIdx]._vendor; } }
+        public string Vendor { get { return ActiveDecoder._vendor; } }
 
         /// <summary>
         /// Gets the comments in the current selected Vorbis stream
         /// </summary>
-        public string[] Comments { get { return _decoders[_streamIdx]._comments; } }
+        public string[] Comments { get { return ActiveDecoder._comments; } }
 
         /// <summary>
         /// Gets the number of bits read that are related to framing and transport alone
         /// </summary>
-        public long ContainerOverheadBits { get { return _packetProvider.ContainerBits; } }
+        public long ContainerOverheadBits { get { return ActiveDecoder.ContainerBits; } }
 
         /// <summary>
         /// Gets or sets whether to automatically apply clipping to samples returned by <see cref="VorbisReader.ReadSamples"/>.
@@ -251,7 +208,7 @@ namespace NVorbis
             if (offset < 0) throw new ArgumentOutOfRangeException("offset");
             if (count < 0 || offset + count > buffer.Length) throw new ArgumentOutOfRangeException("count");
 
-            count = _decoders[_streamIdx].ReadSamples(buffer, offset, count);
+            count = ActiveDecoder.ReadSamples(buffer, offset, count);
 
             if (ClipSamples)
             {
@@ -282,6 +239,8 @@ namespace NVorbis
         {
             if (index < 0 || index >= StreamCount) throw new ArgumentOutOfRangeException("index");
 
+            if (_decoders == null) throw new ObjectDisposedException("VorbisReader");
+
             if (_streamIdx == index) return false;
 
             var curDecoder = _decoders[_streamIdx];
@@ -296,11 +255,12 @@ namespace NVorbis
         /// </summary>
         public TimeSpan DecodedTime
         {
-            get { return TimeSpan.FromSeconds((double)_decoders[_streamIdx].CurrentPosition / _decoders[_streamIdx]._sampleRate); }
-            set
+            get
             {
-                SeekTo((long)(value.TotalSeconds * SampleRate));
+                var decoder = ActiveDecoder;
+                return TimeSpan.FromSeconds((double)decoder.CurrentPosition / decoder._sampleRate);
             }
+            set { ActiveDecoder.SeekTo((long)(value.TotalSeconds * SampleRate)); }
         }
 
         /// <summary>
@@ -308,7 +268,18 @@ namespace NVorbis
         /// </summary>
         public TimeSpan TotalTime
         {
-            get { return TimeSpan.FromSeconds((double)_packetProvider.GetLastGranulePos(_serials[_streamIdx]) / _decoders[_streamIdx]._sampleRate); }
+            get
+            {
+                var decoder = ActiveDecoder;
+                if (decoder.CanSeek)
+                {
+                    return TimeSpan.FromSeconds((double)decoder.GetLastGranulePos() / decoder._sampleRate);
+                }
+                else
+                {
+                    return TimeSpan.MaxValue;
+                }
+            }
         }
         
         #endregion

@@ -13,10 +13,8 @@ using System.IO;
 
 namespace NVorbis
 {
-    class VorbisStreamDecoder : IVorbisStreamStatus
+    class VorbisStreamDecoder : IVorbisStreamStatus, IDisposable
     {
-        static internal byte InitialPacketMarker { get { return (byte)1; } }
-
         internal int _upperBitrate;
         internal int _nominalBitrate;
         internal int _lowerBitrate;
@@ -63,25 +61,25 @@ namespace NVorbis
 
         #endregion
 
-        Func<DataPacket> _getNextPacket;
-        Func<int> _getTotalPages;
+        IPacketProvider _packetProvider;
 
         List<int> _pagesSeen;
         int _lastPageSeen;
 
         bool _eosFound;
 
-        internal VorbisStreamDecoder(Func<DataPacket> getNextPacket, Func<int> getTotalPages)
+        internal VorbisStreamDecoder(IPacketProvider packetProvider)
         {
-            _getNextPacket = getNextPacket;
-            _getTotalPages = getTotalPages;
+            _packetProvider = packetProvider;
 
             _pagesSeen = new List<int>();
             _lastPageSeen = -1;
         }
 
-        internal bool TryInit(DataPacket initialPacket)
+        internal bool TryInit()
         {
+            var initialPacket = _packetProvider.GetNextPacket();
+
             // make sure it's a vorbis stream...
             if (!initialPacket.ReadBytes(7).SequenceEqual(new byte[] { 0x01, 0x76, 0x6f, 0x72, 0x62, 0x69, 0x73 }))
             {
@@ -95,10 +93,10 @@ namespace NVorbis
             ProcessStreamHeader(initialPacket);
 
             // finally, load the comment and book headers...
-            bool comments = false, books = false;
-            while (!(comments & books))
+            DataPacket commentsPacket = null, booksPacket = null;
+            while (commentsPacket == null || booksPacket == null)
             {
-                var packet = _getNextPacket();
+                var packet = _packetProvider.GetNextPacket();
                 if (packet.IsResync) throw new InvalidDataException("Missing header packets!");
 
                 if (!_pagesSeen.Contains(packet.PageSequenceNumber)) _pagesSeen.Add(packet.PageSequenceNumber);
@@ -106,14 +104,30 @@ namespace NVorbis
                 switch (packet.PeekByte())
                 {
                     case 1: throw new InvalidDataException("Found second init header!");
-                    case 3: LoadComments(packet); comments = true; break;
-                    case 5: LoadBooks(packet); books = true; break;
+                    case 3: LoadComments(packet); commentsPacket = packet; break;
+                    case 5: LoadBooks(packet); booksPacket = packet; break;
                 }
             }
 
+            // tell the packets that we're done with them
+            initialPacket.Done();
+            commentsPacket.Done();
+            booksPacket.Done();
+
+            // get the decoding logic bootstrapped
             InitDecoder();
 
             return true;
+        }
+
+        public void Dispose()
+        {
+            if (_packetProvider != null)
+            {
+                var temp = _packetProvider;
+                _packetProvider = null;
+                temp.Dispose();
+            }
         }
 
         #region Header Decode
@@ -134,8 +148,6 @@ namespace NVorbis
 
             Block0Size = 1 << (int)packet.ReadBits(4);
             Block1Size = 1 << (int)packet.ReadBits(4);
-
-            packet.Done();
 
             if (_nominalBitrate == 0)
             {
@@ -598,7 +610,12 @@ namespace NVorbis
             try
             {
                 // get the next packet
-                var packet = _getNextPacket();
+                DataPacket packet = null;
+                var packetProvider = _packetProvider;
+                if (packetProvider != null)
+                {
+                    packet = packetProvider.GetNextPacket();
+                }
 
                 // if the packet is null, our packet reader is gone...
                 if (packet == null)
@@ -744,6 +761,46 @@ namespace NVorbis
             return samplesRead + count;
         }
 
+        internal bool CanSeek
+        {
+            get { return _packetProvider.CanSeek; }
+        }
+
+        internal void SeekTo(long granulePos)
+        {
+            if (!_packetProvider.CanSeek) throw new NotSupportedException();
+
+            if (granulePos < 0) throw new ArgumentOutOfRangeException("granulePos");
+
+            var targetPacketIndex = 3;
+            if (granulePos > 0)
+            {
+                var idx = _packetProvider.FindPacket(granulePos, GetPacketLength);
+                if (idx == -1) throw new ArgumentOutOfRangeException("granulePos");
+                targetPacketIndex = idx - 1;  // move to the previous packet to prime the decoder
+            }
+
+            // get the data packet for later
+            var dataPacket = _packetProvider.GetPacket(targetPacketIndex);
+
+            // actually seek the stream
+            _packetProvider.SeekToPacket(targetPacketIndex);
+
+            // now read samples until we are exactly at the granule position requested
+            CurrentPosition = dataPacket.GranulePosition;
+            var cnt = (int)((granulePos - CurrentPosition) * _channels);
+            if (cnt > 0)
+            {
+                var seekBuffer = new float[cnt];
+                while (cnt > 0)
+                {
+                    var temp = ReadSamples(seekBuffer, 0, cnt);
+                    if (temp == 0) break;   // we're at the end...
+                    cnt -= temp;
+                }
+            }
+        }
+
         internal long CurrentPosition
         {
             get { return _currentPosition - _preparedLength; }
@@ -756,6 +813,16 @@ namespace NVorbis
                 ResetDecoder();
                 _prevBuffer = null;
             }
+        }
+
+        internal long GetLastGranulePos()
+        {
+            return _packetProvider.GetGranuleCount();
+        }
+
+        internal long ContainerBits
+        {
+            get { return _packetProvider.ContainerBits; }
         }
 
         public void ResetStats()
@@ -828,7 +895,7 @@ namespace NVorbis
         {
             get
             {
-                return _glueBits + _metaBits + _timeHdrBits + _wasteHdrBits + _wasteBits;
+                return _glueBits + _metaBits + _timeHdrBits + _wasteHdrBits + _wasteBits + _packetProvider.ContainerBits;
             }
         }
 
@@ -847,7 +914,7 @@ namespace NVorbis
 
         public int TotalPages
         {
-            get { return _getTotalPages(); }
+            get { return _packetProvider.GetTotalPageCount(); }
         }
 
         public bool Clipped

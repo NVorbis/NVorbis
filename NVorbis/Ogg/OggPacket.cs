@@ -23,6 +23,8 @@ namespace NVorbis.Ogg
 
         internal Packet Next { get; set; }
         internal Packet Prev { get; set; }
+        internal bool IsContinued { get; set; }
+        internal bool IsContinuation { get; set; }
 
         int _curOfs;
 
@@ -36,7 +38,7 @@ namespace NVorbis.Ogg
             _curOfs = 0;
         }
 
-        protected override void DoMergeWith(NVorbis.DataPacket continuation)
+        internal void MergeWith(NVorbis.DataPacket continuation)
         {
             var op = continuation as Packet;
 
@@ -50,7 +52,7 @@ namespace NVorbis.Ogg
             }
             else
             {
-                _mergedPacket.DoMergeWith(continuation);
+                _mergedPacket.MergeWith(continuation);
             }
 
             // per the spec, a partial packet goes with the next page's granulepos.  we'll go ahead and assign it to the next page as well
@@ -58,18 +60,13 @@ namespace NVorbis.Ogg
             PageSequenceNumber = continuation.PageSequenceNumber;
         }
 
-        protected override bool CanReset
-        {
-            get { return true; }
-        }
-
-        protected override void DoReset()
+        internal void Reset()
         {
             _curOfs = 0;
 
             if (_mergedPacket != null)
             {
-                _mergedPacket.DoReset();
+                _mergedPacket.Reset();
             }
         }
 

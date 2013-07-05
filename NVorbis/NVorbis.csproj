@@ -74,8 +74,10 @@
   <ItemGroup>
     <Compile Include="BufferedReadStream.cs" />
     <Compile Include="Huffman.cs" />
+    <Compile Include="IContainerReader.cs" />
     <Compile Include="IPacketProvider.cs" />
     <Compile Include="Mdct.cs" />
+    <Compile Include="NewStreamEventArgs.cs" />
     <Compile Include="Ogg\OggContainerReader.cs" />
     <Compile Include="DataPacket.cs" />
     <Compile Include="Ogg\OggCrc.cs">

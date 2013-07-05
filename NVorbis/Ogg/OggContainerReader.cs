@@ -11,51 +11,110 @@ using System.IO;
 
 namespace NVorbis.Ogg
 {
-    class ContainerReader : IPacketProvider
+    /// <summary>
+    /// Provides an <see cref="IContainerReader"/> implementation for basic Ogg files.
+    /// </summary>
+    public class ContainerReader : IContainerReader
     {
         Crc _crc = new Crc();
         BufferedReadStream _stream;
         Dictionary<int, PacketReader> _packetReaders;
         Dictionary<int, bool> _eosFlags;
-        List<int> _streamSerials;
+        List<int> _streamSerials, _disposedStreamSerials;
         long _nextPageOffset;
         int _pageCount;
-        Action<int> _newStreamCallback;
 
         byte[] _readBuffer = new byte[65025];   // up to a full page of data (but no more!)
 
         System.Threading.Mutex _pageLock = new System.Threading.Mutex(false);
 
-        internal long _containerBits;
+        long _containerBits, _wasteBits;
 
-        internal int[] StreamSerials
+        /// <summary>
+        /// Gets the list of stream serials found in the container so far.
+        /// </summary>
+        public int[] StreamSerials
         {
             get { return _streamSerials.ToArray(); }
         }
 
-        internal ContainerReader(BufferedReadStream stream, Action<int> newStreamCallback)
-        {
-            _stream = stream;
+        /// <summary>
+        /// Event raised when a new logical stream is found in the container.
+        /// </summary>
+        public event EventHandler<NewStreamEventArgs> NewStream;
 
+        /// <summary>
+        /// Creates a new instance with the specified file.
+        /// </summary>
+        /// <param name="path">The full path to the file.</param>
+        public ContainerReader(string path)
+            : this(File.Open(path, FileMode.Open, FileAccess.Read, FileShare.Read), true)
+        {
+        }
+
+        /// <summary>
+        /// Creates a new instance with the specified stream.  Optionally sets to close the stream when disposed.
+        /// </summary>
+        /// <param name="stream">The stream to read.</param>
+        /// <param name="closeOnDispose"><c>True</c> to close the stream when <see cref="Dispose"/> is called, otherwise <c>False</c>.</param>
+        public ContainerReader(Stream stream, bool closeOnDispose)
+        {
             _packetReaders = new Dictionary<int, PacketReader>();
             _eosFlags = new Dictionary<int, bool>();
             _streamSerials = new List<int>();
+            _disposedStreamSerials = new List<int>();
 
-            _newStreamCallback = newStreamCallback;
+            _stream = (stream as BufferedReadStream) ?? new BufferedReadStream(stream) { CloseBaseStream = closeOnDispose };
         }
 
-        bool IPacketProvider.Init()
+        /// <summary>
+        /// Initializes the container and finds the first stream.
+        /// </summary>
+        /// <returns><c>True</c> if a valid logical stream is found, otherwise <c>False</c>.</returns>
+        public bool Init()
         {
             return GatherNextPage() != -1;
         }
 
-        void IDisposable.Dispose()
+        internal void DisposePacketReader(PacketReader packetReader)
         {
-            _packetReaders.Clear();
+            _disposedStreamSerials.Add(packetReader.StreamSerial);
+            _eosFlags[packetReader.StreamSerial] = true;
+            _streamSerials.Remove(packetReader.StreamSerial);
+            _packetReaders.Remove(packetReader.StreamSerial);
+        }
+
+        /// <summary>
+        /// Disposes this instance.
+        /// </summary>
+        public void Dispose()
+        {
+            foreach (var streamSerial in _streamSerials.ToArray())
+            {
+                _packetReaders[streamSerial].Dispose();
+            }
+
             _nextPageOffset = 0L;
             _containerBits = 0L;
+            _wasteBits = 0L;
 
             _stream.Dispose();
+        }
+
+        /// <summary>
+        /// Gets the <see cref="IPacketProvider"/> instance for the specified stream serial.
+        /// </summary>
+        /// <param name="streamSerial">The stream serial to look for.</param>
+        /// <returns>An <see cref="IPacketProvider"/> instance.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">The specified stream serial was not found.</exception>
+        public IPacketProvider GetStream(int streamSerial)
+        {
+            PacketReader provider;
+            if (!_packetReaders.TryGetValue(streamSerial, out provider))
+            {
+                throw new ArgumentOutOfRangeException("streamSerial");
+            }
+            return provider;
         }
 
         class PageHeader
@@ -168,7 +227,7 @@ namespace NVorbis.Ogg
             while ((hdr = ReadPageHeader(startPos)) == null)
             {
                 isResync = true;
-                _containerBits += 8;
+                _wasteBits += 8;
                 _stream.Position = ++startPos;
 
                 var cnt = 0;
@@ -187,7 +246,7 @@ namespace NVorbis.Ogg
                             _stream.Seek(-3, SeekOrigin.Current);
                         }
                     }
-                    _containerBits += 8;
+                    _wasteBits += 8;
                 } while (++cnt < 65536);    // we will only search through 64KB of data to find the next sync marker.  if it can't be found, we have a badly corrupted stream.
                 if (cnt == 65536) return null;
             }
@@ -210,6 +269,10 @@ namespace NVorbis.Ogg
             {
                 packetReader = new PacketReader(this, hdr.StreamSerial);
             }
+
+            // save off the container bits
+            packetReader.ContainerBits += _containerBits;
+            _containerBits = 0;
 
             // get our flags prepped
             var isContinued = false;
@@ -292,17 +355,35 @@ namespace NVorbis.Ogg
 
         int GatherNextPage()
         {
-            var hdr = FindNextPageHeader();
-            if (hdr == null)
+            while (true)
             {
-                return -1;
+                // get our next header
+                var hdr = FindNextPageHeader();
+                if (hdr == null)
+                {
+                    return -1;
+                }
+                
+                // if it's in a disposed stream, grab the next page instead
+                if (_disposedStreamSerials.Contains(hdr.StreamSerial)) continue;
+                
+                // otherwise, add it
+                if (AddPage(hdr))
+                {
+                    var callback = NewStream;
+                    if (callback != null)
+                    {
+                        var ea = new NewStreamEventArgs(_packetReaders[hdr.StreamSerial]);
+                        callback(this, ea);
+                        if (ea.IgnoreStream)
+                        {
+                            _packetReaders[hdr.StreamSerial].Dispose();
+                            continue;
+                        }
+                    }
+                }
+                return hdr.StreamSerial;
             }
-            if (AddPage(hdr))
-            {
-                var callback = _newStreamCallback;
-                if (callback != null) callback(hdr.StreamSerial);
-            }
-            return hdr.StreamSerial;
         }
 
         /// <summary>
@@ -326,25 +407,17 @@ namespace NVorbis.Ogg
             } while (nextSerial != streamSerial);
         }
 
-        DataPacket IPacketProvider.GetNextPacket(int streamSerial)
+        /// <summary>
+        /// Finds the next new stream in the container.
+        /// </summary>
+        /// <returns><c>True</c> if a new stream was found, otherwise <c>False</c>.</returns>
+        /// <exception cref="InvalidOperationException"><see cref="CanSeek"/> is <c>False</c>.</exception>
+        public bool FindNextStream()
         {
-            return _packetReaders[streamSerial].GetNextPacket();
-        }
+            if (!CanSeek) throw new InvalidOperationException();
 
-        long IPacketProvider.GetLastGranulePos(int streamSerial)
-        {
-            return _packetReaders[streamSerial].GetLastPacket().PageGranulePosition;
-        }
-
-        bool IPacketProvider.FindNextStream(int currentStreamSerial)
-        {
             // goes through all the pages until the serial count increases
-
-            // if the index is less than the highest, go ahead and return true
-            var idx = Array.IndexOf(StreamSerials, currentStreamSerial);
             var cnt = this._packetReaders.Count;
-            if (idx < cnt - 1) return true;
-
             using (var pageLock = TakePageReaderLock())
             {
                 // read pages until we're done...
@@ -360,13 +433,24 @@ namespace NVorbis.Ogg
             }
         }
 
-        internal int GetReadPageCount()
+        /// <summary>
+        /// Gets the number of pages that have been read in the container.
+        /// </summary>
+        public int PagesRead
         {
-            return _pageCount;
+            get { return _pageCount; }
         }
 
-        internal int GetTotalPageCount()
+        /// <summary>
+        /// Retrieves the total number of pages in the container.
+        /// </summary>
+        /// <returns>The total number of pages.</returns>
+        /// <exception cref="InvalidOperationException"><see cref="CanSeek"/> is <c>False</c>.</exception>
+        public int GetTotalPageCount()
         {
+            if (!CanSeek) throw new InvalidOperationException();
+
+            // add an invalid stream serial as a dummy...
             _eosFlags.Add(-1, false);
 
             // there cannot possibly be another page less than 28 bytes from the end of the file
@@ -383,35 +467,20 @@ namespace NVorbis.Ogg
             return _pageCount;
         }
 
-        bool IPacketProvider.CanSeek
+        /// <summary>
+        /// Gets whether the container supports seeking.
+        /// </summary>
+        public bool CanSeek
         {
-            get { return true; }
+            get { return _stream.CanSeek; }
         }
 
-        int IPacketProvider.GetTotalPageCount(int streamSerial)
+        /// <summary>
+        /// Gets the number of bits in the container that are not associated with a logical stream.
+        /// </summary>
+        public long WasteBits
         {
-            return _packetReaders[streamSerial].GetTotalPageCount();
-        }
-
-        long IPacketProvider.ContainerBits
-        {
-            get { return _containerBits; }
-        }
-
-        int IPacketProvider.FindPacket(int streamSerial, long granulePos, Func<DataPacket, DataPacket, DataPacket, int> packetGranuleCountCallback)
-        {
-            // let the packet reader do the dirty work
-            return _packetReaders[streamSerial].FindPacket(granulePos, packetGranuleCountCallback);
-        }
-
-        void IPacketProvider.SeekToPacket(int streamSerial, int packetIndex)
-        {
-            _packetReaders[streamSerial].SeekToPacket(packetIndex);
-        }
-
-        DataPacket IPacketProvider.GetPacket(int streamSerial, int packetIndex)
-        {
-            return _packetReaders[streamSerial].GetPacket(packetIndex);
+            get { return _wasteBits; }
         }
     }
 }
