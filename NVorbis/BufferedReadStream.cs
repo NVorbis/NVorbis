@@ -476,6 +476,24 @@ namespace NVorbis
             _buffer.MinimalRead = minimalRead;
         }
 
+        protected override void Dispose(bool disposing)
+        {
+            base.Dispose(disposing);
+            if (disposing)
+            {
+                if (CloseBaseStream)
+                {
+                    _baseStream.Close();
+                }
+            }
+        }
+
+        public bool CloseBaseStream
+        {
+            get;
+            set;
+        }
+
         public bool MinimalRead
         {
             get { return _buffer.MinimalRead; }
