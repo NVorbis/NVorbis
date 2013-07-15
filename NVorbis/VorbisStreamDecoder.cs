@@ -177,8 +177,6 @@ namespace NVorbis
                 _comments[i] = Encoding.UTF8.GetString(packet.ReadBytes(packet.ReadInt32()));
             }
 
-            packet.Done();
-
             _metaBits += packet.BitsRead - 56;
             _wasteHdrBits += 8 * packet.Length - packet.BitsRead;
         }
@@ -253,8 +251,6 @@ namespace NVorbis
 
             // check the framing bit
             if (!packet.ReadBit()) throw new InvalidDataException();
-
-            packet.Done();
 
             ++_glueBits;
 
@@ -339,7 +335,6 @@ namespace NVorbis
             if (packet.ReadBit())
             {
                 // we really can't do anything... count the bits as waste
-                packet.Done();
                 return false;
             }
 
@@ -354,10 +349,13 @@ namespace NVorbis
                     _nextFlag = packet.ReadBit();
                     modeBits += 2;
                 }
+                else
+                {
+                    _prevFlag = _nextFlag = false;
+                }
             }
             catch (EndOfStreamException)
             {
-                packet.Done();
                 return false;
             }
 
@@ -426,10 +424,6 @@ namespace NVorbis
             }
             catch (InvalidDataException)
             {
-            }
-            finally
-            {
-                packet.Done();
             }
 
             return false;
@@ -607,10 +601,10 @@ namespace NVorbis
         {
             _sw.Start();
 
+            DataPacket packet = null;
             try
             {
                 // get the next packet
-                DataPacket packet = null;
                 var packetProvider = _packetProvider;
                 if (packetProvider != null)
                 {
@@ -635,9 +629,11 @@ namespace NVorbis
 
                 if (!UnpackPacket(packet))
                 {
+                    packet.Done();
                     _wasteBits += 8 * packet.Length;
                     return;
                 }
+                packet.Done();
 
                 // we can now safely decode all the data without having to worry about a corrupt or partial packet
 
@@ -665,6 +661,14 @@ namespace NVorbis
                     _bitsPerPacketHistory.Dequeue();
                     sc -= _sampleCountHistory.Dequeue();
                 }
+            }
+            catch
+            {
+                if (packet != null)
+                {
+                    packet.Done();
+                }
+                throw;
             }
             finally
             {
