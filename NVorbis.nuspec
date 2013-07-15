@@ -2,7 +2,7 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2011/08/nuspec.xsd">
     <metadata>
         <id>NVorbis</id>
-        <version>0.6.0</version>
+        <version>0.7.0</version>
         <title />
         <authors>Andrew Ward</authors>
         <owners />
@@ -11,11 +11,11 @@
         <requireLicenseAcceptance>false</requireLicenseAcceptance>
         <description>A fully managed implementation of a Xiph.org Foundation Ogg Vorbis decoder.</description>
         <summary>A managed Xiph.org Foundation Ogg Vorbis decoder</summary>
-        <releaseNotes>- Remove ACache from project
-- Make clipping optional (default: on)
-- Set clipping to clamp at +/-.99999994 instead of +/-1 as a courtesy to those not outputing float samples
-- Performance improvements for RingBuffer
-- Performance improvements in ThreadSafeStream</releaseNotes>
+        <releaseNotes>- Rewrite Ogg Reader buffering logic to vastly improve memory usage
+- Reorganize to more easily support other container types / work with other Ogg stream decoders
+- Exposed Ogg reading types
+- Performance improvements
+- Bugfix: Don't throw on Vorbis streams that only have a single mode</releaseNotes>
         <language>en-US</language>
         <tags>ogg vorbis xiph audio c# sound .NET</tags>
         <frameworkAssemblies>

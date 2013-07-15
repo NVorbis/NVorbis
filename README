@@ -76,3 +76,9 @@ History
     * Set clipping to clamp at +/-.99999994 instead of +/-1 as a courtesy to those not outputing float samples
     * Performance improvements for RingBuffer
     * Performance improvements in ThreadSafeStream
+0.7.0 - 07/15/2013
+    * Rewrite Ogg Reader buffering logic to vastly improve memory usage
+    * Reorganize to more easily support other container types / work with other Ogg stream decoders
+    * Exposed Ogg reading types
+    * Performance improvements
+    * Bugfix: Don't throw on Vorbis streams that only have a single mode
