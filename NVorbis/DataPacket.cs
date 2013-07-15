@@ -48,13 +48,18 @@ namespace NVorbis
         /// <param name="count">The number of bits to attempt to read.</param>
         /// <param name="bitsRead">The number of bits actually read.</param>
         /// <returns>The value of the bits read.</returns>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is not between 1 and 64.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is not between 0 and 64.</exception>
         public ulong TryPeekBits(int count, out int bitsRead)
         {
             ulong value = 0;
             int bitShift = 0;
 
-            if (count <= 0 || count > 64) throw new ArgumentOutOfRangeException("count");
+            if (count < 0 || count > 64) throw new ArgumentOutOfRangeException("count");
+            if (count == 0)
+            {
+                bitsRead = 0;
+                return 0UL;
+            }
 
             if (count + _bitCount > 64)
             {
@@ -96,7 +101,7 @@ namespace NVorbis
         /// </summary>
         /// <param name="count">The number of bits to read.</param>
         /// <returns>The value of the bits read.</returns>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is not between 1 and 64.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is not between 0 and 64.</exception>
         /// <exception cref="EndOfStreamException">The end of the packet was encountered before reading all the requested bits.</exception>
         public ulong PeekBits(int count)
         {
@@ -113,7 +118,11 @@ namespace NVorbis
         /// <exception cref="EndOfStreamException">The end of the packet was encountered before advancing the requested number of bits.</exception>
         public void SkipBits(int count)
         {
-            if (_bitCount > count)
+            if (count == 0)
+            {
+                // no-op
+            }
+            else if (_bitCount > count)
             {
                 // we still have bits left over...
                 _bitBucket >>= count;
@@ -192,10 +201,13 @@ namespace NVorbis
         /// </summary>
         /// <param name="count">The number of bits to read.</param>
         /// <returns>The value of the bits read.</returns>
-        /// <exception cref="ArgumentOutOfRangeException">The number of bits specified is not between 1 and 64.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">The number of bits specified is not between 0 and 64.</exception>
         /// <exception cref="EndOfStreamException">The end of the packet was encountered before reading all the requested bits.</exception>
         public ulong ReadBits(int count)
         {
+            // short-circuit 0
+            if (count == 0) return 0UL;
+
             var value = PeekBits(count);
 
             SkipBits(count);
