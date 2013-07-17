@@ -453,9 +453,10 @@ namespace NVorbis.OpenTKSupport
                         else
                             tempBuffers = stream.alBufferIds.Skip(queued).ToArray();
 
-                        for (int i = 0; i < tempBuffers.Length; i++)
+                        int bufIdx = 0;
+                        for (; bufIdx < tempBuffers.Length; bufIdx++)
                         {
-                            finished |= FillBuffer(stream, tempBuffers[i]);
+                            finished |= FillBuffer(stream, tempBuffers[bufIdx]);
 
                             if (finished)
                             {
@@ -464,12 +465,12 @@ namespace NVorbis.OpenTKSupport
                                 else
                                 {
                                     streams.Remove(stream);
-                                    i = tempBuffers.Length;
+                                    break;
                                 }
                             }
                         }
 
-                        AL.SourceQueueBuffers(stream.alSourceId, tempBuffers.Length, tempBuffers);
+                        AL.SourceQueueBuffers(stream.alSourceId, bufIdx, tempBuffers);
                         ALHelper.Check();
 
                         if (finished && !stream.IsLooped)
