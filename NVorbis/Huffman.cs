@@ -11,13 +11,13 @@ namespace NVorbis
 {
     static class Huffman
     {
-        static internal HuffmanListNode<T> BuildLinkedList<T>(T[] values, int[] lengthList, int[] codeList)
+        static internal HuffmanListNode BuildLinkedList(int[] values, int[] lengthList, int[] codeList)
         {
-            HuffmanListNode<T>[] list = new HuffmanListNode<T>[lengthList.Length];
+            HuffmanListNode[] list = new HuffmanListNode[lengthList.Length];
 
             for (int i = 0; i < list.Length; i++)
             {
-                list[i] = new HuffmanListNode<T>
+                list[i] = new HuffmanListNode
                 {
                     Value = values[i],
                     Length = lengthList[i] <= 0 ? 99999 : lengthList[i],
@@ -26,18 +26,7 @@ namespace NVorbis
                 };
             }
 
-            Array.Sort(
-                list,
-                (i1, i2) =>
-                {
-                    var len = i1.Length - i2.Length;
-                    if (len == 0)
-                    {
-                        return i1.Bits - i2.Bits;
-                    }
-                    return len;
-                }
-            );
+            Array.Sort(list, SortCallback);
 
             for (int i = 1; i < list.Length && list[i].Length < 99999; i++)
             {
@@ -46,17 +35,27 @@ namespace NVorbis
 
             return list[0];
         }
+
+        static int SortCallback(HuffmanListNode i1, HuffmanListNode i2)
+        {
+            var len = i1.Length - i2.Length;
+            if (len == 0)
+            {
+                return i1.Bits - i2.Bits;
+            }
+            return len;
+        }
     }
 
-    class HuffmanListNode<T>
+    class HuffmanListNode
     {
-        internal T Value;
+        internal int Value;
 
         internal int Length;
         internal int Bits;
         internal int Mask;
 
-        internal HuffmanListNode<T> Next;
+        internal HuffmanListNode Next;
 
         public int HitCount { get; set; }
     }
