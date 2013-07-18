@@ -2,7 +2,7 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
     <metadata>
         <id>NVorbis.OpenTKSupport</id>
-        <version>1.0.0</version>
+        <version>1.0.1</version>
         <title />
         <authors>Renaud Bedard</authors>
         <owners />
@@ -11,7 +11,7 @@
         <requireLicenseAcceptance>false</requireLicenseAcceptance>
         <description>OpenTK support for NVorbis</description>
         <summary>OpenTK support for NVorbis</summary>
-        <releaseNotes>Initial Release</releaseNotes>
+        <releaseNotes>- Fix playback error at the end of the stream.</releaseNotes>
         <language>en-US</language>
         <tags>audio c# .NET sound vorbis OpenTK OpenAL</tags>
         <dependencies>

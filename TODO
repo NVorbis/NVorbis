@@ -2,7 +2,6 @@
 * Check that Residue0 is implemented correctly
 
 * RTP support
-	- Put an interface between VorbisReader and OggContainerReader
 	- Implement the same interface for RTP (non-seekable)
 	- Add a constructor for VorbisReader that accepts a NetworkStream
 		- Possibly another System.Net member?  Needs thought.

@@ -82,3 +82,8 @@ History
     * Exposed Ogg reading types
     * Performance improvements
     * Bugfix: Don't throw on Vorbis streams that only have a single mode
+0.7.1 - 07/18/2013
+    * Removed use of generics & lambda from Huffman decoder
+    * Reduced computation by only processing samples that are required for output
+    * Bugfix: Seeking now works again
+    * Bugfix: OpenTKSupport.OggStream now only queues as many source buffers as it filled

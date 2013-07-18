@@ -2,7 +2,7 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2011/08/nuspec.xsd">
     <metadata>
         <id>NVorbis</id>
-        <version>0.7.0</version>
+        <version>0.7.1</version>
         <title />
         <authors>Andrew Ward</authors>
         <owners />
@@ -11,11 +11,10 @@
         <requireLicenseAcceptance>false</requireLicenseAcceptance>
         <description>A fully managed implementation of a Xiph.org Foundation Ogg Vorbis decoder.</description>
         <summary>A managed Xiph.org Foundation Ogg Vorbis decoder</summary>
-        <releaseNotes>- Rewrite Ogg Reader buffering logic to vastly improve memory usage
-- Reorganize to more easily support other container types / work with other Ogg stream decoders
-- Exposed Ogg reading types
-- Performance improvements
-- Bugfix: Don't throw on Vorbis streams that only have a single mode</releaseNotes>
+        <releaseNotes>- Removed use of generics &amp; lambda from Huffman decoder
+- Reduced computation by only processing samples that are required for output
+- Bugfix: Seeking now works again
+- Bugfix: OpenTKSupport.OggStream now only queues as many source buffers as it filled</releaseNotes>
         <language>en-US</language>
         <tags>ogg vorbis xiph audio c# sound .NET</tags>
         <frameworkAssemblies>
