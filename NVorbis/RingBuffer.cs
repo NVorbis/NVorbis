@@ -88,7 +88,7 @@ namespace NVorbis
 
         internal void Clear()
         {
-            _start = _end;
+            _start = _end = 0;
         }
 
         internal int Length
@@ -114,7 +114,7 @@ namespace NVorbis
             if (idx < 0)
             {
                 start -= index;
-                idx = 0;
+                idx = channel;
             }
 
             // go through and do the overlap

@@ -63,6 +63,7 @@ namespace NVorbis.Ogg
         internal void Reset()
         {
             _curOfs = 0;
+            ResetBitReader();
 
             if (_mergedPacket != null)
             {

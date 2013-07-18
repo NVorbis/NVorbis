@@ -363,6 +363,8 @@ namespace NVorbis
             {
                 var startBits = packet.BitsRead;
 
+                var halfBlockSize = _mode.BlockSize / 2;
+
                 // read the noise floor data (but don't decode yet)
                 for (int i = 0; i < _channels; i++)
                 {
@@ -370,7 +372,7 @@ namespace NVorbis
                     _noExecuteChannel[i] = !_floorData[i].ExecuteChannel;
 
                     // go ahead and clear the residue buffers
-                    Array.Clear(_residue[i], 0, _mode.BlockSize);
+                    Array.Clear(_residue[i], 0, halfBlockSize);
                 }
 
                 // make sure we handle no-energy channels correctly given the couplings...
@@ -401,7 +403,7 @@ namespace NVorbis
                     {
                         var r = _residue[c];
                         var rt = rTemp[c];
-                        for (int i = 0; i < _mode.BlockSize; i++)
+                        for (int i = 0; i < halfBlockSize; i++)
                         {
                             r[i] += rt[i];
                         }
@@ -436,43 +438,46 @@ namespace NVorbis
             var halfSizeW = _mode.BlockSize / 2;
             for (int i = steps.Length - 1; i >= 0; i--)
             {
-                var magnitude = _residue[steps[i].Magnitude];
-                var angle = _residue[steps[i].Angle];
-
-                // we only have to do the first half; MDCT ignores the last half
-                for (int j = 0; j < halfSizeW; j++)
+                if (_floorData[steps[i].Angle].ExecuteChannel || _floorData[steps[i].Magnitude].ExecuteChannel)
                 {
-                    float newM, newA;
+                    var magnitude = _residue[steps[i].Magnitude];
+                    var angle = _residue[steps[i].Angle];
 
-                    if (magnitude[j] > 0)
+                    // we only have to do the first half; MDCT ignores the last half
+                    for (int j = 0; j < halfSizeW; j++)
                     {
-                        if (angle[j] > 0)
+                        float newM, newA;
+
+                        if (magnitude[j] > 0)
                         {
-                            newM = magnitude[j];
-                            newA = magnitude[j] - angle[j];
+                            if (angle[j] > 0)
+                            {
+                                newM = magnitude[j];
+                                newA = magnitude[j] - angle[j];
+                            }
+                            else
+                            {
+                                newA = magnitude[j];
+                                newM = magnitude[j] + angle[j];
+                            }
                         }
                         else
                         {
-                            newA = magnitude[j];
-                            newM = magnitude[j] + angle[j];
+                            if (angle[j] > 0)
+                            {
+                                newM = magnitude[j];
+                                newA = magnitude[j] + angle[j];
+                            }
+                            else
+                            {
+                                newA = magnitude[j];
+                                newM = magnitude[j] - angle[j];
+                            }
                         }
-                    }
-                    else
-                    {
-                        if (angle[j] > 0)
-                        {
-                            newM = magnitude[j];
-                            newA = magnitude[j] + angle[j];
-                        }
-                        else
-                        {
-                            newA = magnitude[j];
-                            newM = magnitude[j] - angle[j];
-                        }
-                    }
 
-                    magnitude[j] = newM;
-                    angle[j] = newA;
+                        magnitude[j] = newM;
+                        angle[j] = newA;
+                    }
                 }
             }
 
@@ -485,6 +490,11 @@ namespace NVorbis
                 {
                     _mode.Mapping.ChannelSubmap[c].Floor.Apply(floorData, res);
                     Mdct.Reverse(res, _mode.BlockSize);
+                }
+                else
+                {
+                    // since we aren't doing the IMDCT, we have to explicitly clear the back half of the block
+                    Array.Clear(res, halfSizeW, halfSizeW);
                 }
             }
         }
@@ -784,11 +794,14 @@ namespace NVorbis
                 targetPacketIndex = idx - 1;  // move to the previous packet to prime the decoder
             }
 
-            // get the data packet for later
-            var dataPacket = _packetProvider.GetPacket(targetPacketIndex);
-
-            // actually seek the stream
+            // seek the stream
             _packetProvider.SeekToPacket(targetPacketIndex);
+
+            // now figure out where we are and how many samples we need to discard...
+            // note that we use the granule position of the "current" packet, since it will be discarded no matter what
+
+            // get the packet that we'll decode next
+            var dataPacket = _packetProvider.PeekNextPacket();
 
             // now read samples until we are exactly at the granule position requested
             CurrentPosition = dataPacket.GranulePosition;

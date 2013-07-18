@@ -162,6 +162,20 @@ namespace NVorbis.Ogg
             return packet;
         }
 
+        public DataPacket PeekNextPacket()
+        {
+            // this is a little bit of a hack, but it works...
+            var curPacket = _current;
+            try
+            {
+                return GetNextPacket();
+            }
+            finally
+            {
+                _current = curPacket;
+            }
+        }
+
         public void SeekToPacket(int index)
         {
             if (!CanSeek) throw new InvalidOperationException();

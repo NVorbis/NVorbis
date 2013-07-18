@@ -39,6 +39,12 @@ namespace NVorbis
         DataPacket GetNextPacket();
 
         /// <summary>
+        /// Retrieves the next packet in the stream but does not advance to the following packet.
+        /// </summary>
+        /// <returns>The next packet in the stream or <c>null</c> if no more packets.</returns>
+        DataPacket PeekNextPacket();
+
+        /// <summary>
         /// Retrieves the packet specified from the stream.
         /// </summary>
         /// <param name="packetIndex">The index of the packet to retrieve.</param>

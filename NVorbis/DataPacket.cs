@@ -160,6 +160,16 @@ namespace NVorbis
         }
 
         /// <summary>
+        /// Resets the bit reader.
+        /// </summary>
+        protected void ResetBitReader()
+        {
+            _bitBucket = 0;
+            _bitCount = 0;
+            _readBits = 0;
+        }
+
+        /// <summary>
         /// Gets whether the packet was found after a stream resync.
         /// </summary>
         public bool IsResync { get; internal set; }
