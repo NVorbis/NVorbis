@@ -174,11 +174,7 @@ namespace NVorbis.OpenTKSupport
 
             lock (stopMutex)
             {
-                if (Finished != null)
-                {
-                    Finished(this, EventArgs.Empty);
-                    Finished = null;
-                }
+                NotifyFinished();
                 OggStreamer.Instance.RemoveStream(this);
             }
         }
@@ -244,6 +240,16 @@ namespace NVorbis.OpenTKSupport
         {
             AL.SourceStop(alSourceId);
             ALHelper.Check();
+        }
+
+        internal void NotifyFinished()
+        {
+            var callback = Finished;
+            if (callback != null)
+            {
+                callback(this, EventArgs.Empty);
+                Finished = null;  // This is not typical...  Usually we count on whatever code added the event handler to also remove it
+            }
         }
 
         void Empty()
@@ -485,11 +491,7 @@ namespace NVorbis.OpenTKSupport
                                 {
                                     lock (stream.stopMutex)
                                     {
-                                        if (stream.Finished != null)
-                                        {
-                                            stream.Finished(stream, EventArgs.Empty);
-                                            stream.Finished = null;
-                                        }
+                                        stream.NotifyFinished();
                                     }
                                     streams.Remove(stream);
                                     break;
