@@ -43,7 +43,7 @@ namespace NVorbis.OpenTKSupport
         readonly Stream underlyingStream;
 
         internal VorbisReader Reader { get; private set; }
-        internal bool Ready { get; private set; }
+        public bool Ready { get; private set; }
         internal bool Preparing { get; private set; }
 
         public int BufferCount { get; private set; }
