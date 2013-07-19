@@ -369,6 +369,11 @@ namespace NVorbis.OpenTKSupport
                     underlyingThread = new Thread(EnsureBuffersFilled) { Priority = ThreadPriority.Lowest };
                     underlyingThread.Start();
                 }
+                else
+                {
+                    // no need for this, user is in charge
+                    updateRate = 0;
+                }
             }
 
             UpdateRate = updateRate;
@@ -515,6 +520,11 @@ namespace NVorbis.OpenTKSupport
                             ALHelper.Check();
                         }
                     }
+                }
+
+                if (UpdateRate > 0)
+                {
+                    Thread.Sleep((int)(1000 / UpdateRate));
                 }
             }
             while (underlyingThread != null && !cancelled);
