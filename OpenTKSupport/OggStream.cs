@@ -50,6 +50,8 @@ namespace NVorbis.OpenTKSupport
 
         public ILogger Logger { private get; set; }
 
+        internal EventHandler Finished;
+
         public OggStream(string filename, int bufferCount = DefaultBufferCount) : this(File.OpenRead(filename), bufferCount) { }
         public OggStream(Stream stream, int bufferCount = DefaultBufferCount)
         {
@@ -172,6 +174,11 @@ namespace NVorbis.OpenTKSupport
 
             lock (stopMutex)
             {
+                if (Finished != null)
+                {
+                    Finished(this, EventArgs.Empty);
+                    Finished = null;
+                }
                 OggStreamer.Instance.RemoveStream(this);
             }
         }
@@ -318,9 +325,9 @@ namespace NVorbis.OpenTKSupport
         readonly short[] castBuffer;
 
         readonly HashSet<OggStream> streams = new HashSet<OggStream>();
-        readonly List<OggStream> threadLocalStreams = new List<OggStream>(); 
+        readonly List<OggStream> threadLocalStreams = new List<OggStream>();
 
-        readonly Thread underlyingThread;
+        Thread underlyingThread;
         volatile bool cancelled;
 
         public float UpdateRate { get; private set; }
@@ -343,7 +350,13 @@ namespace NVorbis.OpenTKSupport
             private set { lock (singletonMutex) instance = value; }
         }
 
-        public OggStreamer(int bufferSize = DefaultBufferSize, float updateRate = DefaultUpdateRate)
+        /// <summary>
+        /// Constructs an OggStreamer that plays ogg files in the background
+        /// </summary>
+        /// <param name="bufferSize">Buffer size</param>
+        /// <param name="updateRate">Number of times per second to update</param>
+        /// <param name="internalThread">True to use an internal thread, false to use your own thread, in which case use must call EnsureBuffersFilled periodically</param>
+        public OggStreamer(int bufferSize = DefaultBufferSize, float updateRate = DefaultUpdateRate, bool internalThread = true)
         {
             lock (singletonMutex)
             {
@@ -351,8 +364,11 @@ namespace NVorbis.OpenTKSupport
                     throw new InvalidOperationException("Already running");
 
                 Instance = this;
-                underlyingThread = new Thread(EnsureBuffersFilled) { Priority = ThreadPriority.Lowest };
-                underlyingThread.Start();
+                if (internalThread)
+                {
+                    underlyingThread = new Thread(EnsureBuffersFilled) { Priority = ThreadPriority.Lowest };
+                    underlyingThread.Start();
+                }
             }
 
             UpdateRate = updateRate;
@@ -375,6 +391,7 @@ namespace NVorbis.OpenTKSupport
                     streams.Clear();
 
                 Instance = null;
+                underlyingThread = null;
             }
         }
 
@@ -407,7 +424,7 @@ namespace NVorbis.OpenTKSupport
 
             return readSamples != BufferSize;
         }
-        static void CastBuffer(float[] inBuffer, short[] outBuffer, int length)
+        public static void CastBuffer(float[] inBuffer, short[] outBuffer, int length)
         {
             for (int i = 0; i < length; i++)
             {
@@ -418,13 +435,10 @@ namespace NVorbis.OpenTKSupport
             }
         }
 
-        void EnsureBuffersFilled()
+        public void EnsureBuffersFilled()
         {
-            while (!cancelled)
+            do
             {
-                Thread.Sleep((int) (1000 / UpdateRate));
-                if (cancelled) break;
-
                 threadLocalStreams.Clear();
                 lock (iterationMutex) threadLocalStreams.AddRange(streams);
 
@@ -464,6 +478,14 @@ namespace NVorbis.OpenTKSupport
                                     stream.Reader.DecodedTime = TimeSpan.Zero;
                                 else
                                 {
+                                    lock (stream.stopMutex)
+                                    {
+                                        if (stream.Finished != null)
+                                        {
+                                            stream.Finished(stream, EventArgs.Empty);
+                                            stream.Finished = null;
+                                        }
+                                    }
                                     streams.Remove(stream);
                                     break;
                                 }
@@ -495,6 +517,7 @@ namespace NVorbis.OpenTKSupport
                     }
                 }
             }
+            while (underlyingThread != null && !cancelled);
         }
     }
 }
