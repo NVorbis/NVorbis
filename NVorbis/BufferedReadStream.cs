@@ -195,21 +195,19 @@ namespace NVorbis
                     // if we can't seek, there's nothing we can do
                     if (!_wrapper.Source.CanSeek) throw new InvalidOperationException("Cannot seek backwards on a forward-only stream!");
 
-                    // if there's data in the buffer, try to keep it (up to doubling the buffer size)
-                    if (_end > 0)
-                    {
-                        // if doubling the buffer would push it past the max size, don't check it
-                        if ((startIdx + _data.Length > 0) || (_data.Length * 2 <= _maxSize && startIdx + _data.Length * 2 > 0))
-                        {
-                            endIdx = _end;
-                        }
-                    }
-
                     // we know we'll have to start reading here
                     readOffset = offset;
 
+                    // if there's data in the buffer, try to keep it (up to doubling the buffer size)
+                    if (_end - startIdx <= _data.Length * 2 && _data.Length < _maxSize)
+                    {
+                        // we have to move the data, so do so
+                        moveCount = startIdx;
+                        readStart += startIdx;
+                        readCount = -startIdx;
+                    }
                     // if the end of the request is before the start of our buffer...
-                    if (endIdx < 0)
+                    else
                     {
                         // ... just truncate and move on
                         Truncate();
@@ -221,12 +219,6 @@ namespace NVorbis
 
                         // how much do we need to read?
                         readCount = count;
-                    }
-                    else // i.e., endIdx >= 0
-                    {
-                        // we have overlap with existing data...  save as much as possible
-                        moveCount = -endIdx;
-                        readCount = -startIdx;
                     }
                 }
                 else // i.e., startIdx >= 0
@@ -279,7 +271,7 @@ namespace NVorbis
 
                 #region Buffer Resizing & Data Moving
 
-                if (endIdx - moveCount > _data.Length || readStart + readCount - moveCount > _data.Length)
+                if ((moveCount < 0 && _end - moveCount > _data.Length) || (endIdx - moveCount > _data.Length || readStart + readCount - moveCount > _data.Length))
                 {
                     var newSize = _data.Length * 2;
                     while (newSize < endIdx - moveCount)
@@ -291,7 +283,7 @@ namespace NVorbis
                     if (moveCount < 0)
                     {
                         // reverse copy
-                        Buffer.BlockCopy(_data, 0, newBuf, -moveCount, _end + moveCount);
+                        Buffer.BlockCopy(_data, 0, newBuf, -moveCount, _end);
 
                         _discardCount = 0;
                     }
