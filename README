@@ -87,3 +87,7 @@ History
     * Reduced computation by only processing samples that are required for output
     * Bugfix: Seeking now works again
     * Bugfix: OpenTKSupport.OggStream now only queues as many source buffers as it filled
+0.7.2 - 07/22/2013
+    * Bugfix: Floor 0 implementation is now correct
+    * Bugfix: Residue 0 & 1 implementation is now correct
+    * Bugfix: Seeking back less than the current buffer size no longer corrupts the read buffer

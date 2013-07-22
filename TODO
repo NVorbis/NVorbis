@@ -1,7 +1,4 @@
-﻿* Check that Floor0 is implemented correctly
-* Check that Residue0 is implemented correctly
-
-* RTP support
+﻿* RTP support
 	- Implement the same interface for RTP (non-seekable)
 	- Add a constructor for VorbisReader that accepts a NetworkStream
 		- Possibly another System.Net member?  Needs thought.
@@ -9,8 +6,7 @@
 * Matroska support
 	- Needs a base EBML reader
 
-* More optimization?  Currently running at > 94x realtime on a Core i7 M 620
-	- look for places where we can move logic into header decode
+* More optimization?  Currently running at > 105x realtime on a Core i7 M 620
 	- more profiling
 
 * Test with a lot more Vorbis streams
