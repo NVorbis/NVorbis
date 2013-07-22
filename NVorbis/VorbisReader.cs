@@ -260,7 +260,11 @@ namespace NVorbis
                 var decoder = ActiveDecoder;
                 return TimeSpan.FromSeconds((double)decoder.CurrentPosition / decoder._sampleRate);
             }
-            set { ActiveDecoder.SeekTo((long)(value.TotalSeconds * SampleRate)); }
+            set
+            {
+                ActiveDecoder.SeekTo((long)(value.TotalSeconds * SampleRate));
+            }
+
         }
 
         /// <summary>

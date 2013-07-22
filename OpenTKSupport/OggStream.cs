@@ -423,10 +423,6 @@ namespace NVorbis.OpenTKSupport
             lock (readMutex)
             {   
                 readSamples = stream.Reader.ReadSamples(readSampleBuffer, 0, BufferSize);
-                if (readSamples <= 0)
-                {
-                    return true;
-                }
                 CastBuffer(readSampleBuffer, castBuffer, readSamples);
             }
             AL.BufferData(bufferId, stream.Reader.Channels == 1 ? ALFormat.Mono16 : ALFormat.Stereo16, castBuffer,
@@ -437,9 +433,8 @@ namespace NVorbis.OpenTKSupport
             else                            Logger.Log(LogEvent.LastPacket, stream);
             Logger.Log(LogEventSingle.MemoryUsage, () => GC.GetTotalMemory(true));
 
-            return false;
+            return readSamples != BufferSize;
         }
-
         public static void CastBuffer(float[] inBuffer, short[] outBuffer, int length)
         {
             for (int i = 0; i < length; i++)
@@ -491,7 +486,14 @@ namespace NVorbis.OpenTKSupport
                             if (finished)
                             {
                                 if (stream.IsLooped)
+                                {
                                     stream.Reader.DecodedTime = TimeSpan.Zero;
+                                    if (bufIdx == 0)
+                                    {
+                                        // we didn't have any buffers left over, so let's start from the beginning on the next cycle...
+                                        continue;
+                                    }
+                                }
                                 else
                                 {
                                     lock (stream.stopMutex)
