@@ -433,8 +433,9 @@ namespace NVorbis.OpenTKSupport
             else                            Logger.Log(LogEvent.LastPacket, stream);
             Logger.Log(LogEventSingle.MemoryUsage, () => GC.GetTotalMemory(true));
 
-            return readSamples != BufferSize;
+            return readSamples <= 0;
         }
+
         public static void CastBuffer(float[] inBuffer, short[] outBuffer, int length)
         {
             for (int i = 0; i < length; i++)
