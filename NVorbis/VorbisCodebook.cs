@@ -251,7 +251,7 @@ namespace NVorbis
 
         internal int Dimensions;
 
-        int Entries;
+        internal int Entries;
 
         int[] Lengths;
 
