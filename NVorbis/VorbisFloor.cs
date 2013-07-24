@@ -167,37 +167,40 @@ namespace NVorbis
 
                     data.Amp = (float)(data.Amp / _ampDiv * _ampOfs);
 
-                    try
+                    var bookNum = (uint)packet.ReadBits(_bookBits);
+                    if (bookNum >= _books.Length)
                     {
-                        var bookNum = (uint)packet.ReadBits(_bookBits);
-                        if (bookNum >= _books.Length) throw new InvalidDataException();
-                        var book = _books[bookNum];
+                        // we ran out of data or the packet is corrupt...  0 the floor and return
+                        data.Amp = 0;
+                        return data;
+                    }
+                    var book = _books[bookNum];
 
-                        // first, the book decode...
-                        for (int i = 0; i < _order; )
+                    // first, the book decode...
+                    for (int i = 0; i < _order; )
+                    {
+                        var entry = book.DecodeScalar(packet);
+                        if (entry == -1)
                         {
-                            var entry = book.DecodeScalar(packet);
-                            for (int j = 0; i < _order && j < book.Dimensions; j++, i++)
-                            {
-                                data.Coeff[i] = book[entry, j];
-                            }
+                            // we ran out of data or the packet is corrupt...  0 the floor and return
+                            data.Amp = 0;
+                            return data;
                         }
-
-                        // then, the "averaging"
-                        var last = 0f;
-                        for (int j = 0; j < _order; )
+                        for (int j = 0; i < _order && j < book.Dimensions; j++, i++)
                         {
-                            for (int k = 0; j < _order && k < book.Dimensions; j++, k++)
-                            {
-                                data.Coeff[j] += last;
-                            }
-                            last = data.Coeff[j - 1];
+                            data.Coeff[i] = book[entry, j];
                         }
                     }
-                    catch (EndOfStreamException)
+
+                    // then, the "averaging"
+                    var last = 0f;
+                    for (int j = 0; j < _order; )
                     {
-                        // per the spec, an end of packet condition here indicates "no floor"
-                        data.Amp = 0.0f;
+                        for (int k = 0; j < _order && k < book.Dimensions; j++, k++)
+                        {
+                            data.Coeff[j] += last;
+                        }
+                        last = data.Coeff[j - 1];
                     }
                 }
                 return data;
@@ -408,40 +411,45 @@ namespace NVorbis
                 // hoist ReadPosts to here since that's all we're doing...
                 if (packet.ReadBit())
                 {
-                    try
-                    {
-                        var postCount = 2;
-                        data.Posts[0] = (int)packet.ReadBits(_yBits);
-                        data.Posts[1] = (int)packet.ReadBits(_yBits);
+                    var postCount = 2;
+                    data.Posts[0] = (int)packet.ReadBits(_yBits);
+                    data.Posts[1] = (int)packet.ReadBits(_yBits);
 
-                        for (int i = 0; i < _partitionClass.Length; i++)
+                    for (int i = 0; i < _partitionClass.Length; i++)
+                    {
+                        var clsNum = _partitionClass[i];
+                        var cdim = _classDimensions[clsNum];
+                        var cbits = _classSubclasses[clsNum];
+                        var csub = (1 << cbits) - 1;
+                        var cval = 0U;
+                        if (cbits > 0)
                         {
-                            var clsNum = _partitionClass[i];
-                            var cdim = _classDimensions[clsNum];
-                            var cbits = _classSubclasses[clsNum];
-                            var csub = (1 << cbits) - 1;
-                            var cval = 0U;
-                            if (cbits > 0)
+                            if ((cval = (uint)_classMasterbooks[clsNum].DecodeScalar(packet)) == uint.MaxValue)
                             {
-                                cval = (uint)_classMasterbooks[clsNum].DecodeScalar(packet);
-                            }
-                            for (int j = 0; j < cdim; j++)
-                            {
-                                var book = _subclassBooks[clsNum][cval & csub];
-                                cval >>= cbits;
-                                if (book != null)
-                                {
-                                    data.Posts[postCount] = (int)book.DecodeScalar(packet);
-                                }
-                                ++postCount;
+                                // we read a bad value...  bail
+                                postCount = 0;
+                                break;
                             }
                         }
+                        for (int j = 0; j < cdim; j++)
+                        {
+                            var book = _subclassBooks[clsNum][cval & csub];
+                            cval >>= cbits;
+                            if (book != null)
+                            {
+                                if ((data.Posts[postCount] = book.DecodeScalar(packet)) == -1)
+                                {
+                                    // we read a bad value... bail
+                                    postCount = 0;
+                                    i = _partitionClass.Length;
+                                    break;
+                                }
+                            }
+                            ++postCount;
+                        }
+                    }
 
-                        data.PostCount = postCount;
-                    }
-                    catch (EndOfStreamException)
-                    {
-                    }
+                    data.PostCount = postCount;
                 }
 
                 return data;
@@ -450,7 +458,7 @@ namespace NVorbis
             internal override void Apply(PacketData packetData, float[] residue)
             {
                 var data = packetData as PacketData1;
-                if (data == null) throw new InvalidDataException("Incorrect packet data!");
+                if (data == null) throw new ArgumentException("Incorrect packet data!", "packetData");
 
                 if (data.PostCount > 0)
                 {

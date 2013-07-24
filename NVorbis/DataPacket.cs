@@ -36,7 +36,7 @@ namespace NVorbis
         abstract protected int ReadNextByte();
 
         /// <summary>
-        /// Indicates that the packet has been read and its data is not longer needed.
+        /// Indicates that the packet has been read and its data is no longer needed.
         /// </summary>
         virtual public void Done()
         {
@@ -72,9 +72,14 @@ namespace NVorbis
                 var val = ReadNextByte();
                 if (val == -1)
                 {
-                    count = _bitCount;
-                    bitShift = 0;
-                    break;
+                    bitsRead = _bitCount;
+                    value = _bitBucket;
+                    _bitBucket = 0;
+                    _bitCount = 0;
+
+                    IsShort |= (bitsRead + _readBits < Length * 8);
+
+                    return value;
                 }
                 _bitBucket = (ulong)(val & 0xFF) << _bitCount | _bitBucket;
                 _bitCount += 8;
@@ -102,12 +107,10 @@ namespace NVorbis
         /// <param name="count">The number of bits to read.</param>
         /// <returns>The value of the bits read.</returns>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is not between 0 and 64.</exception>
-        /// <exception cref="EndOfStreamException">The end of the packet was encountered before reading all the requested bits.</exception>
         public ulong PeekBits(int count)
         {
             int bitsRead;
             var bits = TryPeekBits(count, out bitsRead);
-            if (bitsRead < count) throw new EndOfStreamException();
             return bits;
         }
 
@@ -115,7 +118,6 @@ namespace NVorbis
         /// Advances the position counter by the specified number of bits.
         /// </summary>
         /// <param name="count">The number of bits to advance.</param>
-        /// <exception cref="EndOfStreamException">The end of the packet was encountered before advancing the requested number of bits.</exception>
         public void SkipBits(int count)
         {
             if (count == 0)
@@ -144,7 +146,14 @@ namespace NVorbis
 
                 while (count > 8)
                 {
-                    if (ReadNextByte() == -1) throw new EndOfStreamException();
+                    if (ReadNextByte() == -1)
+                    {
+                        if ((count %= 8) == 0)
+                        {
+                            IsShort |= (_readBits < Length * 8);
+                        }
+                        break;
+                    }
                     count -= 8;
                     _readBits += 8;
                 }
@@ -167,6 +176,8 @@ namespace NVorbis
             _bitBucket = 0;
             _bitCount = 0;
             _readBits = 0;
+
+            IsShort = false;
         }
 
         /// <summary>
@@ -206,13 +217,14 @@ namespace NVorbis
 
         internal int PageSequenceNumber { get; set; }
 
+        internal bool IsShort { get; private set; }
+
         /// <summary>
         /// Reads the specified number of bits from the packet and advances the position counter.
         /// </summary>
         /// <param name="count">The number of bits to read.</param>
         /// <returns>The value of the bits read.</returns>
         /// <exception cref="ArgumentOutOfRangeException">The number of bits specified is not between 0 and 64.</exception>
-        /// <exception cref="EndOfStreamException">The end of the packet was encountered before reading all the requested bits.</exception>
         public ulong ReadBits(int count)
         {
             // short-circuit 0
@@ -229,7 +241,6 @@ namespace NVorbis
         /// Reads the next byte from the packet.  Does not advance the position counter.
         /// </summary>
         /// <returns>The byte read from the packet.</returns>
-        /// <exception cref="EndOfStreamException">The end of the packet was encountered while reading the byte.</exception>
         public byte PeekByte()
         {
             return (byte)PeekBits(8);
@@ -239,7 +250,6 @@ namespace NVorbis
         /// Reads the next byte from the packet and advances the position counter.
         /// </summary>
         /// <returns>The byte read from the packet.</returns>
-        /// <exception cref="EndOfStreamException">The end of the packet was encountered while reading the byte.</exception>
         public byte ReadByte()
         {
             return (byte)ReadBits(8);
@@ -250,21 +260,13 @@ namespace NVorbis
         /// </summary>
         /// <param name="count">The number of bytes to read.</param>
         /// <returns>A byte array holding the data read.</returns>
-        /// <exception cref="EndOfStreamException">The end of the packet was encountered before reading all the requested bytes.</exception>
         public byte[] ReadBytes(int count)
         {
             var buf = new List<byte>(count);
 
             while (buf.Count < count)
             {
-                try
-                {
-                    buf.Add(ReadByte());
-                }
-                catch (EndOfStreamException)
-                {
-                    break;
-                }
+                buf.Add(ReadByte());
             }
 
             return buf.ToArray();
@@ -283,14 +285,13 @@ namespace NVorbis
             if (index < 0 || index + count > buffer.Length) throw new ArgumentOutOfRangeException("index");
             for (int i = 0; i < count; i++)
             {
-                try
-                {
-                    buffer[index++] = ReadByte();
-                }
-                catch (EndOfStreamException)
+                int cnt;
+                byte val = (byte)TryPeekBits(8, out cnt);
+                if (cnt == 0)
                 {
                     return i;
                 }
+                buffer[index++] = val;
             }
             return count;
         }
@@ -299,7 +300,6 @@ namespace NVorbis
         /// Reads the next bit from the packet and advances the position counter.
         /// </summary>
         /// <returns>The value of the bit read.</returns>
-        /// <exception cref="EndOfStreamException">The end of the packet was encountered while trying to read the bit.</exception>
         public bool ReadBit()
         {
             return ReadBits(1) == 1;
@@ -309,7 +309,6 @@ namespace NVorbis
         /// Retrieves the next 16 bits from the packet as a <see cref="short"/> and advances the position counter.
         /// </summary>
         /// <returns>The value of the next 16 bits.</returns>
-        /// <exception cref="EndOfStreamException">The end of the packet was encountered while reading the bits.</exception>
         public short ReadInt16()
         {
             return (short)ReadBits(16);
@@ -319,7 +318,6 @@ namespace NVorbis
         /// Retrieves the next 32 bits from the packet as a <see cref="int"/> and advances the position counter.
         /// </summary>
         /// <returns>The value of the next 32 bits.</returns>
-        /// <exception cref="EndOfStreamException">The end of the packet was encountered while reading the bits.</exception>
         public int ReadInt32()
         {
             return (int)ReadBits(32);
@@ -329,7 +327,6 @@ namespace NVorbis
         /// Retrieves the next 64 bits from the packet as a <see cref="long"/> and advances the position counter.
         /// </summary>
         /// <returns>The value of the next 64 bits.</returns>
-        /// <exception cref="EndOfStreamException">The end of the packet was encountered while reading the bits.</exception>
         public long ReadInt64()
         {
             return (long)ReadBits(64);
@@ -339,7 +336,6 @@ namespace NVorbis
         /// Retrieves the next 16 bits from the packet as a <see cref="ushort"/> and advances the position counter.
         /// </summary>
         /// <returns>The value of the next 16 bits.</returns>
-        /// <exception cref="EndOfStreamException">The end of the packet was encountered while reading the bits.</exception>
         public ushort ReadUInt16()
         {
             return (ushort)ReadBits(16);
@@ -349,7 +345,6 @@ namespace NVorbis
         /// Retrieves the next 32 bits from the packet as a <see cref="uint"/> and advances the position counter.
         /// </summary>
         /// <returns>The value of the next 32 bits.</returns>
-        /// <exception cref="EndOfStreamException">The end of the packet was encountered while reading the bits.</exception>
         public uint ReadUInt32()
         {
             return (uint)ReadBits(32);
@@ -359,7 +354,6 @@ namespace NVorbis
         /// Retrieves the next 64 bits from the packet as a <see cref="ulong"/> and advances the position counter.
         /// </summary>
         /// <returns>The value of the next 64 bits.</returns>
-        /// <exception cref="EndOfStreamException">The end of the packet was encountered while reading the bits.</exception>
         public ulong ReadUInt64()
         {
             return (ulong)ReadBits(64);
@@ -369,7 +363,6 @@ namespace NVorbis
         /// Advances the position counter by the specified number of bytes.
         /// </summary>
         /// <param name="count">The number of bytes to advance.</param>
-        /// <exception cref="EndOfStreamException">The end of the packet was encountered while advancing.</exception>
         public void SkipBytes(int count)
         {
             SkipBits(count * 8);
