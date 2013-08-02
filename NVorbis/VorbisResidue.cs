@@ -74,7 +74,7 @@ namespace NVorbis
 
         abstract protected void Init(DataPacket packet);
 
-        // residue type 0... samples are grouped by channel, then stored with interleaved dimensions (d0, d1, d2, d0, d1, d2, etc...)
+        // residue type 0... samples are grouped by channel, then stored with non-interleaved dimensions (d0, d0, d0, d0, ..., d1, d1, d1, d1, ..., d2, d2, d2, d2, etc...)
         class Residue0 : VorbisResidue
         {
             int _begin;
@@ -256,7 +256,7 @@ namespace NVorbis
             }
         }
 
-        // residue type 1... samples are grouped by channel, then stored with non-interleaved dimensions (d0, d0, d0, d0, ..., d1, d1, d1, d1, ..., d2, d2, d2, d2, etc...)
+        // residue type 1... samples are grouped by channel, then stored with interleaved dimensions (d0, d1, d2, d0, d1, d2, etc...)
         class Residue1 : Residue0
         {
             internal Residue1(VorbisStreamDecoder vorbis) : base(vorbis) { }
@@ -270,7 +270,7 @@ namespace NVorbis
                     var entry = codebook.DecodeScalar(packet);
                     for (int j = 0; j < codebook.Dimensions; i++, j++)
                     {
-                        res[offset + i] = codebook[entry, j];
+                        res[offset + i] += codebook[entry, j];
                     }
                 }
             }
