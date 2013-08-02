@@ -26,6 +26,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".nuget", ".nuget", "{8C243E
 		.nuget\NuGet.targets = .nuget\NuGet.targets
 	EndProjectSection
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestHarness", "TestHarness\TestHarness.csproj", "{D269D053-A735-493B-B953-C4ECF70A6CEB}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UnitTests", "UnitTests\UnitTests.csproj", "{FA206688-26A4-46E0-B043-0496B2D886B4}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug - Unsafe MDCT|Any CPU = Debug - Unsafe MDCT|Any CPU
@@ -65,6 +69,22 @@ Global
 		{7BABE72F-07E3-40E9-A65B-4EF98029AE6B}.Release - Unsafe MDCT|Any CPU.Build.0 = Release|Any CPU
 		{7BABE72F-07E3-40E9-A65B-4EF98029AE6B}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{7BABE72F-07E3-40E9-A65B-4EF98029AE6B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D269D053-A735-493B-B953-C4ECF70A6CEB}.Debug - Unsafe MDCT|Any CPU.ActiveCfg = Debug|Any CPU
+		{D269D053-A735-493B-B953-C4ECF70A6CEB}.Debug - Unsafe MDCT|Any CPU.Build.0 = Debug|Any CPU
+		{D269D053-A735-493B-B953-C4ECF70A6CEB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D269D053-A735-493B-B953-C4ECF70A6CEB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D269D053-A735-493B-B953-C4ECF70A6CEB}.Release - Unsafe MDCT|Any CPU.ActiveCfg = Release|Any CPU
+		{D269D053-A735-493B-B953-C4ECF70A6CEB}.Release - Unsafe MDCT|Any CPU.Build.0 = Release|Any CPU
+		{D269D053-A735-493B-B953-C4ECF70A6CEB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D269D053-A735-493B-B953-C4ECF70A6CEB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FA206688-26A4-46E0-B043-0496B2D886B4}.Debug - Unsafe MDCT|Any CPU.ActiveCfg = Debug|Any CPU
+		{FA206688-26A4-46E0-B043-0496B2D886B4}.Debug - Unsafe MDCT|Any CPU.Build.0 = Debug|Any CPU
+		{FA206688-26A4-46E0-B043-0496B2D886B4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FA206688-26A4-46E0-B043-0496B2D886B4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FA206688-26A4-46E0-B043-0496B2D886B4}.Release - Unsafe MDCT|Any CPU.ActiveCfg = Release|Any CPU
+		{FA206688-26A4-46E0-B043-0496B2D886B4}.Release - Unsafe MDCT|Any CPU.Build.0 = Release|Any CPU
+		{FA206688-26A4-46E0-B043-0496B2D886B4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FA206688-26A4-46E0-B043-0496B2D886B4}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
