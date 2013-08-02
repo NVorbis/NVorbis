@@ -91,3 +91,5 @@ History
     * Bugfix: Floor 0 implementation is now correct
     * Bugfix: Residue 0 & 1 implementation is now correct
     * Bugfix: Seeking back less than the current buffer size no longer corrupts the read buffer
+0.7.3 - 08/02/2013
+    * Bugfix: Fix residue 1

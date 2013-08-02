@@ -14,7 +14,7 @@ namespace NVorbis
     /// <summary>
     /// A thread-safe, read-only, buffering stream wrapper.
     /// </summary>
-    class BufferedReadStream : Stream
+    partial class BufferedReadStream : Stream
     {
         const int DEFAULT_INITIAL_SIZE = 32768; // 32KB  (1/2 full page)
         const int DEFAULT_MAX_SIZE = 262144;    // 256KB (4 full pages)
@@ -460,6 +460,7 @@ namespace NVorbis
             if (!baseStream.CanRead) throw new ArgumentException("baseStream");
 
             if (maxBufferSize < 1) maxBufferSize = 1;
+            if (initialSize < 1) initialSize = 1;
             if (initialSize > maxBufferSize) initialSize = maxBufferSize;
 
             _baseStream = baseStream;

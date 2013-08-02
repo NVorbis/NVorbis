@@ -2,7 +2,7 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2011/08/nuspec.xsd">
     <metadata>
         <id>NVorbis</id>
-        <version>0.7.2</version>
+        <version>0.7.3</version>
         <title />
         <authors>Andrew Ward</authors>
         <owners />
@@ -11,9 +11,7 @@
         <requireLicenseAcceptance>false</requireLicenseAcceptance>
         <description>A fully managed implementation of a Xiph.org Foundation Ogg Vorbis decoder.</description>
         <summary>A managed Xiph.org Foundation Ogg Vorbis decoder</summary>
-        <releaseNotes>- Bugfix: Floor 0 implementation is now correct
-- Bugfix: Residue 0 &amp; 1 implementation is now correct
-- Bugfix: Seeking back less than the current buffer size no longer corrupts data being returned</releaseNotes>
+        <releaseNotes>- Bugfix: Fixed residue 1</releaseNotes>
         <language>en-US</language>
         <tags>ogg vorbis xiph audio c# sound .NET</tags>
         <frameworkAssemblies>
