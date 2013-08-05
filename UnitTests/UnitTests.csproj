@@ -52,7 +52,7 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\BufferedReadStream\TestHarness.csproj">
+    <ProjectReference Include="..\TestHarness\TestHarness.csproj">
       <Project>{D269D053-A735-493B-B953-C4ECF70A6CEB}</Project>
       <Name>TestHarness</Name>
     </ProjectReference>
