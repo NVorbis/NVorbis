@@ -123,7 +123,7 @@ namespace UnitTests
 
             Assert.AreEqual(16, temp);
             Assert.AreEqual(0x504F, output);
-            Assert.AreEqual(_defaultTestPacket.Length * 8, _defaultTestPacket.BitsRead);
+            Assert.AreEqual(80, _defaultTestPacket.BitsRead);
             Assert.AreEqual(true, _defaultTestPacket.IsShort);
         }
 
@@ -192,6 +192,46 @@ namespace UnitTests
 
             Assert.AreEqual(startBits + 6, _defaultTestPacket.BitsRead);
             Assert.AreEqual(0xA, _defaultTestPacket.TryPeekBits(4, out temp));
+        }
+
+        [Test]
+        public void SkipBitsWithOverflow1()
+        {
+            _defaultTestPacket.SkipBits(6);
+
+            int temp;
+            _defaultTestPacket.TryPeekBits(64, out temp);
+
+            var startBits = _defaultTestPacket.BitsRead;
+            _defaultTestPacket.SkipBits(1);
+
+            Assert.AreEqual(startBits + 1, _defaultTestPacket.BitsRead);
+
+            var testVal = _defaultTestPacket.TryPeekBits(8, out temp);
+
+            _defaultTestPacket.Reset();
+            _defaultTestPacket.SkipBits(7);
+            Assert.AreEqual(_defaultTestPacket.TryPeekBits(8, out temp), testVal);
+        }
+
+        [Test]
+        public void SkipBitsWithOverflow2()
+        {
+            _defaultTestPacket.SkipBits(6);
+
+            int temp;
+            _defaultTestPacket.TryPeekBits(64, out temp);
+
+            var startBits = _defaultTestPacket.BitsRead;
+            _defaultTestPacket.SkipBits(2);
+
+            Assert.AreEqual(startBits + 2, _defaultTestPacket.BitsRead);
+
+            var testVal = _defaultTestPacket.TryPeekBits(8, out temp);
+
+            _defaultTestPacket.Reset();
+            _defaultTestPacket.SkipBits(8);
+            Assert.AreEqual(_defaultTestPacket.TryPeekBits(8, out temp), testVal);
         }
 
         [Test]
