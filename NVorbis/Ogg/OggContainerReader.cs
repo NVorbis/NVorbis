@@ -1,6 +1,6 @@
 ﻿/****************************************************************************
  * NVorbis                                                                  *
- * Copyright (C) 2012, Andrew Ward <afward@gmail.com>                       *
+ * Copyright (C) 2013, Andrew Ward <afward@gmail.com>                       *
  *                                                                          *
  * See COPYING for license terms (Ms-PL).                                   *
  *                                                                          *
@@ -26,7 +26,7 @@ namespace NVorbis.Ogg
 
         byte[] _readBuffer = new byte[65025];   // up to a full page of data (but no more!)
 
-        System.Threading.Mutex _pageLock = new System.Threading.Mutex(false);
+        object _pageLock = new object();
 
         long _containerBits, _wasteBits;
 
@@ -330,21 +330,22 @@ namespace NVorbis.Ogg
 
         internal class PageReaderLock : IDisposable
         {
-            System.Threading.Mutex _lock;
+            object _lock;
 
-            public PageReaderLock(System.Threading.Mutex pageLock)
+            public PageReaderLock(object pageLock)
             {
-                (_lock = pageLock).WaitOne();
+                System.Threading.Monitor.Enter(pageLock);
+                _lock = pageLock;
             }
 
-            public bool Validate(System.Threading.Mutex pageLock)
+            public bool Validate(object pageLock)
             {
                 return object.ReferenceEquals(pageLock, _lock);
             }
 
             public void Dispose()
             {
-                _lock.ReleaseMutex();
+                System.Threading.Monitor.Exit(_lock);
             }
         }
 
