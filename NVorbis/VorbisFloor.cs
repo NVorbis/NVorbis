@@ -211,12 +211,13 @@ namespace NVorbis
                 var data = packetData as PacketData0;
                 if (data == null) throw new ArgumentException("Incorrect packet data!");
 
+                var n = data.BlockSize / 2;
+
                 if (data.Amp > 0f)
                 {
                     // this is pretty well stolen directly from libvorbis...  BSD license
                     var barkMap = _barkMaps[data.BlockSize];
                     var wMap = _wMap[data.BlockSize];
-                    var n = data.BlockSize / 2;
 
                     int i = 0;
                     for (i = 0; i < _order; i++)
@@ -261,6 +262,10 @@ namespace NVorbis
 
                         while (barkMap[++i] == k) residue[i] *= q;
                     }
+                }
+                else
+                {
+                    Array.Clear(residue, 0, n);
                 }
             }
         }
@@ -460,11 +465,11 @@ namespace NVorbis
                 var data = packetData as PacketData1;
                 if (data == null) throw new ArgumentException("Incorrect packet data!", "packetData");
 
+                var n = data.BlockSize / 2;
+
                 if (data.PostCount > 0)
                 {
                     var stepFlags = UnwrapPosts(data);
-
-                    var n = data.BlockSize / 2;
 
                     var lx = 0;
                     var ly = data.Posts[0] * _multiplier;
@@ -487,6 +492,10 @@ namespace NVorbis
                     {
                         RenderLineMulti(lx, ly, n, ly, residue);
                     }
+                }
+                else
+                {
+                    Array.Clear(residue, 0, n);
                 }
             }
 
