@@ -275,7 +275,7 @@ namespace NVorbis
             // try to get as many bits as possible...
             int bitCnt; // we really don't care how many bits were read; try to decode anyway...
             var bits = (int)packet.TryPeekBits(MaxBits, out bitCnt);
-            if (bitCnt == 0) throw new InvalidDataException();
+            if (bitCnt == 0) return -1;
 
             // now go through the list and find the matching entry
             var node = LTree;
@@ -289,7 +289,7 @@ namespace NVorbis
                 }
                 node = node.Next;
             }
-            throw new InvalidDataException();
+            return -1;
         }
     }
 }

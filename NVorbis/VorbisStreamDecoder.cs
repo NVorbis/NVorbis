@@ -340,95 +340,78 @@ namespace NVorbis
 
             // get mode and prev/next flags
             var modeBits = _modeFieldBits;
-            try
+            _mode = Modes[(int)packet.ReadBits(_modeFieldBits)];
+            if (_mode.BlockFlag)
             {
-                _mode = Modes[(int)packet.ReadBits(_modeFieldBits)];
-                if (_mode.BlockFlag)
-                {
-                    _prevFlag = packet.ReadBit();
-                    _nextFlag = packet.ReadBit();
-                    modeBits += 2;
-                }
-                else
-                {
-                    _prevFlag = _nextFlag = false;
-                }
+                _prevFlag = packet.ReadBit();
+                _nextFlag = packet.ReadBit();
+                modeBits += 2;
             }
-            catch (EndOfStreamException)
+            else
             {
-                return false;
+                _prevFlag = _nextFlag = false;
             }
 
-            try
+            if (packet.IsShort) return false;
+
+            var startBits = packet.BitsRead;
+
+            var halfBlockSize = _mode.BlockSize / 2;
+
+            // read the noise floor data (but don't decode yet)
+            for (int i = 0; i < _channels; i++)
             {
-                var startBits = packet.BitsRead;
+                _floorData[i] = _mode.Mapping.ChannelSubmap[i].Floor.UnpackPacket(packet, _mode.BlockSize, i);
+                _noExecuteChannel[i] = !_floorData[i].ExecuteChannel;
 
-                var halfBlockSize = _mode.BlockSize / 2;
+                // go ahead and clear the residue buffers
+                Array.Clear(_residue[i], 0, halfBlockSize);
+            }
 
-                // read the noise floor data (but don't decode yet)
-                for (int i = 0; i < _channels; i++)
+            // make sure we handle no-energy channels correctly given the couplings...
+            foreach (var step in _mode.Mapping.CouplingSteps)
+            {
+                if (_floorData[step.Angle].ExecuteChannel || _floorData[step.Magnitude].ExecuteChannel)
                 {
-                    _floorData[i] = _mode.Mapping.ChannelSubmap[i].Floor.UnpackPacket(packet, _mode.BlockSize, i);
-                    _noExecuteChannel[i] = !_floorData[i].ExecuteChannel;
-
-                    // go ahead and clear the residue buffers
-                    Array.Clear(_residue[i], 0, halfBlockSize);
+                    _floorData[step.Angle].ForceEnergy = true;
+                    _floorData[step.Magnitude].ForceEnergy = true;
                 }
+            }
 
-                // make sure we handle no-energy channels correctly given the couplings...
-                foreach (var step in _mode.Mapping.CouplingSteps)
+            var floorBits = packet.BitsRead - startBits;
+            startBits = packet.BitsRead;
+
+            foreach (var subMap in _mode.Mapping.Submaps)
+            {
+                for (int j = 0; j < _channels; j++)
                 {
-                    if (_floorData[step.Angle].ExecuteChannel || _floorData[step.Magnitude].ExecuteChannel)
+                    if (_mode.Mapping.ChannelSubmap[j] != subMap)
                     {
-                        _floorData[step.Angle].ForceEnergy = true;
-                        _floorData[step.Magnitude].ForceEnergy = true;
+                        _floorData[j].ForceNoEnergy = true;
                     }
                 }
 
-                var floorBits = packet.BitsRead - startBits;
-                startBits = packet.BitsRead;
-
-                foreach (var subMap in _mode.Mapping.Submaps)
+                var rTemp = subMap.Residue.Decode(packet, _noExecuteChannel, _channels, _mode.BlockSize);
+                for (int c = 0; c < _channels; c++)
                 {
-                    for (int j = 0; j < _channels; j++)
+                    var r = _residue[c];
+                    var rt = rTemp[c];
+                    for (int i = 0; i < halfBlockSize; i++)
                     {
-                        if (_mode.Mapping.ChannelSubmap[j] != subMap)
-                        {
-                            _floorData[j].ForceNoEnergy = true;
-                        }
-                    }
-
-                    var rTemp = subMap.Residue.Decode(packet, _noExecuteChannel, _channels, _mode.BlockSize);
-                    for (int c = 0; c < _channels; c++)
-                    {
-                        var r = _residue[c];
-                        var rt = rTemp[c];
-                        for (int i = 0; i < halfBlockSize; i++)
-                        {
-                            r[i] += rt[i];
-                        }
+                        r[i] += rt[i];
                     }
                 }
-
-                _glueBits += 1;
-                _modeBits += modeBits;
-                _floorBits += floorBits;
-                _resBits += packet.BitsRead - startBits;
-                _wasteBits += 8 * packet.Length - packet.BitsRead;
-
-                _packetCount += 1;
-
-                return true;
-            }
-            catch (EndOfStreamException)
-            {
-                ResetDecoder();
-            }
-            catch (InvalidDataException)
-            {
             }
 
-            return false;
+            _glueBits += 1;
+            _modeBits += modeBits;
+            _floorBits += floorBits;
+            _resBits += packet.BitsRead - startBits;
+            _wasteBits += 8 * packet.Length - packet.BitsRead;
+
+            _packetCount += 1;
+
+            return true;
         }
 
         void DecodePacket()
