@@ -93,3 +93,5 @@ History
     * Bugfix: Seeking back less than the current buffer size no longer corrupts the read buffer
 0.7.3 - 08/02/2013
     * Bugfix: Fix residue 1
+0.7.4 - 09/16/2013
+    * Bugfix: Some stereo files with sound on only one channel decoded noise on the silent channel.
