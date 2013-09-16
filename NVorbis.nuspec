@@ -2,7 +2,7 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2011/08/nuspec.xsd">
     <metadata>
         <id>NVorbis</id>
-        <version>0.7.3</version>
+        <version>0.7.4</version>
         <title />
         <authors>Andrew Ward</authors>
         <owners />
@@ -11,7 +11,7 @@
         <requireLicenseAcceptance>false</requireLicenseAcceptance>
         <description>A fully managed implementation of a Xiph.org Foundation Ogg Vorbis decoder.</description>
         <summary>A managed Xiph.org Foundation Ogg Vorbis decoder</summary>
-        <releaseNotes>- Bugfix: Fixed residue 1</releaseNotes>
+        <releaseNotes>- Bugfix: Some stereo files with sound on only one channel decoded noise on the silent channel</releaseNotes>
         <language>en-US</language>
         <tags>ogg vorbis xiph audio c# sound .NET</tags>
         <frameworkAssemblies>
