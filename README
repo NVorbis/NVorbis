@@ -98,3 +98,5 @@ History
 0.8.0test1 - 09/16/2013
     * Rebuilt container reading infrastructure so it is properly decoupled from the decoder
     * Added unit tests for the packet reader, Ogg container reader
+0.8.0 - 12/06/2013
+    * Replaces 0.7.4 as recommended release
