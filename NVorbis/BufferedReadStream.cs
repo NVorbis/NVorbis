@@ -59,6 +59,12 @@ namespace NVorbis
             base.Dispose(disposing);
             if (disposing)
             {
+                if (_buffer != null)
+                {
+                    _buffer.Dispose();
+                    _buffer = null;
+                }
+
                 if (CloseBaseStream)
                 {
                     _baseStream.Close();

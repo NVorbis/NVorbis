@@ -11,13 +11,14 @@ using System.IO;
 
 namespace NVorbis
 {
-    partial class StreamReadBuffer
+    partial class StreamReadBuffer : IDisposable
     {
         class StreamWrapper
         {
             internal Stream Source;
             internal object LockObject = new object();
             internal long EofOffset = long.MaxValue;
+            internal int RefCount = 1;
         }
 
         static Dictionary<Stream, StreamWrapper> _lockObjects = new Dictionary<Stream, StreamWrapper>();
@@ -36,6 +37,10 @@ namespace NVorbis
                     wrapper.EofOffset = source.Length;
                 }
             }
+            else
+            {
+                wrapper.RefCount++;
+            }
 
             // make sure our initial size is a power of 2 (this makes resizing simpler to understand)
             initialSize = 2 << (int)Math.Log(initialSize - 1, 2);
@@ -47,6 +52,14 @@ namespace NVorbis
             _data = new byte[initialSize];
             _maxSize = maxSize;
             _minimalRead = minimalRead;
+        }
+
+        public void Dispose()
+        {
+            if (--_wrapper.RefCount == 0)
+            {
+                _lockObjects.Remove(_wrapper.Source);
+            }
         }
 
         StreamWrapper _wrapper;
