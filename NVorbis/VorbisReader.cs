@@ -257,14 +257,28 @@ namespace NVorbis
         {
             get
             {
-                var decoder = ActiveDecoder;
-                return TimeSpan.FromSeconds((double)decoder.CurrentPosition / decoder._sampleRate);
+                return TimeSpan.FromSeconds((double)ActiveDecoder.CurrentPosition / SampleRate);
             }
             set
             {
                 ActiveDecoder.SeekTo((long)(value.TotalSeconds * SampleRate));
             }
 
+        }
+
+        /// <summary>
+        /// Gets or Sets the current position of the next sample to be decoded.
+        /// </summary>
+        public long DecodedPosition
+        {
+            get 
+            {
+                return ActiveDecoder.CurrentPosition;
+            }
+            set
+            {
+                ActiveDecoder.SeekTo(value);
+            }
         }
 
         /// <summary>
@@ -282,6 +296,22 @@ namespace NVorbis
                 else
                 {
                     return TimeSpan.MaxValue;
+                }
+            }
+        }
+
+        public long TotalSamples
+        {
+            get
+            {
+                var decoder = ActiveDecoder;
+                if (decoder.CanSeek)
+                {
+                    return decoder.GetLastGranulePos();
+                }
+                else
+                {
+                    return long.MaxValue;
                 }
             }
         }
