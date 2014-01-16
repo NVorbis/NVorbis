@@ -331,12 +331,6 @@ namespace NVorbis
                 if (newSize <= _maxSize)
                 {
                     newBuf = new byte[newSize];
-
-                    if (_discardCount > 0 && newSize == _maxSize)
-                    {
-                        // we need to discard everything... move it out
-                        moveCount += _discardCount;
-                    }
                 }
                 else
                 {
