@@ -53,20 +53,21 @@ namespace NVorbis
             return EnsureAvailable(offset, ref count);
         }
 
-        public void TestingCalculateRead(ref int startIdx, ref int endIdx, out int readStart, out int readCount, out int moveCount, out long readOffset)
+        public void TestingCalcBuffer(long offset, int count, out int readStart, out int readEnd)
         {
-            CalculateRead(ref startIdx, ref endIdx, out readStart, out readCount, out moveCount, out readOffset);
+            CalcBuffer(offset, count, out readStart, out readEnd);
         }
 
-        public void TestingPrepareBufferForRead(ref int startIdx, ref int endIdx, ref int readStart, int readCount, int moveCount, long readOffset)
+        public void TestingEnsureBufferSize(int reqSize, bool copyContents, int copyOffset)
         {
-            PrepareBufferForRead(ref startIdx, ref endIdx, ref readStart, readCount, moveCount, readOffset);
+            EnsureBufferSize(reqSize, copyContents, copyOffset);
         }
 
-        public int TestingFillBuffer(int startIdx, int count, int readStart, int readCount, long readOffset)
+        public int TestingFillBuffer(long offset, int count, int readStart, int readEnd)
         {
-            return FillBuffer(startIdx, count, readStart, readCount, readOffset);
+            return FillBuffer(offset, count, readStart, readEnd);
         }
+
 
         public int TestingPrepareStreamForRead(int readCount, long readOffset)
         {
