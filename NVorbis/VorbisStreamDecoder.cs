@@ -604,7 +604,7 @@ namespace NVorbis
                     packet = packetProvider.GetNextPacket();
                 }
 
-                // if the packet is null, our packet reader is gone...
+                // if the packet is null, we've hit the end or the packet reader has been disposed...
                 if (packet == null)
                 {
                     _eosFound = true;
@@ -728,21 +728,13 @@ namespace NVorbis
 
             while (_preparedLength * _channels < count && !_eosFound)
             {
-                try
-                {
-                    DecodeNextPacket();
+                DecodeNextPacket();
 
-                    // we can safely assume the _prevBuffer was null when we entered this loop
-                    if (_prevBuffer != null)
-                    {
-                        // uh-oh... something is wrong...
-                        return ReadSamples(buffer, offset, _prevBuffer.Length);
-                    }
-                }
-                catch (EndOfStreamException)
+                // we can safely assume the _prevBuffer was null when we entered this loop
+                if (_prevBuffer != null)
                 {
-                    _eosFound = true;
-                    break;
+                    // uh-oh... something is wrong...
+                    return ReadSamples(buffer, offset, _prevBuffer.Length);
                 }
             }
 
@@ -804,7 +796,7 @@ namespace NVorbis
         internal long CurrentPosition
         {
             get { return _currentPosition - _preparedLength; }
-            set
+            private set
             {
                 _currentPosition = value;
                 _preparedLength = 0;
@@ -856,11 +848,12 @@ namespace NVorbis
         {
             get
             {
-                try
+                var samples = _sampleCountHistory.Sum();
+                if (samples > 0)
                 {
-                    return (int)((long)_bitsPerPacketHistory.Sum() * _sampleRate / _sampleCountHistory.Sum());
+                    return (int)((long)_bitsPerPacketHistory.Sum() * _sampleRate / samples);
                 }
-                catch (DivideByZeroException)
+                else
                 {
                     return -1;
                 }

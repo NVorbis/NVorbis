@@ -211,11 +211,12 @@ namespace NVorbis
                             {
                                 for (int j = 0; j < channels; j++)
                                 {
-                                    try
+                                    var idx = _classBook.DecodeScalar(packet);
+                                    if (idx >= 0 && idx < _decodeMap.Length)
                                     {
-                                        _partWordCache[j][l] = _decodeMap[_classBook.DecodeScalar(packet)];
+                                        _partWordCache[j][l] = _decodeMap[idx];
                                     }
-                                    catch (IndexOutOfRangeException)
+                                    else
                                     {
                                         i = partVals;
                                         s = _maxStages;
