@@ -16,10 +16,81 @@ namespace NVorbis
     /// </summary>
     public abstract class DataPacket
     {
-        ulong _bitBucket;
-        int _bitCount;
-        long _readBits;
-        byte _overflowBits;
+        ulong _bitBucket;           // 8
+        int _bitCount;              // 4
+        int _readBits;              // 4
+        byte _overflowBits;         // 1
+        PacketFlags _packetFlags;   // 1
+        long _granulePosition;      // 8
+        long _pageGranulePosition;  // 8
+        int _length;                // 4
+        int _granuleCount;          // 4
+        int _pageSequenceNumber;    // 4
+
+        /// <summary>
+        /// Defines flags to apply to the current packet
+        /// </summary>
+        [Flags]
+        // for now, let's use a byte... if we find we need more space, we can always expand it...
+        protected enum PacketFlags : byte
+        {
+            /// <summary>
+            /// Packet is first since reader had to resync with stream.
+            /// </summary>
+            IsResync        = 0x01,
+            /// <summary>
+            /// Packet is the last in the logical stream.
+            /// </summary>
+            IsEndOfStream   = 0x02,
+            /// <summary>
+            /// Packet does not have all its data available.
+            /// </summary>
+            IsShort         = 0x04,
+            /// <summary>
+            /// Packet has a granule count defined.
+            /// </summary>
+            HasGranuleCount = 0x08,
+
+            /// <summary>
+            /// Flag for use by inheritors.
+            /// </summary>
+            User1           = 0x10,
+            /// <summary>
+            /// Flag for use by inheritors.
+            /// </summary>
+            User2           = 0x20,
+            /// <summary>
+            /// Flag for use by inheritors.
+            /// </summary>
+            User3           = 0x40,
+            /// <summary>
+            /// Flag for use by inheritors.
+            /// </summary>
+            User4           = 0x80,
+        }
+
+        /// <summary>
+        /// Gets the value of the specified flag.
+        /// </summary>
+        protected bool GetFlag(PacketFlags flag)
+        {
+            return (_packetFlags & flag) == flag;
+        }
+
+        /// <summary>
+        /// Sets the value of the specified flag.
+        /// </summary>
+        protected void SetFlag(PacketFlags flag, bool value)
+        {
+            if (value)
+            {
+                _packetFlags |= flag;
+            }
+            else
+            {
+                _packetFlags &= ~flag;
+            }
+        }
 
         /// <summary>
         /// Creates a new instance with the specified length.
@@ -189,41 +260,94 @@ namespace NVorbis
         /// <summary>
         /// Gets whether the packet was found after a stream resync.
         /// </summary>
-        public bool IsResync { get; internal set; }
+        public bool IsResync
+        {
+            get { return GetFlag(PacketFlags.IsResync); }
+            internal set { SetFlag(PacketFlags.IsResync, value); }
+        }
 
         /// <summary>
         /// Gets the position of the last granule in the packet.
         /// </summary>
-        public long GranulePosition { get; set; }
+        public long GranulePosition
+        {
+            get { return _granulePosition; }
+            set { _granulePosition = value; }
+        }
 
         /// <summary>
         /// Gets the position of the last granule in the page the packet is in.
         /// </summary>
-        public long PageGranulePosition { get; internal set; }
+        public long PageGranulePosition
+        {
+            get { return _pageGranulePosition; }
+            internal set { _pageGranulePosition = value; }
+        }
 
         /// <summary>
         /// Gets the length of the packet.
         /// </summary>
-        public int Length { get; protected set; }
+        public int Length
+        {
+            get { return _length; }
+            protected set { _length = value; }
+        }
 
         /// <summary>
         /// Gets whether the packet is the last one in the logical stream.
         /// </summary>
-        public bool IsEndOfStream { get; internal set; }
+        public bool IsEndOfStream
+        {
+            get { return GetFlag(PacketFlags.IsEndOfStream); }
+            internal set { SetFlag(PacketFlags.IsEndOfStream, value); }
+        }
 
         /// <summary>
         /// Gets the number of bits read from the packet.
         /// </summary>
-        public long BitsRead { get { return _readBits; } }
+        public long BitsRead
+        {
+            get { return _readBits; }
+        }
 
         /// <summary>
         /// Gets the number of granules in the packet.  If <c>null</c>, the packet has not been decoded yet.
         /// </summary>
-        public long? GranuleCount { get; set; }
+        public int? GranuleCount
+        {
+            get
+            {
+                if (GetFlag(PacketFlags.HasGranuleCount))
+                {
+                    return _granuleCount;
+                }
+                return null;
+            }
+            set
+            {
+                if (value.HasValue)
+                {
+                    _granuleCount = value.Value;
+                    SetFlag(PacketFlags.HasGranuleCount, true);
+                }
+                else
+                {
+                    SetFlag(PacketFlags.HasGranuleCount, false);
+                }
+            }
+        }
 
-        internal int PageSequenceNumber { get; set; }
+        internal int PageSequenceNumber
+        {
+            get { return _pageSequenceNumber; }
+            set { _pageSequenceNumber = value; }
+        }
 
-        internal bool IsShort { get; private set; }
+        internal bool IsShort
+        {
+            get { return GetFlag(PacketFlags.IsShort); }
+            private set { SetFlag(PacketFlags.IsShort, value); }
+        }
 
         /// <summary>
         /// Reads the specified number of bits from the packet and advances the position counter.

@@ -76,14 +76,6 @@ namespace NVorbis.Ogg
             return GatherNextPage() != -1;
         }
 
-        internal void DisposePacketReader(PacketReader packetReader)
-        {
-            _disposedStreamSerials.Add(packetReader.StreamSerial);
-            _eosFlags[packetReader.StreamSerial] = true;
-            _streamSerials.Remove(packetReader.StreamSerial);
-            _packetReaders.Remove(packetReader.StreamSerial);
-        }
-
         /// <summary>
         /// Disposes this instance.
         /// </summary>
@@ -117,6 +109,82 @@ namespace NVorbis.Ogg
             return provider;
         }
 
+        /// <summary>
+        /// Finds the next new stream in the container.
+        /// </summary>
+        /// <returns><c>True</c> if a new stream was found, otherwise <c>False</c>.</returns>
+        /// <exception cref="InvalidOperationException"><see cref="CanSeek"/> is <c>False</c>.</exception>
+        public bool FindNextStream()
+        {
+            if (!CanSeek) throw new InvalidOperationException();
+
+            // goes through all the pages until the serial count increases
+            var cnt = this._packetReaders.Count;
+            while (this._packetReaders.Count == cnt)
+            {
+                lock (_pageLock)
+                {
+                    // acquire & release the lock every pass so we don't block any longer than necessary
+                    if (GatherNextPage() == -1)
+                    {
+                        break;
+                    }
+                }
+            }
+            return cnt > this._packetReaders.Count;
+        }
+
+        /// <summary>
+        /// Gets the number of pages that have been read in the container.
+        /// </summary>
+        public int PagesRead
+        {
+            get { return _pageCount; }
+        }
+
+        /// <summary>
+        /// Retrieves the total number of pages in the container.
+        /// </summary>
+        /// <returns>The total number of pages.</returns>
+        /// <exception cref="InvalidOperationException"><see cref="CanSeek"/> is <c>False</c>.</exception>
+        public int GetTotalPageCount()
+        {
+            if (!CanSeek) throw new InvalidOperationException();
+
+            // just read pages until we can't any more...
+            while (true)
+            {
+                lock (_pageLock)
+                {
+                    // acquire & release the lock every pass so we don't block any longer than necessary
+                    if (GatherNextPage() == -1)
+                    {
+                        break;
+                    }
+                }
+            }
+
+            return _pageCount;
+        }
+
+        /// <summary>
+        /// Gets whether the container supports seeking.
+        /// </summary>
+        public bool CanSeek
+        {
+            get { return _stream.CanSeek; }
+        }
+
+        /// <summary>
+        /// Gets the number of bits in the container that are not associated with a logical stream.
+        /// </summary>
+        public long WasteBits
+        {
+            get { return _wasteBits; }
+        }
+
+
+        // private implmentation bits
         class PageHeader
         {
             public int StreamSerial { get; set; }
@@ -285,7 +353,7 @@ namespace NVorbis.Ogg
             var cnt = hdr.PacketSizes.Length;
             foreach (var size in hdr.PacketSizes)
             {
-                var packet = new Packet(_stream, dataOffset, size)
+                var packet = new Packet(this, dataOffset, size)
                     {
                         PageGranulePosition = hdr.GranulePosition,
                         IsEndOfStream = isEOS,
@@ -328,32 +396,6 @@ namespace NVorbis.Ogg
             }
         }
 
-        internal class PageReaderLock : IDisposable
-        {
-            object _lock;
-
-            public PageReaderLock(object pageLock)
-            {
-                System.Threading.Monitor.Enter(pageLock);
-                _lock = pageLock;
-            }
-
-            public bool Validate(object pageLock)
-            {
-                return object.ReferenceEquals(pageLock, _lock);
-            }
-
-            public void Dispose()
-            {
-                System.Threading.Monitor.Exit(_lock);
-            }
-        }
-
-        internal PageReaderLock TakePageReaderLock()
-        {
-            return new PageReaderLock(_pageLock);
-        }
-
         int GatherNextPage()
         {
             while (true)
@@ -387,101 +429,53 @@ namespace NVorbis.Ogg
             }
         }
 
-        /// <summary>
-        /// Gathers pages until finding a page for the stream indicated
-        /// </summary>
-        internal void GatherNextPage(int streamSerial, PageReaderLock pageLock)
+        // packet reader bits...
+        internal void DisposePacketReader(PacketReader packetReader)
         {
-            // pageLock is just so we know the caller took a lock... we don't actually need it for anything else
+            _disposedStreamSerials.Add(packetReader.StreamSerial);
+            _eosFlags[packetReader.StreamSerial] = true;
+            _streamSerials.Remove(packetReader.StreamSerial);
+            _packetReaders.Remove(packetReader.StreamSerial);
+        }
 
-            if (pageLock == null) throw new ArgumentNullException("pageLock");
-            if (!pageLock.Validate(_pageLock)) throw new ArgumentException("pageLock");
+        internal int PacketReadByte(long offset)
+        {
+            lock (_pageLock)
+            {
+                _stream.Position = offset;
+                return _stream.ReadByte();
+            }
+        }
+
+        internal void PacketDiscardThrough(long offset)
+        {
+            lock (_pageLock)
+            {
+                _stream.DiscardThrough(offset);
+            }
+        }
+
+        internal bool GatherNextPage(int streamSerial)
+        {
             if (!_eosFlags.ContainsKey(streamSerial)) throw new ArgumentOutOfRangeException("streamSerial");
 
             int nextSerial;
             do
             {
-                if (_eosFlags[streamSerial]) throw new EndOfStreamException();
-                
-                nextSerial = GatherNextPage();
-                if (nextSerial == -1) throw new InvalidDataException("Could not find next page.");
-            } while (nextSerial != streamSerial);
-        }
-
-        /// <summary>
-        /// Finds the next new stream in the container.
-        /// </summary>
-        /// <returns><c>True</c> if a new stream was found, otherwise <c>False</c>.</returns>
-        /// <exception cref="InvalidOperationException"><see cref="CanSeek"/> is <c>False</c>.</exception>
-        public bool FindNextStream()
-        {
-            if (!CanSeek) throw new InvalidOperationException();
-
-            // goes through all the pages until the serial count increases
-            var cnt = this._packetReaders.Count;
-            using (var pageLock = TakePageReaderLock())
-            {
-                // read pages until we're done...
-                while (this._packetReaders.Count == cnt)
+                lock (_pageLock)
                 {
-                    if (GatherNextPage() == -1)
+                    if (_eosFlags[streamSerial]) return false;
+
+                    nextSerial = GatherNextPage();
+                    if (nextSerial == -1)
                     {
-                        break;
+                        _eosFlags[streamSerial] = true;
+                        return false;
                     }
                 }
+            } while (nextSerial != streamSerial);
 
-                return cnt > this._packetReaders.Count;
-            }
-        }
-
-        /// <summary>
-        /// Gets the number of pages that have been read in the container.
-        /// </summary>
-        public int PagesRead
-        {
-            get { return _pageCount; }
-        }
-
-        /// <summary>
-        /// Retrieves the total number of pages in the container.
-        /// </summary>
-        /// <returns>The total number of pages.</returns>
-        /// <exception cref="InvalidOperationException"><see cref="CanSeek"/> is <c>False</c>.</exception>
-        public int GetTotalPageCount()
-        {
-            if (!CanSeek) throw new InvalidOperationException();
-
-            // add an invalid stream serial as a dummy...
-            _eosFlags.Add(-1, false);
-
-            // there cannot possibly be another page less than 28 bytes from the end of the file
-            while (_stream.Position < _stream.Length - 28)
-            {
-                using (var pageLock = TakePageReaderLock())
-                {
-                    GatherNextPage(-1, pageLock);
-                }
-            }
-
-            _eosFlags.Remove(-1);
-
-            return _pageCount;
-        }
-
-        /// <summary>
-        /// Gets whether the container supports seeking.
-        /// </summary>
-        public bool CanSeek
-        {
-            get { return _stream.CanSeek; }
-        }
-
-        /// <summary>
-        /// Gets the number of bits in the container that are not associated with a logical stream.
-        /// </summary>
-        public long WasteBits
-        {
-            get { return _wasteBits; }
+            return true;
         }
     }
 }
