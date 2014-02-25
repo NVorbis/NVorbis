@@ -101,3 +101,10 @@ History
 0.8.0 - 01/16/2014
     * Minor bugfixing to test1
     * Replaces 0.7.4 as recommended release
+0.8.1 - 02/24/2014
+    * Bugfix: Threading issues in Ogg reader
+    * Rewrite StreamReadBuffer (again) for simplicity and correctness
+    * Add "saved buffer" concept to StreamReadBuffer for multi-threaded performance
+    * Reduce Ogg reader memory usage
+    * Add locking for multi-threading support in Ogg reader
+    * Remove exception-based logic where possible for better performance
