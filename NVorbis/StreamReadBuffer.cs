@@ -1,6 +1,6 @@
 ﻿/****************************************************************************
  * NVorbis                                                                  *
- * Copyright (C) 2013, Andrew Ward <afward@gmail.com>                       *
+ * Copyright (C) 2014, Andrew Ward <afward@gmail.com>                       *
  *                                                                          *
  * See COPYING for license terms (Ms-PL).                                   *
  *                                                                          *
@@ -52,6 +52,8 @@ namespace NVorbis
             _data = new byte[initialSize];
             _maxSize = maxSize;
             _minimalRead = minimalRead;
+
+            _savedBuffers = new List<SavedBuffer>();
         }
 
         public void Dispose()
@@ -71,6 +73,18 @@ namespace NVorbis
         int _discardCount;
 
         bool _minimalRead;
+
+        // we're locked already when we enter, so we can do whatever we need to do without worrying about it...
+        class SavedBuffer
+        {
+            public byte[] Buffer;
+            public long BaseOffset;
+            public int End;
+            public int DiscardCount;
+            public long VersionSaved;
+        }
+        long _versionCounter;
+        List<SavedBuffer> _savedBuffers;
 
         /// <summary>
         /// Gets or Sets whether to limit reads to the smallest size possible.
@@ -180,227 +194,244 @@ namespace NVorbis
             {
                 return _data[startIdx];
             }
-
             return -1;
         }
 
         int EnsureAvailable(long offset, ref int count)
         {
-            // short-circuit if the offset & count are inside our buffer's range
-            // if we're not doing minimal read, this should be the typical path
-            var startIdx = (int)(offset - _baseOffset);
-            int endIdx = startIdx + count;
-            if (startIdx >= 0 && endIdx <= _end)
+            // simple... if we're inside the buffer, just return the offset (FAST PATH)
+            if (offset >= _baseOffset && offset + count < _baseOffset + _end)
             {
-                return startIdx;
+                return (int)(offset - _baseOffset);
             }
 
-            // we don't already have enough data in the buffer to satisfy the request...  Go get it
+            // not so simple... we're outside the buffer somehow...
 
-            // declare some variables...
-            int readStart, readCount, moveCount;
-            long readOffset;
+            // let's make sure the request makes sense
+            if (count > _maxSize)
+            {
+                throw new InvalidOperationException("Not enough room in the buffer!  Increase the maximum size and try again.");
+            }
 
-            // go figure out our read parameters
-            CalculateRead(ref startIdx, ref endIdx, out readStart, out readCount, out moveCount, out readOffset);
+            // can we satisfy the request with a saved buffer?
+            for (int i = 0; i < _savedBuffers.Count; i++)
+            {
+                var tempS = _savedBuffers[i].BaseOffset - offset;
+                if ((tempS < 0 && _savedBuffers[i].End + tempS > 0) || (tempS > 0 && count - tempS > 0))
+                {
+                    SwapBuffers(_savedBuffers[i]);
+                    return EnsureAvailable(offset, ref count);
+                }
+            }
 
-            // prepare the buffer for the read
-            PrepareBufferForRead(ref startIdx, ref endIdx, ref readStart, readCount, moveCount, readOffset);
+            // look for buffers we need to drop due to age...
+            ++_versionCounter;
+            while (_savedBuffers.Count > 0 && _savedBuffers[0].VersionSaved + 50 < _versionCounter)
+            {
+                _savedBuffers[0].Buffer = null;
+                _savedBuffers.RemoveAt(0);
+            }
 
-            // fill the buffer appropriately
-            count = FillBuffer(startIdx, count, readStart, readCount, readOffset);
+            // if we have to seek back, we're doomed...
+            if (offset < _baseOffset && !_wrapper.Source.CanSeek)
+            {
+                throw new InvalidOperationException("Cannot seek before buffer on forward-only streams!");
+            }
 
-            return startIdx;
+            // figure up the new buffer parameters...
+            int readStart;
+            int readEnd;
+            CalcBuffer(offset, count, out readStart, out readEnd);
+
+            // fill the buffer...
+            // if we did a reverse seek, there will be data still in end of the buffer...  Make sure to fill everything between
+            count = FillBuffer(offset, count, readStart, readEnd);
+
+            return (int)(offset - _baseOffset);
         }
 
-        void CalculateRead(ref int startIdx, ref int endIdx, out int readStart, out int readCount, out int moveCount, out long readOffset)
+        void SaveBuffer()
         {
-            if (startIdx < 0)
-            {
-                // if we can't seek, there's nothing we can do
-                if (!_wrapper.Source.CanSeek) throw new InvalidOperationException("Cannot seek backwards on a forward-only stream!");
-
-                // we know we'll have to start reading here
-                readOffset = _baseOffset + startIdx;
-
-                // if there's data in the buffer, try to keep it (up to the maximum buffer size)
-                if (_end - startIdx <= _maxSize)
+            _savedBuffers.Add(
+                new SavedBuffer
                 {
-                    // we have to move the data, so do so
-                    moveCount = startIdx;
-                    readStart = startIdx;
-                    readCount = -startIdx;
+                    Buffer = _data,
+                    BaseOffset = _baseOffset,
+                    End = _end,
+                    DiscardCount = _discardCount,
+                    VersionSaved = _versionCounter
                 }
-                // if the end of the request is before the start of our buffer...
+            );
+
+            _data = null;
+            _end = 0;
+            _discardCount = 0;
+        }
+
+        void CreateNewBuffer(long offset, int count)
+        {
+            SaveBuffer();
+
+            _data = new byte[2 << (int)Math.Log(count - 1, 2)];
+            _baseOffset = offset;
+        }
+
+        void SwapBuffers(SavedBuffer savedBuffer)
+        {
+            _savedBuffers.Remove(savedBuffer);
+            SaveBuffer();
+            _data = savedBuffer.Buffer;
+            _baseOffset = savedBuffer.BaseOffset;
+            _end = savedBuffer.End;
+            _discardCount = savedBuffer.DiscardCount;
+        }
+
+        void CalcBuffer(long offset, int count, out int readStart, out int readEnd)
+        {
+            readStart = 0;
+            readEnd = 0;
+            if (offset < _baseOffset)
+            {
+                // try to overlap the end...
+                if (offset + _maxSize <= _baseOffset)
+                {
+                    // nope... complete refill
+                    //EnsureBufferSize(count, false, 0);
+                    // in this case, we're going to assume that another thread is trying to read metadata, so let's create a new buffer...
+                    CreateNewBuffer(offset, count);
+                    _baseOffset = offset;
+                    readEnd = count;
+                }
                 else
                 {
-                    // ... just truncate and move on
-                    moveCount = _maxSize;
-                    readStart = moveCount;
-                    readCount = endIdx - startIdx;
-                    startIdx = moveCount;
-                    endIdx = startIdx + readCount;
+                    // we have at least some overlap
+                    readEnd = (int)(offset - _baseOffset);
+                    EnsureBufferSize(Math.Min((int)(offset + _maxSize - _baseOffset), _end) - readEnd, true, readEnd);
+                    // re-pull in case EnsureBufferSize had to discard...
+                    readEnd = (int)(offset - _baseOffset);
                 }
             }
-            else // i.e., startIdx >= 0
+            else
             {
-                // we only get to here if at least one byte of the request is past the end of the read data
-                // start with the simplest scenario and work our way up
-
-                // 1) We just need to fill the buffer a bit more
-                if (endIdx < _data.Length)
+                // try to overlap the beginning...
+                if (offset >= _baseOffset + _maxSize)
                 {
-                    moveCount = 0;
-                    readStart = _end;
-                    readCount = endIdx - readStart;
-                    readOffset = _baseOffset + readStart;
+                    // nope... complete refill
+                    CreateNewBuffer(offset, count);
+                    //EnsureBufferSize(count, false, 0);
+                    _baseOffset = offset;
+                    readEnd = count;
                 }
-                // 2) There's enough room to save some data without discarding
-                else if (endIdx < _maxSize)
-                {
-                    moveCount = 0;
-                    readStart = _end;
-                    readCount = endIdx - readStart;
-                    readOffset = _baseOffset + readStart;
-                }
-                // 3) There's enough room to save some data with discarding
-                else if (endIdx - _discardCount < _maxSize)
-                {
-                    moveCount = _discardCount;
-                    readStart = _end;
-                    readCount = endIdx - readStart;
-                    readOffset = _baseOffset + readStart;
-                }
-                // 4) We have to throw away some data that hasn't been discarded
                 else
                 {
-                    // just truncate
-                    moveCount = _maxSize;
-                    readStart = moveCount;
-                    readCount = endIdx - startIdx;
-                    readOffset = _baseOffset + startIdx;
-                    startIdx = moveCount;
-                    endIdx = startIdx + readCount;
+                    // we have at least some overlap
+                    readEnd = (int)(offset + count - _baseOffset);
+                    var ofs = Math.Max(readEnd - _maxSize, 0);
+                    EnsureBufferSize(readEnd - ofs, true, ofs);
+                    readStart = _end;
+                    // re-pull in case EnsureBufferSize had to discard...
+                    readEnd = (int)(offset + count - _baseOffset);
                 }
             }
         }
 
-        void PrepareBufferForRead(ref int startIdx, ref int endIdx, ref int readStart, int readCount, int moveCount, long readOffset)
+        void EnsureBufferSize(int reqSize, bool copyContents, int copyOffset)
         {
-            if (Math.Abs(moveCount) >= _maxSize)
-            {
-                // make sure our counts come in right
-                _discardCount = 0;
-                _end = 0;
-
-                // adjust the numbers back to reality
-                startIdx -= moveCount;
-                endIdx -= moveCount;
-                readStart -= moveCount;
-                moveCount = 0;
-
-                // update our base offset to reflect the real base
-                _baseOffset = readOffset + startIdx;
-
-                if (startIdx != 0)
-                {
-                    // adjust so startIdx = 0
-                    endIdx -= startIdx;
-                    readStart -= startIdx;
-                    startIdx = 0;
-                }
-            }
-
-            // figure out the minimum index we'll actually touch (including non-discarded bytes)
-            var firstIndex = Math.Min(Math.Min(startIdx, readStart) - moveCount, _discardCount);
-            // figure out the maximum index we'll actually touch
-            var lastIndex = Math.Max(Math.Max(endIdx, readStart + readCount), _end) - moveCount;
-            // if they are more the _data.Length apart, resize; otherwise try to move the data
-            var reqSize = Math.Abs(lastIndex - firstIndex);
-
-            // figure out if we need to resize the buffer
             byte[] newBuf = _data;
             if (reqSize > _data.Length)
             {
-                var newSize = _data.Length * 2;
-                while (newSize < reqSize)
+                if (reqSize > _maxSize)
                 {
-                    newSize *= 2;
-                }
-                
-                if (newSize <= _maxSize)
-                {
-                    newBuf = new byte[newSize];
-                }
-                else
-                {
-                    throw new InvalidOperationException("Not enough room in the buffer!  Increase the maximum size and try again.");
-                }
-            }
-            else if (lastIndex > _data.Length)
-            {
-                // if we discard everything and still can't hold all the data, something is wrong
-                if (lastIndex - _discardCount > _data.Length)
-                {
-                    // this shouldn't happen
-                    throw new InvalidOperationException("PrepareBufferForRead got confused!");
-                }
-
-                // only discard as much as we absolutely have to
-                moveCount += (lastIndex - _data.Length);
-            }
-
-            // if moveCount is non-zero, we have to move some data around
-            if (moveCount != 0)
-            {
-                // forward copy, reverse copy, or truncate?
-                if (moveCount > 0)
-                {
-                    // forward move
-                    Buffer.BlockCopy(_data, moveCount, newBuf, 0, _end - moveCount);
-
-                    if ((_discardCount -= moveCount) < 0) _discardCount = 0;
-                }
-                else
-                {
-                    // reverse move
-                    for (int srcIdx = _data.Length - 1 + moveCount, destIdx = _data.Length - 1; srcIdx >= 0; srcIdx--, destIdx--)
+                    if (reqSize - _discardCount <= _maxSize || _wrapper.Source.CanSeek)
                     {
-                        newBuf[destIdx] = _data[srcIdx];
+                        // lose some of the earlier data...
+                        var ofs = reqSize - _maxSize;
+                        copyOffset += ofs;
+                        reqSize -= ofs;
+                    }
+                    else
+                    {
+                        throw new InvalidOperationException("Not enough room in the buffer!  Increase the maximum size and try again.");
+                    }
+                }
+
+                // find the new size
+                var size = _data.Length;
+                while (size < reqSize)
+                {
+                    size *= 2;
+                }
+
+                // if we discarded some bytes above, don't resize the buffer unless we have to...
+                if (size > _data.Length)
+                {
+                    newBuf = new byte[size];
+                }
+            }
+
+            if (copyContents)
+            {
+                // adjust the position of the data
+                if (copyOffset > 0 || (copyOffset == 0 && newBuf != _data))
+                {
+                    // copy forward
+                    Buffer.BlockCopy(_data, copyOffset, newBuf, 0, _end - copyOffset);
+
+                    // adjust our discard count
+                    if ((_discardCount -= copyOffset) < 0) _discardCount = 0;
+
+                    _end -= copyOffset;
+                }
+                else if (copyOffset < 0)
+                {
+                    // copy backward
+                    // be clever... if we're moving to a new buffer, just use a block copy
+                    if (newBuf != _data)
+                    {
+                        Buffer.BlockCopy(_data, 0, newBuf, -copyOffset, Math.Min(_end, newBuf.Length + copyOffset));
+                    }
+                    else
+                    {
+                        var sIdx = _end + copyOffset;
+                        var dIdx = _end;
+                        while (--sIdx >= 0)
+                        {
+                            newBuf[--dIdx] = _data[sIdx];
+                        }
                     }
 
+                    // adjust our discard count
                     _discardCount = 0;
                 }
 
-                // remove moveCount from the indexes
-                _baseOffset += moveCount;
-                readStart -= moveCount;
-                startIdx -= moveCount;
-                endIdx -= moveCount;
-                _end -= moveCount;
+                // adjust our markers
+                _baseOffset += copyOffset;
             }
-            else if (_end > 0 && !object.ReferenceEquals(_data, newBuf))
+            else
             {
-                // just do a straight copy
-                Buffer.BlockCopy(_data, 0, newBuf, 0, _data.Length);
+                _discardCount = 0;
+                // we can't set _baseOffset since our caller hasn't told us what it should be...
+                _end = 0;
             }
+
             _data = newBuf;
         }
 
-        int FillBuffer(int startIdx, int count, int readStart, int readCount, long readOffset)
+        int FillBuffer(long offset, int count, int readStart, int readEnd)
         {
-            // This lock is for sitations where more than one BufferedReadStream instance are wrapping the same stream.
-            //    Otherwise it is redundant.
+            var readOffset = _baseOffset + readStart;
+            var readCount = readEnd - readStart;
+
             lock (_wrapper.LockObject)
             {
                 readCount = PrepareStreamForRead(readCount, readOffset);
 
                 ReadStream(readStart, readCount, readOffset);
 
-                if (_end < startIdx + count)
+                // check for full read...
+                if (_end < readStart + readCount)
                 {
-                    // we didn't get a full read...
-                    count = Math.Max(0, _end - startIdx);
+                    count = Math.Max(0, (int)(_baseOffset + _end - offset));
                 }
                 else if (!_minimalRead && _end < _data.Length)
                 {
@@ -408,7 +439,6 @@ namespace NVorbis
                     _end += _wrapper.Source.Read(_data, _end, _data.Length - _end);
                 }
             }
-
             return count;
         }
 
