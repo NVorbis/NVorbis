@@ -180,7 +180,7 @@ namespace NVorbis.Ogg
                     if (_last != null && !_last.IsContinued && _current != _last) return true;
                 }
 
-                if (!_container.GatherNextPage(_streamSerial))
+                if (!_eosFound && !_container.GatherNextPage(_streamSerial))
                 {
                     // not technically true, but because the container doesn't have any more pages, it might as well be
                     _eosFound = true;
