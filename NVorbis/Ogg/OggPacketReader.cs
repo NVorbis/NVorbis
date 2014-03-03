@@ -149,6 +149,11 @@ namespace NVorbis.Ogg
             }
         }
 
+        internal bool HasEndOfStream
+        {
+            get { return _eosFound; }
+        }
+
         public int StreamSerial
         {
             get { return _streamSerial; }
