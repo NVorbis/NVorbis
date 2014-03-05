@@ -864,18 +864,21 @@ namespace NVorbis
 
             if (granulePos < 0) throw new ArgumentOutOfRangeException("granulePos");
 
-            var targetPacketIndex = 3;
+            DataPacket packet;
             if (granulePos > 0)
             {
-                var idx = _packetProvider.FindPacket(granulePos, GetPacketLength);
-                if (idx == -1) throw new ArgumentOutOfRangeException("granulePos");
-                targetPacketIndex = idx - 1;  // move to the previous packet to prime the decoder
+                packet = _packetProvider.FindPacket(granulePos, GetPacketLength);
+                if (packet == null) throw new ArgumentOutOfRangeException("granulePos");
+            }
+            else
+            {
+                packet = _packetProvider.GetPacket(4);
             }
 
             lock (_seekLock)
             {
                 // seek the stream
-                _packetProvider.SeekToPacket(targetPacketIndex);
+                _packetProvider.SeekToPacket(packet, 1);
 
                 // now figure out where we are and how many samples we need to discard...
                 // note that we use the granule position of the "current" packet, since it will be discarded no matter what

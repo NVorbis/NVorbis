@@ -245,55 +245,6 @@ namespace NVorbis.Ogg
             return curPacket;
         }
 
-        public void SeekToPacket(int index)
-        {
-            if (!CanSeek) throw new InvalidOperationException();
-
-            // we won't worry about locking here since the only atomic operation is the assignment to _current
-            _current = GetPacketByIndex(index).Prev;
-        }
-
-        Packet GetPacketByIndex(int index)
-        {
-            if (index < 0) throw new ArgumentOutOfRangeException("index");
-
-            // don't lock since we're obviously not even started yet...
-            while (_first == null)
-            {
-                if (_eosFound) throw new InvalidDataException();
-
-                _container.GatherNextPage(_streamSerial);
-            }
-
-            var packet = _first;
-            while (--index >= 0)
-            {
-                lock (_packetLock)
-                {
-                    if (packet.Next != null)
-                    {
-                        packet = packet.Next;
-                        continue;
-                    }
-
-                    if (_eosFound) throw new ArgumentOutOfRangeException("index");
-                }
-
-                do
-                {
-                    if (!_container.GatherNextPage(_streamSerial))
-                    {
-                        throw new ArgumentOutOfRangeException("index");
-                    }
-                } while (packet.Next == null);
-
-                // go ahead and loop back to the locked section above...
-                ++index;
-            }
-
-            return packet;
-        }
-
         internal void ReadAllPages()
         {
             if (!CanSeek) throw new InvalidOperationException();
@@ -334,7 +285,38 @@ namespace NVorbis.Ogg
 
         public DataPacket GetPacket(int packetIndex)
         {
-            var packet = GetPacketByIndex(packetIndex);
+            if (!CanSeek) throw new InvalidOperationException();
+            if (packetIndex < 0) throw new ArgumentOutOfRangeException("index");
+
+            // if _first is null, something is borked
+            if (_first == null) throw new InvalidOperationException("Packet reader has no packets!");
+
+            // starting from the beginning, count packets until we have the one we want...
+            var packet = _first;
+            while (--packetIndex >= 0)
+            {
+                lock (_packetLock)
+                {
+                    if (packet.Next == null && _eosFound)
+                    {
+                        throw new ArgumentOutOfRangeException("index");
+                    }
+
+                    packet = packet.Next;
+                }
+
+                do
+                {
+                    if (!_container.GatherNextPage(_streamSerial))
+                    {
+                        throw new ArgumentOutOfRangeException("index");
+                    }
+                } while (packet.Next == null);
+
+                // go ahead and loop back to the locked section above...
+                ++packetIndex;
+            }
+
             packet.Reset();
             return packet;
         }
@@ -438,7 +420,7 @@ namespace NVorbis.Ogg
             return null;
         }
 
-        public int FindPacket(long granulePos, Func<DataPacket, DataPacket, int> packetGranuleCountCallback)
+        public DataPacket FindPacket(long granulePos, Func<DataPacket, DataPacket, int> packetGranuleCountCallback)
         {
             // This will find which packet contains the granule position being requested.  It is basically a linear search.
             // Please note, the spec actually calls for a bisection search, but the result here should be the same.
@@ -481,20 +463,25 @@ namespace NVorbis.Ogg
                 foundPacket = FindPacketInPage(packet, granulePos, packetGranuleCountCallback);
             }
 
-            // if we didn't find a packet, just return "not found"
-            if (foundPacket == null)
+            return foundPacket;
+        }
+
+        public void SeekToPacket(DataPacket packet, int preRoll)
+        {
+            if (preRoll < 0) throw new ArgumentOutOfRangeException("preRoll");
+            if (packet == null) throw new ArgumentNullException("granulePos");
+
+            var op = packet as Packet;
+            if (op == null) throw new ArgumentException("Incorrect packet type!", "packet");
+
+            while (--preRoll >= 0)
             {
-                return -1;
+                op = op.Prev;
+                if (op == null) throw new ArgumentOutOfRangeException("preRoll");
             }
 
-            // we found the packet, so now we just have to count back to the beginning and see what its index is...
-            int idx = 0;
-            while (foundPacket.Prev != null)
-            {
-                foundPacket = foundPacket.Prev;
-                ++idx;
-            }
-            return idx;
+            // _current always points to the last packet returned by PeekNextPacketInternal
+            _current = op.Prev;
         }
 
         public long GetGranuleCount()

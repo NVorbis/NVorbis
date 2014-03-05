@@ -74,15 +74,14 @@ namespace NVorbis
         /// <param name="packetGranuleCountCallback">A callback method that takes the current and previous packets and returns the number of granules in the current packet.</param>
         /// <returns>The index of the packet that includes the specified granule position or -1 if none found.</returns>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="granulePos"/> is less than 0 or is after the last granule.</exception>
-        int FindPacket(long granulePos, Func<DataPacket, DataPacket, int> packetGranuleCountCallback);
+        DataPacket FindPacket(long granulePos, Func<DataPacket, DataPacket, int> packetGranuleCountCallback);
 
         /// <summary>
-        /// Seeks the stream to the indicated packet index.
+        /// Sets the next packet to be returned, applying a pre-roll as necessary.
         /// </summary>
-        /// <param name="index">The packet index to seek to.</param>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is less than 0 or greater than the last available packet index.</exception>
-        /// <exception cref="InvalidOperationException"><see cref="CanSeek"/> is <c>False</c>.</exception>
-        void SeekToPacket(int index);
+        /// <param name="packet">The packet to key from.</param>
+        /// <param name="preRoll">The number of packets to return before the indicated packet.</param>
+        void SeekToPacket(DataPacket packet, int preRoll);
 
         /// <summary>
         /// Occurs when the stream is about to change parameters.
