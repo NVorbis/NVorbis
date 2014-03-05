@@ -409,7 +409,7 @@ namespace NVorbis
                     // be clever... if we're moving to a new buffer or the ranges don't overlap, just use a block copy
                     if (newBuf != _data || _end <= -copyOffset)
                     {
-                        Buffer.BlockCopy(_data, 0, newBuf, -copyOffset, Math.Min(_end, _data.Length + copyOffset));
+                        Buffer.BlockCopy(_data, 0, newBuf, -copyOffset, Math.Max(_end, Math.Min(_end, _data.Length + copyOffset)));
                     }
                     else
                     {
