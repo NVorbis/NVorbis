@@ -11,10 +11,13 @@ namespace NVorbis
 {
     static class Huffman
     {
-        static internal HuffmanListNode BuildLinkedList(int[] values, int[] lengthList, int[] codeList)
+        const int MAX_TABLE_BITS = 10;
+
+        static internal System.Collections.Generic.List<HuffmanListNode> BuildPrefixedLinkedList(int[] values, int[] lengthList, int[] codeList, out int tableBits, out HuffmanListNode firstOverflowNode)
         {
             HuffmanListNode[] list = new HuffmanListNode[lengthList.Length];
 
+            var maxLen = 0;
             for (int i = 0; i < list.Length; i++)
             {
                 list[i] = new HuffmanListNode
@@ -24,16 +27,54 @@ namespace NVorbis
                     Bits = codeList[i],
                     Mask = (1 << lengthList[i]) - 1,
                 };
+                if (lengthList[i] > 0 && maxLen < lengthList[i])
+                {
+                    maxLen = lengthList[i];
+                }
             }
 
             Array.Sort(list, SortCallback);
 
-            for (int i = 1; i < list.Length && list[i].Length < 99999; i++)
+            tableBits = maxLen > MAX_TABLE_BITS ? MAX_TABLE_BITS : maxLen;
+
+            var prefixList = new System.Collections.Generic.List<HuffmanListNode>(1 << tableBits);
+            firstOverflowNode = null;
+            for (int i = 0; i < list.Length && list[i].Length < 99999; i++)
             {
-                list[i - 1].Next = list[i];
+                if (firstOverflowNode == null)
+                {
+                    var itemBits = list[i].Length;
+                    if (itemBits > tableBits)
+                    {
+                        firstOverflowNode = list[i];
+                    }
+                    else
+                    {
+                        var maxVal = 1 << (tableBits - itemBits);
+                        var item = list[i];
+                        for (int j = 0; j < maxVal; j++)
+                        {
+                            var idx = (j << itemBits) | item.Bits;
+                            while (prefixList.Count <= idx)
+                            {
+                                prefixList.Add(null);
+                            }
+                            prefixList[idx] = item;
+                        }
+                    }
+                }
+                else
+                {
+                    list[i - 1].Next = list[i];
+                }
             }
 
-            return list[0];
+            while (prefixList.Count < 1 << tableBits)
+            {
+                prefixList.Add(null);
+            }
+
+            return prefixList;
         }
 
         static int SortCallback(HuffmanListNode i1, HuffmanListNode i2)
@@ -56,7 +97,5 @@ namespace NVorbis
         internal int Mask;
 
         internal HuffmanListNode Next;
-
-        public int HitCount { get; set; }
     }
 }

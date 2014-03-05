@@ -122,7 +122,7 @@ namespace NVorbis
 
             if (!ComputeCodewords(sparse, sortedEntries, codewords, codewordLengths, len: Lengths, n: Entries, values: values)) throw new InvalidDataException();
 
-            LTree = Huffman.BuildLinkedList(values ?? Enumerable.Range(0, codewords.Length).ToArray(), codewordLengths ?? Lengths, codewords);
+            PrefixList = Huffman.BuildPrefixedLinkedList(values ?? Enumerable.Range(0, codewords.Length).ToArray(), codewordLengths ?? Lengths, codewords, out PrefixBitLength, out PrefixOverflowTree);
         }
 
         bool ComputeCodewords(bool sparse, int sortedEntries, int[] codewords, int[] codewordLengths, int[] len, int n, int[] values)
@@ -259,8 +259,11 @@ namespace NVorbis
 
         internal int MapType;
 
-        HuffmanListNode LTree;
+        HuffmanListNode PrefixOverflowTree;
+        System.Collections.Generic.List<HuffmanListNode> PrefixList;
+        int PrefixBitLength;
         int MaxBits;
+
 
         internal float this[int entry, int dim]
         {
@@ -272,23 +275,30 @@ namespace NVorbis
 
         internal int DecodeScalar(DataPacket packet)
         {
-            // try to get as many bits as possible...
-            int bitCnt; // we really don't care how many bits were read; try to decode anyway...
-            var bits = (int)packet.TryPeekBits(MaxBits, out bitCnt);
+            int bitCnt;
+            var bits = (int)packet.TryPeekBits(PrefixBitLength, out bitCnt);
             if (bitCnt == 0) return -1;
 
-            // now go through the list and find the matching entry
-            var node = LTree;
-            while (node != null)
+            // try to get the value from the prefix list...
+            var node = PrefixList[bits];
+            if (node != null)
+            {
+                packet.SkipBits(node.Length);
+                return node.Value;
+            }
+
+            // nope, not possible... run the tree
+            bits = (int)packet.TryPeekBits(MaxBits, out bitCnt);
+
+            node = PrefixOverflowTree;
+            do
             {
                 if (node.Bits == (bits & node.Mask))
                 {
-                    node.HitCount++;
                     packet.SkipBits(node.Length);
                     return node.Value;
                 }
-                node = node.Next;
-            }
+            } while ((node = node.Next) != null);
             return -1;
         }
     }
