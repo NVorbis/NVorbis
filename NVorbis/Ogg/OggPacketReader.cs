@@ -202,11 +202,7 @@ namespace NVorbis.Ogg
         // This is fast path... don't make the caller wait if we can help it...
         public DataPacket GetNextPacket()
         {
-            var packet = (_current = PeekNextPacketInternal());
-
-            if (packet.IsContinued) throw new InvalidDataException();
-
-            return packet;
+            return (_current = PeekNextPacketInternal());
         }
 
         public DataPacket PeekNextPacket()
@@ -221,8 +217,6 @@ namespace NVorbis.Ogg
             if (_current == null)
             {
                 curPacket = _first;
-
-                if (curPacket.IsContinued) throw new InvalidDataException("First packet cannot be split between pages!");
             }
             else
             {
@@ -244,6 +238,7 @@ namespace NVorbis.Ogg
             // if we're returning a packet, prep is for use
             if (curPacket != null)
             {
+                if (curPacket.IsContinued) throw new InvalidDataException("Packet is incomplete!");
                 curPacket.Reset();
             }
 
