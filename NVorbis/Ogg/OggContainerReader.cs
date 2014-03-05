@@ -25,8 +25,6 @@ namespace NVorbis.Ogg
 
         byte[] _readBuffer = new byte[65025];   // up to a full page of data (but no more!)
 
-        object _pageLock = new object();
-
         long _containerBits, _wasteBits;
 
         /// <summary>
@@ -70,7 +68,15 @@ namespace NVorbis.Ogg
         /// <returns><c>True</c> if a valid logical stream is found, otherwise <c>False</c>.</returns>
         public bool Init()
         {
-            return GatherNextPage() != -1;
+            _stream.TakeLock();
+            try
+            {
+                return GatherNextPage() != -1;
+            }
+            finally
+            {
+                _stream.ReleaseLock();
+            }
         }
 
         /// <summary>
@@ -120,13 +126,18 @@ namespace NVorbis.Ogg
             var cnt = this._packetReaders.Count;
             while (this._packetReaders.Count == cnt)
             {
-                lock (_pageLock)
+                _stream.TakeLock();
+                try
                 {
                     // acquire & release the lock every pass so we don't block any longer than necessary
                     if (GatherNextPage() == -1)
                     {
                         break;
                     }
+                }
+                finally
+                {
+                    _stream.ReleaseLock();
                 }
             }
             return cnt > this._packetReaders.Count;
@@ -152,13 +163,18 @@ namespace NVorbis.Ogg
             // just read pages until we can't any more...
             while (true)
             {
-                lock (_pageLock)
+                _stream.TakeLock();
+                try
                 {
                     // acquire & release the lock every pass so we don't block any longer than necessary
                     if (GatherNextPage() == -1)
                     {
                         break;
                     }
+                }
+                finally
+                {
+                    _stream.ReleaseLock();
                 }
             }
 
@@ -437,18 +453,28 @@ namespace NVorbis.Ogg
 
         internal int PacketReadByte(long offset)
         {
-            lock (_pageLock)
+            _stream.TakeLock();
+            try
             {
                 _stream.Position = offset;
                 return _stream.ReadByte();
+            }
+            finally
+            {
+                _stream.ReleaseLock();
             }
         }
 
         internal void PacketDiscardThrough(long offset)
         {
-            lock (_pageLock)
+            _stream.TakeLock();
+            try
             {
                 _stream.DiscardThrough(offset);
+            }
+            finally
+            {
+                _stream.ReleaseLock();
             }
         }
 
@@ -459,7 +485,8 @@ namespace NVorbis.Ogg
             int nextSerial;
             do
             {
-                lock (_pageLock)
+                _stream.TakeLock();
+                try
                 {
                     if (_packetReaders[streamSerial].HasEndOfStream) return false;
 
@@ -468,6 +495,10 @@ namespace NVorbis.Ogg
                     {
                         return false;
                     }
+                }
+                finally
+                {
+                    _stream.ReleaseLock();
                 }
             } while (nextSerial != streamSerial);
 

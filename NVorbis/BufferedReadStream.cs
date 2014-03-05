@@ -23,6 +23,8 @@ namespace NVorbis
         StreamReadBuffer _buffer;
         long _readPosition;
         object _localLock = new object();
+        System.Threading.Thread _owningThread;
+        int _lockCount;
 
         public BufferedReadStream(Stream baseStream)
             : this(baseStream, DEFAULT_INITIAL_SIZE, DEFAULT_MAX_SIZE, false)
@@ -72,6 +74,34 @@ namespace NVorbis
             }
         }
 
+        // route all the container locking through here so we can track whether the caller actually took the lock...
+        public void TakeLock()
+        {
+            System.Threading.Monitor.Enter(_localLock);
+            if (++_lockCount == 1)
+            {
+                _owningThread = System.Threading.Thread.CurrentThread;
+            }
+        }
+
+        void CheckLock()
+        {
+            if (_owningThread != System.Threading.Thread.CurrentThread)
+            {
+                throw new System.Threading.SynchronizationLockException();
+            }
+        }
+
+        public void ReleaseLock()
+        {
+            CheckLock();
+            if (--_lockCount == 0)
+            {
+                _owningThread = null;
+            }
+            System.Threading.Monitor.Exit(_localLock);
+        }
+
         public bool CloseBaseStream
         {
             get;
@@ -89,10 +119,8 @@ namespace NVorbis
             get { return _buffer.MaxSize; }
             set
             {
-                lock (_localLock)
-                {
-                    _buffer.MaxSize = value;
-                }
+                CheckLock();
+                _buffer.MaxSize = value;
             }
         }
 
@@ -108,18 +136,14 @@ namespace NVorbis
 
         public void Discard(int bytes)
         {
-            lock (_localLock)
-            {
-                _buffer.DiscardThrough(_buffer.BaseOffset + bytes);
-            }
+            CheckLock();
+            _buffer.DiscardThrough(_buffer.BaseOffset + bytes);
         }
 
         public void DiscardThrough(long offset)
         {
-            lock (_localLock)
-            {
-                _buffer.DiscardThrough(offset);
-            }
+            CheckLock();
+            _buffer.DiscardThrough(offset);
         }
 
         public override bool CanRead
@@ -155,52 +179,46 @@ namespace NVorbis
 
         public override int ReadByte()
         {
-            lock (_localLock)
+            CheckLock();
+            var val = _buffer.ReadByte(Position);
+            if (val > -1)
             {
-                var val = _buffer.ReadByte(_readPosition);
-                if (val > -1)
-                {
-                    ++_readPosition;
-                }
-                return val;
+                Seek(1, SeekOrigin.Current);
             }
+            return val;
         }
 
         public override int Read(byte[] buffer, int offset, int count)
         {
-            lock (_localLock)
-            {
-                var cnt = _buffer.Read(_readPosition, buffer, offset, count);
-                _readPosition += cnt;
-                return cnt;
-            }
+            CheckLock();
+            var cnt = _buffer.Read(Position, buffer, offset, count);
+            Seek(cnt, SeekOrigin.Current);
+            return cnt;
         }
 
         public override long Seek(long offset, SeekOrigin origin)
         {
-            lock (_localLock)
+            CheckLock();
+            switch (origin)
             {
-                switch (origin)
-                {
-                    case SeekOrigin.Begin:
-                        // no-op
-                        break;
-                    case SeekOrigin.Current:
-                        offset += _readPosition;
-                        break;
-                    case SeekOrigin.End:
-                        offset += _baseStream.Length;
-                        break;
-                }
-
-                if (!_baseStream.CanSeek)
-                {
-                    if (offset < _buffer.BaseOffset) throw new InvalidOperationException("Cannot seek to before the start of the buffer!");
-                    if (offset >= _buffer.BufferEndOffset) throw new InvalidOperationException("Cannot seek to beyond the end of the buffer!  Discard some bytes.");
-                }
-
-                return (_readPosition = offset);
+                case SeekOrigin.Begin:
+                    // no-op
+                    break;
+                case SeekOrigin.Current:
+                    offset += Position;
+                    break;
+                case SeekOrigin.End:
+                    offset += _baseStream.Length;
+                    break;
             }
+
+            if (!_baseStream.CanSeek)
+            {
+                if (offset < _buffer.BaseOffset) throw new InvalidOperationException("Cannot seek to before the start of the buffer!");
+                if (offset >= _buffer.BufferEndOffset) throw new InvalidOperationException("Cannot seek to beyond the end of the buffer!  Discard some bytes.");
+            }
+
+            return (_readPosition = offset);
         }
 
         public override void SetLength(long value)
