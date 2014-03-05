@@ -395,7 +395,7 @@ namespace NVorbis
             if (copyContents)
             {
                 // adjust the position of the data
-                if (copyOffset > 0 || (copyOffset == 0 && newBuf != _data))
+                if ((copyOffset > 0 && copyOffset < _end) || (copyOffset == 0 && newBuf != _data))
                 {
                     // copy forward
                     Buffer.BlockCopy(_data, copyOffset, newBuf, 0, _end - copyOffset);
@@ -403,7 +403,7 @@ namespace NVorbis
                     // adjust our discard count
                     if ((_discardCount -= copyOffset) < 0) _discardCount = 0;
                 }
-                else if (copyOffset < 0)
+                else if (copyOffset < 0 && -copyOffset < _end)
                 {
                     // copy backward
                     // be clever... if we're moving to a new buffer or the ranges don't overlap, just use a block copy
@@ -418,6 +418,11 @@ namespace NVorbis
                     }
 
                     // adjust our discard count
+                    _discardCount = 0;
+                }
+                else
+                {
+                    _end = copyOffset;
                     _discardCount = 0;
                 }
 
