@@ -202,15 +202,20 @@ namespace NVorbis.Ogg
             }
             else
             {
-                lock (_packetLock)
+                while (true)
                 {
-                    curPacket = _current.Next;
-
-                    // keep going as long as we can possibly get a complete packet
-                    while ((curPacket == null || curPacket.IsContinued) && !_eosFound)
+                    lock (_packetLock)
                     {
-                        // we need another packet and we've not found the end of the stream...
-                        if (!_container.GatherNextPage(_streamSerial))
+                        curPacket = _current.Next;
+
+                        // if we have a valid packet or we can't get any more, bail out of the loop
+                        if ((curPacket != null && !curPacket.IsContinued) || _eosFound) break;
+                    }
+
+                    // we need another packet and we've not found the end of the stream...
+                    if (!_container.GatherNextPage(_streamSerial))
+                    {
+                        lock (_packetLock)
                         {
                             // we're at the end, so mark as much and move on
                             _eosFound = true;
@@ -224,9 +229,6 @@ namespace NVorbis.Ogg
                                 _last.Next = null;
                             }
                         }
-
-                        // make sure to get the correct value
-                        curPacket = _current.Next;
                     }
                 }
             }
