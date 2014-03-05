@@ -299,9 +299,11 @@ namespace NVorbis.Ogg
 
                 do
                 {
-                    if (!_container.GatherNextPage(_streamSerial)) _eosFound = true;
-
-                    if (_eosFound) throw new ArgumentOutOfRangeException("index");
+                    if (!_container.GatherNextPage(_streamSerial))
+                    {
+                        _eosFound = true;
+                        throw new ArgumentOutOfRangeException("index");
+                    }
                 } while (packet.Next == null);
 
                 // go ahead and loop back to the locked section above...
@@ -316,13 +318,8 @@ namespace NVorbis.Ogg
             if (!CanSeek) throw new InvalidOperationException();
 
             // don't hold the lock any longer than we have to
-            while (true)
+            while (!_eosFound)
             {
-                lock (_packetLock)
-                {
-                    if (_eosFound) break;
-                }
-
                 if (!_container.GatherNextPage(_streamSerial)) _eosFound = true;
             }
         }
@@ -361,6 +358,106 @@ namespace NVorbis.Ogg
             return packet;
         }
 
+        Packet GetLastPacketInPage(Packet packet)
+        {
+            if (packet != null)
+            {
+                var pageSeqNumber = packet.PageSequenceNumber;
+                while (packet.Next != null && packet.Next.PageSequenceNumber == pageSeqNumber)
+                {
+                    packet = packet.Next;
+                }
+
+                while (packet != null && packet.IsContinued)
+                {
+                    // gotta go grab the next page
+                    if (_eosFound)
+                    {
+                        packet = null;
+                    }
+                    else if (!_container.GatherNextPage(_streamSerial))
+                    {
+                        _eosFound = true;
+                        packet = null;
+                    }
+                }
+            }
+            return packet;
+        }
+
+        Packet FindPacketInPage(Packet pagePacket, long targetGranulePos, Func<DataPacket, DataPacket, int> packetGranuleCountCallback)
+        {
+            var lastPacketInPage = GetLastPacketInPage(pagePacket);
+            if (lastPacketInPage == null)
+            {
+                return null;
+            }
+
+            // return the packet the granule position is in
+            var packet = lastPacketInPage;
+            do
+            {
+                if (!packet.GranuleCount.HasValue)
+                {
+                    // we don't know its length or position...
+
+                    // if it's the last packet in the page, it gets the page's granule position. Otherwise, calc it.
+                    if (packet == lastPacketInPage)
+                    {
+                        packet.GranulePosition = packet.PageGranulePosition;
+                    }
+                    else
+                    {
+                        packet.GranulePosition = packet.Next.GranulePosition - packet.Next.GranuleCount.Value;
+                    }
+
+                    // if it's the last packet in the stream, it might be a partial.  The spec says the last packet has to be on its own page, so if it is not assume the stream was truncated.
+                    if (packet == _last && _eosFound && packet.Prev.PageSequenceNumber < packet.PageSequenceNumber)
+                    {
+                        packet.GranuleCount = (int)(packet.GranulePosition - packet.Prev.PageGranulePosition);
+                    }
+                    else if (packet.Prev != null)
+                    {
+                        packet.Prev.Reset();
+                        packet.Reset();
+
+                        packet.GranuleCount = packetGranuleCountCallback(packet, packet.Prev);
+                    }
+                    else
+                    {
+                        // probably the first data packet...
+                        if (packet.GranulePosition > packet.Next.GranulePosition - packet.Next.GranuleCount)
+                        {
+                            throw new InvalidOperationException("First data packet size mismatch");
+                        }
+                        packet.GranuleCount = (int)packet.GranulePosition;
+                    }
+                }
+
+                // we now know the granule position and count of the packet... is the target within that range?
+                if (targetGranulePos <= packet.GranulePosition && targetGranulePos > packet.GranulePosition - packet.GranuleCount)
+                {
+                    // make sure the previous packet has a position too
+                    if (packet.Prev != null && !packet.Prev.GranuleCount.HasValue)
+                    {
+                        packet.Prev.GranulePosition = packet.GranulePosition - packet.GranuleCount.Value;
+                    }
+                    return packet;
+                }
+
+                packet = packet.Prev;
+            } while (packet != null && packet.PageSequenceNumber == lastPacketInPage.PageSequenceNumber);
+
+            // couldn't find it, but maybe that's because something glitched in the file...
+            // we're doing this in case there's a dicontinuity in the file...  It's not perfect, but it'll work
+            if (packet != null && packet.PageGranulePosition < targetGranulePos)
+            {
+                packet.GranulePosition = packet.PageGranulePosition;
+                return packet.Next;
+            }
+            return null;
+        }
+
         public int FindPacket(long granulePos, Func<DataPacket, DataPacket, int> packetGranuleCountCallback)
         {
             // This will find which packet contains the granule position being requested.  It is basically a linear search.
@@ -369,91 +466,53 @@ namespace NVorbis.Ogg
             // don't look for any position before 0!
             if (granulePos < 0) throw new ArgumentOutOfRangeException("granulePos");
 
-            // find the first packet with a higher GranulePosition than the requested value
-            // this is safe to do because we'll get a whole page at a time...
-            while (true)
+            Packet foundPacket = null;
+
+            // determine which direction to search from...
+            var packet = _current ?? _first;
+            if (granulePos > packet.PageGranulePosition)
             {
-                lock (_packetLock)
+                // forward search
+
+                // find the first packet in the page the requested granule is on
+                while (granulePos > packet.PageGranulePosition)
                 {
-                    if (_last != null && _last.PageGranulePosition >= granulePos) break;
-                    if (_eosFound)
+                    if ((packet.Next == null || packet.IsContinued) && !_eosFound)
                     {
-                        // only throw an exception when our data is no good
-                        if (_first == null)
+                        if (!_container.GatherNextPage(_streamSerial))
                         {
-                            throw new InvalidDataException();
-                        }
-                        return -1;
-                    }
-                }
-
-                if (!_container.GatherNextPage(_streamSerial)) _eosFound = true;
-            }
-
-            // We now know the page of the last packet ends somewhere past the requested granule position...
-            // search back until we find the first packet past the requested position
-            // if we make it back to the beginning, return -1;
-
-            var packet = _last;
-            // if the last packet is continued, ignore it (the page granule count actually applies to the previous packet)
-            while (packet.IsContinued)
-            {
-                packet = packet.Prev;
-            }
-            do
-            {
-                // if we don't have a granule count, it's a new packet and we need to calculate its count & position
-                if (!packet.GranuleCount.HasValue)
-                {
-                    // fun part... make sure the packets are ready for "playback"
-                    if (packet.Prev != null) packet.Prev.Reset();
-                    packet.Reset();
-
-                    // go ask the callback to calculate the granule count for this packet (given the surrounding packets)
-                    packet.GranuleCount = packetGranuleCountCallback(packet, packet.Prev);
-
-                    // if it's the last (or second-last in the stream) packet, or it's "Next" is continued, or the next packet is on the next page, just use the page granule position
-                    if (packet == _last || (_eosFound && packet == _last.Prev) || packet.Next.IsContinued || packet.Next.PageSequenceNumber > packet.PageSequenceNumber)
-                    {
-                        // if the page's granule position is -1, something must be horribly wrong... (AddPacket should have addressed this above)
-                        if (packet.PageGranulePosition == -1) throw new InvalidDataException();
-
-                        // use the page's granule position
-                        packet.GranulePosition = packet.PageGranulePosition;
-
-                        // if it's the last packet in the stream, it's a partial...
-                        if (packet == _last && _eosFound)
-                        {
-                            packet.GranuleCount = (int)(packet.PageGranulePosition - packet.Prev.PageGranulePosition);
+                            _eosFound = true;
+                            packet = null;
+                            break;
                         }
                     }
-                    else
-                    {
-                        // this packet's granule position is the next packet's position less the next packet's count (which should already be calculated)
-                        packet.GranulePosition = packet.Next.GranulePosition - packet.Next.GranuleCount.Value;
-                    }
-                }
-
-                // now we know what this packet's granule position is...
-                if (packet.GranulePosition < granulePos)
-                {
-                    // we've found the packet previous to the one we need...
                     packet = packet.Next;
-                    break;
                 }
 
-                // we didn't find the packet, so update and loop
-                packet = packet.Prev;
-            } while (packet != null);
+                foundPacket = FindPacketInPage(packet, granulePos, packetGranuleCountCallback);
+            }
+            else
+            {
+                // reverse search (or we're looking at the same page)
+                while (packet.Prev != null && (granulePos < packet.Prev.PageGranulePosition || packet.Prev.PageGranulePosition == -1))
+                {
+                    packet = packet.Prev;
+                }
 
-            // if we didn't find the packet, something is wrong
-            if (packet == null) return -1;
+                foundPacket = FindPacketInPage(packet, granulePos, packetGranuleCountCallback);
+            }
+
+            // if we didn't find a packet, just return "not found"
+            if (foundPacket == null)
+            {
+                return -1;
+            }
 
             // we found the packet, so now we just have to count back to the beginning and see what its index is...
             int idx = 0;
-            while (packet.Prev != null)
+            while (foundPacket.Prev != null)
             {
-                packet = packet.Prev;
+                foundPacket = foundPacket.Prev;
                 ++idx;
             }
             return idx;
