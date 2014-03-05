@@ -178,7 +178,7 @@ namespace NVorbis
             if (count < 0) throw new ArgumentOutOfRangeException("count");
             if (offset >= _wrapper.EofOffset) return 0;
 
-            var startIdx = EnsureAvailable(offset, ref count);
+            var startIdx = EnsureAvailable(offset, ref count, false);
 
             Buffer.BlockCopy(_data, startIdx, buffer, index, count);
 
@@ -191,7 +191,7 @@ namespace NVorbis
             if (offset >= _wrapper.EofOffset) return -1;
 
             int count = 1;
-            var startIdx = EnsureAvailable(offset, ref count);
+            var startIdx = EnsureAvailable(offset, ref count, false);
             if (count == 1)
             {
                 return _data[startIdx];
@@ -199,7 +199,8 @@ namespace NVorbis
             return -1;
         }
 
-        int EnsureAvailable(long offset, ref int count)
+
+        int EnsureAvailable(long offset, ref int count, bool isRecursion)
         {
             // simple... if we're inside the buffer, just return the offset (FAST PATH)
             if (offset >= _baseOffset && offset + count < _baseOffset + _end)
@@ -215,20 +216,25 @@ namespace NVorbis
                 throw new InvalidOperationException("Not enough room in the buffer!  Increase the maximum size and try again.");
             }
 
+            // make sure we always bump the version counter when a change is made to the data in the "live" buffer
+            ++_versionCounter;
+
             // can we satisfy the request with a saved buffer?
-            for (int i = 0; i < _savedBuffers.Count; i++)
+            if (!isRecursion)
             {
-                var tempS = _savedBuffers[i].BaseOffset - offset;
-                if ((tempS < 0 && _savedBuffers[i].End + tempS > 0) || (tempS > 0 && count - tempS > 0))
+                for (int i = 0; i < _savedBuffers.Count; i++)
                 {
-                    SwapBuffers(_savedBuffers[i]);
-                    return EnsureAvailable(offset, ref count);
+                    var tempS = _savedBuffers[i].BaseOffset - offset;
+                    if ((tempS < 0 && _savedBuffers[i].End + tempS > 0) || (tempS > 0 && count - tempS > 0))
+                    {
+                        SwapBuffers(_savedBuffers[i]);
+                        return EnsureAvailable(offset, ref count, true);
+                    }
                 }
             }
 
             // look for buffers we need to drop due to age...
-            ++_versionCounter;
-            while (_savedBuffers.Count > 0 && _savedBuffers[0].VersionSaved + 50 < _versionCounter)
+            while (_savedBuffers.Count > 0 && _savedBuffers[0].VersionSaved + 25 < _versionCounter)
             {
                 _savedBuffers[0].Buffer = null;
                 _savedBuffers.RemoveAt(0);
@@ -274,7 +280,7 @@ namespace NVorbis
         {
             SaveBuffer();
 
-            _data = new byte[2 << (int)Math.Log(count - 1, 2)];
+            _data = new byte[Math.Min(2 << (int)Math.Log(count - 1, 2), _maxSize)];
             _baseOffset = offset;
         }
 
@@ -297,10 +303,17 @@ namespace NVorbis
                 // try to overlap the end...
                 if (offset + _maxSize <= _baseOffset)
                 {
-                    // nope... complete refill
-                    //EnsureBufferSize(count, false, 0);
-                    // in this case, we're going to assume that another thread is trying to read metadata, so let's create a new buffer...
-                    CreateNewBuffer(offset, count);
+                    // nope...
+                    if (_baseOffset - (offset + _maxSize) > _maxSize)
+                    {
+                        // it's probably best to cache this buffer for a bit
+                        CreateNewBuffer(offset, count);
+                    }
+                    else
+                    {
+                        // don't worry about caching...
+                        EnsureBufferSize(count, false, 0);
+                    }
                     _baseOffset = offset;
                     readEnd = count;
                 }
@@ -309,8 +322,7 @@ namespace NVorbis
                     // we have at least some overlap
                     readEnd = (int)(offset - _baseOffset);
                     EnsureBufferSize(Math.Min((int)(offset + _maxSize - _baseOffset), _end) - readEnd, true, readEnd);
-                    // re-pull in case EnsureBufferSize had to discard...
-                    readEnd = (int)(offset - _baseOffset);
+                    readEnd = (int)(offset - _baseOffset) - readEnd;
                 }
             }
             else
@@ -318,9 +330,15 @@ namespace NVorbis
                 // try to overlap the beginning...
                 if (offset >= _baseOffset + _maxSize)
                 {
-                    // nope... complete refill
-                    CreateNewBuffer(offset, count);
-                    //EnsureBufferSize(count, false, 0);
+                    // nope...
+                    if (offset - (_baseOffset + _maxSize) > _maxSize)
+                    {
+                        CreateNewBuffer(offset, count);
+                    }
+                    else
+                    {
+                        EnsureBufferSize(count, false, 0);
+                    }
                     _baseOffset = offset;
                     readEnd = count;
                 }
@@ -344,30 +362,33 @@ namespace NVorbis
             {
                 if (reqSize > _maxSize)
                 {
-                    if (reqSize - _discardCount <= _maxSize || _wrapper.Source.CanSeek)
+                    if (_wrapper.Source.CanSeek || reqSize - _discardCount <= _maxSize)
                     {
                         // lose some of the earlier data...
                         var ofs = reqSize - _maxSize;
                         copyOffset += ofs;
-                        reqSize -= ofs;
+                        reqSize = _maxSize;
                     }
                     else
                     {
                         throw new InvalidOperationException("Not enough room in the buffer!  Increase the maximum size and try again.");
                     }
                 }
-
-                // find the new size
-                var size = _data.Length;
-                while (size < reqSize)
+                else
                 {
-                    size *= 2;
+                    // find the new size
+                    var size = _data.Length;
+                    while (size < reqSize)
+                    {
+                        size *= 2;
+                    }
+                    reqSize = size;
                 }
 
                 // if we discarded some bytes above, don't resize the buffer unless we have to...
-                if (size > _data.Length)
+                if (reqSize > _data.Length)
                 {
-                    newBuf = new byte[size];
+                    newBuf = new byte[reqSize];
                 }
             }
 
@@ -381,25 +402,19 @@ namespace NVorbis
 
                     // adjust our discard count
                     if ((_discardCount -= copyOffset) < 0) _discardCount = 0;
-
-                    _end -= copyOffset;
                 }
                 else if (copyOffset < 0)
                 {
                     // copy backward
-                    // be clever... if we're moving to a new buffer, just use a block copy
-                    if (newBuf != _data)
+                    // be clever... if we're moving to a new buffer or the ranges don't overlap, just use a block copy
+                    if (newBuf != _data || _end <= -copyOffset)
                     {
-                        Buffer.BlockCopy(_data, 0, newBuf, -copyOffset, Math.Min(_end, newBuf.Length + copyOffset));
+                        Buffer.BlockCopy(_data, 0, newBuf, -copyOffset, Math.Min(_end, _data.Length + copyOffset));
                     }
                     else
                     {
-                        var sIdx = _end + copyOffset;
-                        var dIdx = _end;
-                        while (--sIdx >= 0)
-                        {
-                            newBuf[--dIdx] = _data[sIdx];
-                        }
+                        // this shouldn't happen often, so we can get away with a full buffer refill
+                        _end = copyOffset;
                     }
 
                     // adjust our discard count
@@ -408,6 +423,8 @@ namespace NVorbis
 
                 // adjust our markers
                 _baseOffset += copyOffset;
+                _end -= copyOffset;
+                if (_end > newBuf.Length) _end = newBuf.Length;
             }
             else
             {
@@ -438,7 +455,9 @@ namespace NVorbis
                 else if (!_minimalRead && _end < _data.Length)
                 {
                     // try to finish filling the buffer
-                    _end += _wrapper.Source.Read(_data, _end, _data.Length - _end);
+                    readCount = _data.Length - _end;
+                    readCount = PrepareStreamForRead(readCount, _baseOffset + _end);
+                    _end += _wrapper.Source.Read(_data, _end, readCount);
                 }
             }
             return count;
