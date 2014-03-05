@@ -114,6 +114,9 @@ namespace NVorbis.Ogg
         {
             lock (_packetLock)
             {
+                // if we've already found the end of the stream, don't accept any more packets
+                if (_eosFound) return;
+
                 // if the packet is a resync, it cannot be a continuation...
                 if (packet.IsResync)
                 {
@@ -150,13 +153,34 @@ namespace NVorbis.Ogg
                     }
                 }
 
-                _eosFound |= packet.IsEndOfStream;
+                if (packet.IsEndOfStream)
+                {
+                    SetEndOfStream();
+                }
             }
         }
 
         internal bool HasEndOfStream
         {
             get { return _eosFound; }
+        }
+
+        internal void SetEndOfStream()
+        {
+            lock (_packetLock)
+            {
+                // set the flag...
+                _eosFound = true;
+
+                // make sure we're handling the last packet correctly
+                if (_last.IsContinued)
+                {
+                    // last packet was a partial... spec says dump it
+                    _last = _last.Prev;
+                    _last.Next.Prev = null;
+                    _last.Next = null;
+                }
+            }
         }
 
         public int StreamSerial
@@ -213,23 +237,7 @@ namespace NVorbis.Ogg
                     }
 
                     // we need another packet and we've not found the end of the stream...
-                    if (!_container.GatherNextPage(_streamSerial))
-                    {
-                        lock (_packetLock)
-                        {
-                            // we're at the end, so mark as much and move on
-                            _eosFound = true;
-
-                            // make sure we're handling the last packet correctly
-                            if (_last.IsContinued)
-                            {
-                                // last packet was a partial... spec says dump it
-                                _last = _last.Prev;
-                                _last.Next.Prev = null;
-                                _last.Next = null;
-                            }
-                        }
-                    }
+                    _container.GatherNextPage(_streamSerial);
                 }
             }
 
@@ -259,7 +267,7 @@ namespace NVorbis.Ogg
             {
                 if (_eosFound) throw new InvalidDataException();
 
-                if (!_container.GatherNextPage(_streamSerial)) _eosFound = true;
+                _container.GatherNextPage(_streamSerial);
             }
 
             var packet = _first;
@@ -280,7 +288,6 @@ namespace NVorbis.Ogg
                 {
                     if (!_container.GatherNextPage(_streamSerial))
                     {
-                        _eosFound = true;
                         throw new ArgumentOutOfRangeException("index");
                     }
                 } while (packet.Next == null);
@@ -299,7 +306,7 @@ namespace NVorbis.Ogg
             // don't hold the lock any longer than we have to
             while (!_eosFound)
             {
-                if (!_container.GatherNextPage(_streamSerial)) _eosFound = true;
+                _container.GatherNextPage(_streamSerial);
             }
         }
 
@@ -356,7 +363,6 @@ namespace NVorbis.Ogg
                     }
                     else if (!_container.GatherNextPage(_streamSerial))
                     {
-                        _eosFound = true;
                         packet = null;
                     }
                 }
@@ -460,7 +466,6 @@ namespace NVorbis.Ogg
                     {
                         if (!_container.GatherNextPage(_streamSerial))
                         {
-                            _eosFound = true;
                             packet = null;
                             break;
                         }

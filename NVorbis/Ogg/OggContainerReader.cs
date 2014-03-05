@@ -493,6 +493,13 @@ namespace NVorbis.Ogg
                     nextSerial = GatherNextPage();
                     if (nextSerial == -1)
                     {
+                        foreach (var reader in _packetReaders)
+                        {
+                            if (!reader.Value.HasEndOfStream)
+                            {
+                                reader.Value.SetEndOfStream();
+                            }
+                        }
                         return false;
                     }
                 }
