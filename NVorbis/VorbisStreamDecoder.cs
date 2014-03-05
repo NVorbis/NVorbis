@@ -68,6 +68,8 @@ namespace NVorbis
 
         bool _eosFound;
 
+        object _seekLock = new object();
+
         internal VorbisStreamDecoder(IPacketProvider packetProvider)
         {
             _packetProvider = packetProvider;
@@ -273,6 +275,7 @@ namespace NVorbis
         Stack<DataPacket> _resyncQueue;
 
         long _currentPosition;
+        long _reportedPosition;
 
         VorbisMode _mode;
         bool _prevFlag, _nextFlag;
@@ -691,61 +694,65 @@ namespace NVorbis
             // now calculate the totals...
             return mode.BlockSize / 4 + prevMode.BlockSize / 4;
         }
-        
+
         #endregion
 
         internal int ReadSamples(float[] buffer, int offset, int count)
         {
             int samplesRead = 0;
 
-            if (_prevBuffer != null)
+            lock (_seekLock)
             {
-                // get samples from the previous buffer's data
-                var cnt = Math.Min(count, _prevBuffer.Length);
-                Buffer.BlockCopy(_prevBuffer, 0, buffer, offset, cnt * sizeof(float));
-
-                // if we have samples left over, rebuild the previous buffer array...
-                if (cnt < _prevBuffer.Length)
-                {
-                    var buf = new float[_prevBuffer.Length - cnt];
-                    Buffer.BlockCopy(_prevBuffer, cnt * sizeof(float), buf, 0, (_prevBuffer.Length - cnt) * sizeof(float));
-                    _prevBuffer = buf;
-                }
-                else
-                {
-                    // if no samples left over, clear the previous buffer
-                    _prevBuffer = null;
-                }
-
-                // reduce the desired sample count & increase the desired sample offset
-                count -= cnt;
-                offset += cnt;
-                samplesRead = cnt;
-            }
-
-            int minSize = count + Block1Size * _channels;
-            _outputBuffer.EnsureSize(minSize);
-
-            while (_preparedLength * _channels < count && !_eosFound)
-            {
-                DecodeNextPacket();
-
-                // we can safely assume the _prevBuffer was null when we entered this loop
                 if (_prevBuffer != null)
                 {
-                    // uh-oh... something is wrong...
-                    return ReadSamples(buffer, offset, _prevBuffer.Length);
+                    // get samples from the previous buffer's data
+                    var cnt = Math.Min(count, _prevBuffer.Length);
+                    Buffer.BlockCopy(_prevBuffer, 0, buffer, offset, cnt * sizeof(float));
+
+                    // if we have samples left over, rebuild the previous buffer array...
+                    if (cnt < _prevBuffer.Length)
+                    {
+                        var buf = new float[_prevBuffer.Length - cnt];
+                        Buffer.BlockCopy(_prevBuffer, cnt * sizeof(float), buf, 0, (_prevBuffer.Length - cnt) * sizeof(float));
+                        _prevBuffer = buf;
+                    }
+                    else
+                    {
+                        // if no samples left over, clear the previous buffer
+                        _prevBuffer = null;
+                    }
+
+                    // reduce the desired sample count & increase the desired sample offset
+                    count -= cnt;
+                    offset += cnt;
+                    samplesRead = cnt;
                 }
-            }
 
-            if (_preparedLength * _channels < count)
-            {
-                // we can safely assume we've read the last packet...
-                count = _preparedLength * _channels;
-            }
+                int minSize = count + Block1Size * _channels;
+                _outputBuffer.EnsureSize(minSize);
 
-            _outputBuffer.CopyTo(buffer, offset, count);
-            _preparedLength -= count / _channels;
+                while (_preparedLength * _channels < count && !_eosFound)
+                {
+                    DecodeNextPacket();
+
+                    // we can safely assume the _prevBuffer was null when we entered this loop
+                    if (_prevBuffer != null)
+                    {
+                        // uh-oh... something is wrong...
+                        return ReadSamples(buffer, offset, _prevBuffer.Length);
+                    }
+                }
+
+                if (_preparedLength * _channels < count)
+                {
+                    // we can safely assume we've read the last packet...
+                    count = _preparedLength * _channels;
+                }
+
+                _outputBuffer.CopyTo(buffer, offset, count);
+                _preparedLength -= count / _channels;
+                _reportedPosition = _currentPosition - _preparedLength;
+            }
 
             return samplesRead + count;
         }
@@ -769,35 +776,39 @@ namespace NVorbis
                 targetPacketIndex = idx - 1;  // move to the previous packet to prime the decoder
             }
 
-            // seek the stream
-            _packetProvider.SeekToPacket(targetPacketIndex);
-
-            // now figure out where we are and how many samples we need to discard...
-            // note that we use the granule position of the "current" packet, since it will be discarded no matter what
-
-            // get the packet that we'll decode next
-            var dataPacket = _packetProvider.PeekNextPacket();
-
-            // now read samples until we are exactly at the granule position requested
-            CurrentPosition = dataPacket.GranulePosition;
-            var cnt = (int)((granulePos - CurrentPosition) * _channels);
-            if (cnt > 0)
+            lock (_seekLock)
             {
-                var seekBuffer = new float[cnt];
-                while (cnt > 0)
+                // seek the stream
+                _packetProvider.SeekToPacket(targetPacketIndex);
+
+                // now figure out where we are and how many samples we need to discard...
+                // note that we use the granule position of the "current" packet, since it will be discarded no matter what
+
+                // get the packet that we'll decode next
+                var dataPacket = _packetProvider.PeekNextPacket();
+
+                // now read samples until we are exactly at the granule position requested
+                CurrentPosition = dataPacket.GranulePosition;
+                var cnt = (int)((granulePos - CurrentPosition) * _channels);
+                if (cnt > 0)
                 {
-                    var temp = ReadSamples(seekBuffer, 0, cnt);
-                    if (temp == 0) break;   // we're at the end...
-                    cnt -= temp;
+                    var seekBuffer = new float[cnt];
+                    while (cnt > 0)
+                    {
+                        var temp = ReadSamples(seekBuffer, 0, cnt);
+                        if (temp == 0) break;   // we're at the end...
+                        cnt -= temp;
+                    }
                 }
             }
         }
 
         internal long CurrentPosition
         {
-            get { return _currentPosition - _preparedLength; }
+            get { return _reportedPosition; }
             private set
             {
+                _reportedPosition = value;
                 _currentPosition = value;
                 _preparedLength = 0;
                 _eosFound = false;
