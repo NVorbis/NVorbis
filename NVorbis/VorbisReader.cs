@@ -47,6 +47,7 @@ namespace NVorbis
             {
                 // oops, not Ogg!
                 // we don't support any other container types yet, so error out
+                // TODO: Add Matroska fallback
                 bufferedStream.Close();
                 throw new InvalidDataException("Could not determine container type!");
             }
@@ -97,9 +98,7 @@ namespace NVorbis
             }
             else
             {
-                // NB: This could be an Ogg Skeleton stream...  We should check that, just in case
-                // NB: This could be a RTP stream...  We should check that, just in case
-
+                // This is almost certainly not a Vorbis stream
                 ea.IgnoreStream = true;
             }
         }
@@ -171,6 +170,11 @@ namespace NVorbis
         public string[] Comments { get { return ActiveDecoder._comments; } }
 
         /// <summary>
+        /// Gets whether the previous short sample count was due to a parameter change in the stream.
+        /// </summary>
+        public bool IsParameterChange { get { return ActiveDecoder.IsParameterChange; } }
+
+        /// <summary>
         /// Gets the number of bits read that are related to framing and transport alone
         /// </summary>
         public long ContainerOverheadBits { get { return ActiveDecoder.ContainerBits; } }
@@ -220,6 +224,14 @@ namespace NVorbis
             }
 
             return count;
+        }
+
+        /// <summary>
+        /// Clears the parameter change flag so further samples can be requested.
+        /// </summary>
+        public void ClearParameterChange()
+        {
+            ActiveDecoder.IsParameterChange = false;
         }
 
         /// <summary>

@@ -83,5 +83,10 @@ namespace NVorbis
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is less than 0 or greater than the last available packet index.</exception>
         /// <exception cref="InvalidOperationException"><see cref="CanSeek"/> is <c>False</c>.</exception>
         void SeekToPacket(int index);
+
+        /// <summary>
+        /// Occurs when the stream is about to change parameters.
+        /// </summary>
+        event EventHandler<ParameterChangeEventArgs> ParameterChange;
     }
 }

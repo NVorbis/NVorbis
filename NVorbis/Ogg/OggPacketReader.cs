@@ -65,6 +65,11 @@ namespace NVorbis.Ogg
             }
         }
 
+        // IPacketProvider requires this, but we aren't using it
+#pragma warning disable 67  // disable the "unused" warning
+        public event EventHandler<ParameterChangeEventArgs> ParameterChange;
+#pragma warning restore 67
+
         ContainerReader _container;
         int _streamSerial;
         bool _eosFound;
@@ -170,97 +175,69 @@ namespace NVorbis.Ogg
             get { return _container.CanSeek; }
         }
 
-        bool EnsurePackets()
-        {
-            do
-            {
-                lock (_packetLock)
-                {
-                    // don't bother reading more packets unless we actually need them
-                    if (_last != null && !_last.IsContinued && _current != _last) return true;
-                }
-
-                if (!_eosFound && !_container.GatherNextPage(_streamSerial))
-                {
-                    // not technically true, but because the container doesn't have any more pages, it might as well be
-                    _eosFound = true;
-                    return false;
-                }
-
-                lock (_packetLock)
-                {
-                    // if we've read the entire stream, do some further checking...
-                    if (_eosFound)
-                    {
-                        // make sure the last packet read isn't continued... (per the spec, if the last packet is a partial, ignore it)
-                        // if _last is null, something has gone horribly wrong (i.e., that shouldn't happen)
-                        if (_last.IsContinued)
-                        {
-                            _last = _last.Prev;
-                            _last.Next.Prev = null;
-                            _last.Next = null;
-                        }
-
-                        // if our "current" packet is the same as the "last" packet, we're done
-                        // _last won't be null here
-                        if (_current == _last) return false;
-                    }
-                }
-            } while (true);
-        }
-
         // This is fast path... don't make the caller wait if we can help it...
         public DataPacket GetNextPacket()
         {
-            // make sure we have enough packets... if we're at the end of the stream, return null
-            if (!EnsurePackets()) return null;
-
-            Packet packet;
-            lock (_packetLock)
-            {
-                // "current" is always set to the packet previous to the one about to be returned...
-                if (_current == null)
-                {
-                    packet = (_current = _first);
-                }
-                else
-                {
-                    packet = (_current = _current.Next);
-                }
-            }
+            var packet = (_current = PeekNextPacketInternal());
 
             if (packet.IsContinued) throw new InvalidDataException();
-
-            // make sure the packet is ready for "playback"
-            packet.Reset();
 
             return packet;
         }
 
         public DataPacket PeekNextPacket()
         {
+            return PeekNextPacketInternal();
+        }
+
+        Packet PeekNextPacketInternal()
+        {
+            // try to get the next packet in the sequence
             Packet curPacket;
-            lock (_packetLock)
+            if (_current == null)
             {
-                // get the current packet
-                curPacket = (_current ?? _first);
+                curPacket = _first;
 
-                // if we don't have one, we can't do anything...
-                if (curPacket == null) return null;
-
-                // if we have a next packet, go ahead and return it
-                if (curPacket.Next != null)
+                if (curPacket.IsContinued) throw new InvalidDataException("First packet cannot be split between pages!");
+            }
+            else
+            {
+                lock (_packetLock)
                 {
-                    return curPacket.Next;
-                }
+                    curPacket = _current.Next;
 
-                // if we've hit the end of the stream, we're done
-                if (_eosFound) return null;
+                    // keep going as long as we can possibly get a complete packet
+                    while ((curPacket == null || curPacket.IsContinued) && !_eosFound)
+                    {
+                        // we need another packet and we've not found the end of the stream...
+                        if (!_container.GatherNextPage(_streamSerial))
+                        {
+                            // we're at the end, so mark as much and move on
+                            _eosFound = true;
+
+                            // make sure we're handling the last packet correctly
+                            if (_last.IsContinued)
+                            {
+                                // last packet was a partial... spec says dump it
+                                _last = _last.Prev;
+                                _last.Next.Prev = null;
+                                _last.Next = null;
+                            }
+                        }
+
+                        // make sure to get the correct value
+                        curPacket = _current.Next;
+                    }
+                }
             }
 
-            // finally, try to load more packets and just return the next one
-            EnsurePackets();
-            return curPacket.Next;
+            // if we're returning a packet, prep is for use
+            if (curPacket != null)
+            {
+                curPacket.Reset();
+            }
+
+            return curPacket;
         }
 
         public void SeekToPacket(int index)
