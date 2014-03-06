@@ -243,6 +243,16 @@ namespace NVorbis
         }
 
         /// <summary>
+        /// Searches for the next stream in a concatenated file
+        /// </summary>
+        /// <returns><c>True</c> if a new stream was found, otherwise <c>false</c>.</returns>
+        public bool FindNextStream()
+        {
+            if (_containerReader == null) return false;
+            return _containerReader.FindNextStream();
+        }
+
+        /// <summary>
         /// Switches to an alternate logical stream.
         /// </summary>
         /// <param name="index">The logical stream index to switch to</param>

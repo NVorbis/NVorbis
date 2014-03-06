@@ -100,23 +100,13 @@ namespace NVorbis.NAudioSupport
         public int Read(float[] buffer, int offset, int count)
         {
             return _reader.ReadSamples(buffer, offset, count);
+        }
 
-            // This is for "ConcatenateStreams" support (which we're not doing currently)
-            //var readCount = _reader.ReadSamples(buffer, offset, count);
+        public bool IsParameterChange { get { return _reader.IsParameterChange; } }
 
-            //if (readCount < count)
-            //{
-            //    // we're almost certainly at the end of the stream...  maybe try to read the next stream?
-            //    if (ConcatenateStreams)
-            //    {
-            //        if (_reader.SwitchStreams(_reader.StreamIndex))
-            //        {
-            //            readCount += Read(buffer, offset + readCount, count - readCount);
-            //        }
-            //    }
-            //}
-
-            //return readCount;
+        public void ClearParameterChange()
+        {
+            _reader.ClearParameterChange();
         }
 
         public int StreamCount
@@ -124,7 +114,21 @@ namespace NVorbis.NAudioSupport
             get { return _reader.StreamCount; }
         }
 
-        //public bool ConcatenateStreams { get; set; }
+        public int? NextStreamIndex { get; set; }
+
+        public bool GetNextStreamIndex()
+        {
+            if (!NextStreamIndex.HasValue)
+            {
+                var idx = _reader.StreamCount;
+                if (_reader.FindNextStream())
+                {
+                    NextStreamIndex = idx;
+                    return true;
+                }
+            }
+            return false;
+        }
 
         public int CurrentStream
         {
@@ -134,6 +138,11 @@ namespace NVorbis.NAudioSupport
                 if (!_reader.SwitchStreams(value))
                 {
                     throw new System.IO.InvalidDataException("The selected stream is not a valid Vorbis stream!");
+                }
+
+                if (NextStreamIndex.HasValue && value == NextStreamIndex.Value)
+                {
+                    NextStreamIndex = null;
                 }
             }
         }
