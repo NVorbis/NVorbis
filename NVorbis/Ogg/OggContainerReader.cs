@@ -478,7 +478,7 @@ namespace NVorbis.Ogg
             }
         }
 
-        internal bool GatherNextPage(int streamSerial)
+        internal void GatherNextPage(int streamSerial)
         {
             if (!_packetReaders.ContainsKey(streamSerial)) throw new ArgumentOutOfRangeException("streamSerial");
 
@@ -488,7 +488,7 @@ namespace NVorbis.Ogg
                 _stream.TakeLock();
                 try
                 {
-                    if (_packetReaders[streamSerial].HasEndOfStream) return false;
+                    if (_packetReaders[streamSerial].HasEndOfStream) break;
 
                     nextSerial = GatherNextPage();
                     if (nextSerial == -1)
@@ -500,7 +500,7 @@ namespace NVorbis.Ogg
                                 reader.Value.SetEndOfStream();
                             }
                         }
-                        return false;
+                        break;
                     }
                 }
                 finally
@@ -508,8 +508,6 @@ namespace NVorbis.Ogg
                     _stream.ReleaseLock();
                 }
             } while (nextSerial != streamSerial);
-
-            return true;
         }
     }
 }

@@ -295,26 +295,16 @@ namespace NVorbis.Ogg
             var packet = _first;
             while (--packetIndex >= 0)
             {
-                lock (_packetLock)
+                while (packet.Next == null)
                 {
-                    if (packet.Next == null && _eosFound)
+                    if (_eosFound)
                     {
                         throw new ArgumentOutOfRangeException("index");
                     }
-
-                    packet = packet.Next;
+                    _container.GatherNextPage(_streamSerial);
                 }
 
-                do
-                {
-                    if (!_container.GatherNextPage(_streamSerial))
-                    {
-                        throw new ArgumentOutOfRangeException("index");
-                    }
-                } while (packet.Next == null);
-
-                // go ahead and loop back to the locked section above...
-                ++packetIndex;
+                packet = packet.Next;
             }
 
             packet.Reset();
@@ -338,9 +328,13 @@ namespace NVorbis.Ogg
                     {
                         packet = null;
                     }
-                    else if (!_container.GatherNextPage(_streamSerial))
+                    else
                     {
-                        packet = null;
+                        _container.GatherNextPage(_streamSerial);
+                        if (_eosFound)
+                        {
+                            packet = null;
+                        }
                     }
                 }
             }
@@ -441,7 +435,8 @@ namespace NVorbis.Ogg
                 {
                     if ((packet.Next == null || packet.IsContinued) && !_eosFound)
                     {
-                        if (!_container.GatherNextPage(_streamSerial))
+                        _container.GatherNextPage(_streamSerial);
+                        if (_eosFound)
                         {
                             packet = null;
                             break;
