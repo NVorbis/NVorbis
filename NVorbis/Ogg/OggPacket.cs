@@ -1,6 +1,6 @@
 ﻿/****************************************************************************
  * NVorbis                                                                  *
- * Copyright (C) 2012, Andrew Ward <afward@gmail.com>                       *
+ * Copyright (C) 2014, Andrew Ward <afward@gmail.com>                       *
  *                                                                          *
  * See COPYING for license terms (Ms-PL).                                   *
  *                                                                          *
