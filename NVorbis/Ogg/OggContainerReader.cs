@@ -365,7 +365,7 @@ namespace NVorbis.Ogg
             // get our flags prepped
             var isContinued = false;
             var isContinuation = (hdr.Flags & PageFlags.ContinuesPacket) == PageFlags.ContinuesPacket;
-            var isEOS = (hdr.Flags & PageFlags.EndOfStream) == PageFlags.EndOfStream;
+            var isEOS = false;
             var isResync = hdr.IsResync;
 
             // add all the packets, making sure to update flags as needed
@@ -391,10 +391,11 @@ namespace NVorbis.Ogg
                 isContinuation = false;
                 isResync = false;
 
-                // only the last packet in a page can be continued
+                // only the last packet in a page can be continued or flagged end of stream
                 if (--cnt == 1)
                 {
                     isContinued = hdr.LastPacketContinues;
+                    isEOS = (hdr.Flags & PageFlags.EndOfStream) == PageFlags.EndOfStream;
                 }
             }
 
