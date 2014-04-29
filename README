@@ -116,3 +116,5 @@ History
     * Refactored locking in OggPacketReader / OggContainerReader
     * Improved Ogg end of stream handling
     * Changed container seek API to use packets instead of indexes to reduce linked list traversals
+0.8.3 - 04/29/2014
+    * BugFix: Don't set the end of stream flag until the last packet of the page
