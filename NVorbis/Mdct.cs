@@ -75,14 +75,34 @@ namespace NVorbis
             }
         }
 
-        [ThreadStatic]
-        static float[] _buf2;
+        #region Buffer Handling
+
+        // This addresses the two constraints we have to deal with:
+        //  1) Each Mdct instance must maintain a buffer of n / 2 size without allocating each pass
+        //  2) Mdct must be thread-safe
+        // To handle these constraints, we use a "thread-local" dictionary
+
+        Dictionary<int, float[]> _threadLocalBuffers = new Dictionary<int, float[]>(1);
+        float[] GetBuffer()
+        {
+            lock (_threadLocalBuffers)
+            {
+                float[] buf;
+                if (!_threadLocalBuffers.TryGetValue(System.Threading.Thread.CurrentThread.ManagedThreadId, out buf))
+                {
+                    _threadLocalBuffers[System.Threading.Thread.CurrentThread.ManagedThreadId] = (buf = new float[_n2]);
+                }
+                return buf;
+            }
+        }
+
+        #endregion
 
         void CalcReverse(float[] buffer)
         {
             float[] u, v, buf2;
 
-            buf2 = _buf2 ?? (_buf2 = new float[_n2]);
+            buf2 = GetBuffer();
 
             // copy and reflect spectral data
             // step 0
