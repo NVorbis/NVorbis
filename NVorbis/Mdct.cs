@@ -76,7 +76,7 @@ namespace NVorbis
         }
 
         [ThreadStatic]
-        float[] _buf2;
+        static float[] _buf2;
 
         void CalcReverse(float[] buffer)
         {
