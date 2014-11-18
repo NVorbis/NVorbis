@@ -321,21 +321,10 @@ namespace NVorbis.Ogg
                     packet = packet.Next;
                 }
 
-                while (packet != null && packet.IsContinued)
+                if (packet != null && packet.IsContinued)
                 {
-                    // gotta go grab the next page
-                    if (_eosFound)
-                    {
-                        packet = null;
-                    }
-                    else
-                    {
-                        _container.GatherNextPage(_streamSerial);
-                        if (_eosFound)
-                        {
-                            packet = null;
-                        }
-                    }
+                    // move to the *actual* last packet of the page... If .Prev is null, something is wrong and we can't seek anyway
+                    packet = packet.Prev;
                 }
             }
             return packet;
