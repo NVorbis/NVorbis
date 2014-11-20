@@ -2,7 +2,7 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2011/08/nuspec.xsd">
     <metadata>
         <id>NVorbis</id>
-        <version>0.8.3.0</version>
+        <version>0.8.4.0</version>
         <title />
         <authors>Andrew Ward</authors>
         <owners />
@@ -11,7 +11,8 @@
         <requireLicenseAcceptance>false</requireLicenseAcceptance>
         <description>A fully managed implementation of a Xiph.org Foundation Ogg Vorbis decoder.</description>
         <summary>A managed Xiph.org Foundation Ogg Vorbis decoder</summary>
-        <releaseNotes>- BugFix: Don't set the end of stream flag until the last packet of the page</releaseNotes>
+        <releaseNotes>- BugFix: Fix forward seeking when target page ends with partial packet.
+- Mdct: Make transform thread-safe</releaseNotes>
         <language>en-US</language>
         <tags>ogg vorbis xiph audio c# sound .NET</tags>
         <frameworkAssemblies>

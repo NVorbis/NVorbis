@@ -118,3 +118,6 @@ History
     * Changed container seek API to use packets instead of indexes to reduce linked list traversals
 0.8.3 - 04/29/2014
     * BugFix: Don't set the end of stream flag until the last packet of the page
+0.8.4 - 11/20/2014
+	* BugFix: Forward seeking when target page ends with partial packet should ignore partial packet
+	* Changed MDCT to be thread-safe
