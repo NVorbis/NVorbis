@@ -363,7 +363,7 @@ namespace NVorbis.Ogg
             _containerBits = 0;
 
             // get our flags prepped
-            var isContinued = false;
+            var isContinued = hdr.PacketSizes.Length == 1 && hdr.PacketSizes[0] == 65025 && hdr.LastPacketContinues;
             var isContinuation = (hdr.Flags & PageFlags.ContinuesPacket) == PageFlags.ContinuesPacket;
             var isEOS = false;
             var isResync = hdr.IsResync;
