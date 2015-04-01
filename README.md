@@ -1,4 +1,4 @@
-NVorbis
+NVorbis    [![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/ioctlLR/NVorbis?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 -------
 
 NVorbis is a .Net library for decoding Xiph.org Vorbis files. It is designed to run in partial trust environments and does not require P/Invoke or unsafe code.
@@ -54,3 +54,5 @@ using (var waveOut = new NAudio.Wave.WaveOutEvent())
     // wait here until playback stops or should stop
 }
 ```
+
+If you have any questions or comments, feel free to join us on Gitter.  If you have any issues or feature requests, please submit them in the issue tracker.
