@@ -32,6 +32,8 @@ using (var vorbis = new NVorbis.VorbisReader("path/to/file.ogg"))
     while ((cnt = vorbis.ReadSamples(readBuffer, 0, readBuffer.Length)) > 0)
     {
     	// do stuff with the buffer
+    	// samples are interleaved (chan0, chan1, chan0, chan1, etc.)
+    	// sample value range is -0.99999994f to 0.99999994f unless vorbis.ClipSamples == false
     
     	// OPTIONALLY: get the position we just read through to...
         position = vorbis.DecodedTime;
