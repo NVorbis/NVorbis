@@ -1,12 +1,13 @@
 ﻿
-Microsoft Visual Studio Solution File, Format Version 11.00
-# Visual Studio 2010
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 2013
+VisualStudioVersion = 12.0.31101.0
+MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NVorbis", "NVorbis\NVorbis.csproj", "{A372E591-DFEF-49C4-9C82-98C4361EFCCD}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{2FC272F6-7727-4000-9110-A03F8936BA8E}"
 	ProjectSection(SolutionItems) = preProject
 		COPYING = COPYING
-		NVorbis.NAudioSupport.nuspec = NVorbis.NAudioSupport.nuspec
 		NVorbis.nuspec = NVorbis.nuspec
 		NVorbis.OpenTKSupport.nuspec = NVorbis.OpenTKSupport.nuspec
 		README = README
@@ -14,8 +15,6 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestApp", "TestApp\TestApp.csproj", "{902AD24A-6F7C-4F21-9E88-2B9151AEB563}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NAudioSupport", "NAudioSupport\NAudioSupport.csproj", "{6FC9AAA7-E7FE-4BD4-B813-582D4B3BDA0C}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenTKSupport", "OpenTKSupport\OpenTKSupport.csproj", "{7BABE72F-07E3-40E9-A65B-4EF98029AE6B}"
 EndProject
@@ -42,12 +41,8 @@ Global
 		{A372E591-DFEF-49C4-9C82-98C4361EFCCD}.Release|Any CPU.Build.0 = Release|Any CPU
 		{902AD24A-6F7C-4F21-9E88-2B9151AEB563}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{902AD24A-6F7C-4F21-9E88-2B9151AEB563}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{902AD24A-6F7C-4F21-9E88-2B9151AEB563}.Release|Any CPU.ActiveCfg = Release|x86
-		{902AD24A-6F7C-4F21-9E88-2B9151AEB563}.Release|Any CPU.Build.0 = Release|x86
-		{6FC9AAA7-E7FE-4BD4-B813-582D4B3BDA0C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{6FC9AAA7-E7FE-4BD4-B813-582D4B3BDA0C}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{6FC9AAA7-E7FE-4BD4-B813-582D4B3BDA0C}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{6FC9AAA7-E7FE-4BD4-B813-582D4B3BDA0C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{902AD24A-6F7C-4F21-9E88-2B9151AEB563}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{902AD24A-6F7C-4F21-9E88-2B9151AEB563}.Release|Any CPU.Build.0 = Release|Any CPU
 		{7BABE72F-07E3-40E9-A65B-4EF98029AE6B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{7BABE72F-07E3-40E9-A65B-4EF98029AE6B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{7BABE72F-07E3-40E9-A65B-4EF98029AE6B}.Release|Any CPU.ActiveCfg = Release|Any CPU
