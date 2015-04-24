@@ -41,20 +41,6 @@ using (var vorbis = new NVorbis.VorbisReader("path/to/file.ogg"))
 }
 ```
 
-If you are using [NAudio](https://naudio.codeplex.com/), you may try the following:
-
-```cs
-// add a reference to NVorbis.dll
-// add a reference to NVorbis.NAudioSupport.dll
-
-using (var vorbisStream = new NVorbis.NAudioSupport.VorbisWaveReader("path/to/file.ogg"))
-using (var waveOut = new NAudio.Wave.WaveOutEvent())
-{
-    waveOut.Init(vorbisStream);
-    waveOut.Play();
-   
-    // wait here until playback stops or should stop
-}
-```
+If you are using [NAudio](https://naudio.codeplex.com/), support is available via [NAudio.Vorbis](https://github.com/NAudio/Vorbis).
 
 If you have any questions or comments, feel free to join us on Gitter.  If you have any issues or feature requests, please submit them in the issue tracker.
