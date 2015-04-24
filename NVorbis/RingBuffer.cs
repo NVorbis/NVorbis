@@ -62,11 +62,11 @@ namespace NVorbis
             if (count > len) throw new ArgumentOutOfRangeException("count");
 
             var cnt = Math.Min(count, _bufLen - start);
-            Array.Copy(_buffer, start, buffer, index, cnt);
+            Buffer.BlockCopy(_buffer, start * sizeof(float), buffer, index * sizeof(float), cnt * sizeof(float));
 
             if (cnt < count)
             {
-                Array.Copy(_buffer, 0, buffer, index + cnt, count - cnt);
+                Buffer.BlockCopy(_buffer, 0, buffer, (index + cnt) * sizeof(float), (count - cnt) * sizeof(float));
             }
         }
 
