@@ -439,7 +439,7 @@ namespace NVorbis.Ogg
             else
             {
                 // reverse search (or we're looking at the same page)
-                while (packet.Prev != null && (granulePos < packet.Prev.PageGranulePosition || packet.Prev.PageGranulePosition == -1))
+                while (packet.Prev != null && (granulePos <= packet.Prev.PageGranulePosition || packet.Prev.PageGranulePosition == -1))
                 {
                     packet = packet.Prev;
                 }
