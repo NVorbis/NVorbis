@@ -79,50 +79,53 @@ namespace NVorbis
                     }
                     else
                     {
+                        // mark the entry as unused
                         Lengths[i] = -1;
                     }
                 }
             }
-            MaxBits = Lengths.Max();
-
-            int sortedCount = 0;
-            int[] codewordLengths = null;
-            if (sparse && total >= Entries >> 2)
+            // figure out the maximum bit size; if all are unused, don't do anything else
+            if ((MaxBits = Lengths.Max()) > -1)
             {
-                codewordLengths = new int[Entries];
-                Array.Copy(Lengths, codewordLengths, Entries);
+                int sortedCount = 0;
+                int[] codewordLengths = null;
+                if (sparse && total >= Entries >> 2)
+                {
+                    codewordLengths = new int[Entries];
+                    Array.Copy(Lengths, codewordLengths, Entries);
 
-                sparse = false;
+                    sparse = false;
+                }
+
+                // compute size of sorted tables
+                if (sparse)
+                {
+                    sortedCount = total;
+                }
+                else
+                {
+                    sortedCount = 0;
+                }
+
+                int sortedEntries = sortedCount;
+
+                int[] values = null;
+                int[] codewords = null;
+                if (!sparse)
+                {
+                    codewords = new int[Entries];
+                }
+                else if (sortedEntries != 0)
+                {
+                    codewordLengths = new int[sortedEntries];
+                    codewords = new int[sortedEntries];
+                    values = new int[sortedEntries];
+                }
+
+                if (!ComputeCodewords(sparse, sortedEntries, codewords, codewordLengths, len: Lengths, n: Entries, values: values)) throw new InvalidDataException();
+
+                PrefixList = Huffman.BuildPrefixedLinkedList(values ?? Enumerable.Range(0, codewords.Length).ToArray(), codewordLengths ?? Lengths, codewords, out PrefixBitLength, out PrefixOverflowTree);
             }
-
-            // compute size of sorted tables
-            if (sparse)
-            {
-                sortedCount = total;
-            }
-            else
-            {
-                sortedCount = 0;
-            }
-
-            int sortedEntries = sortedCount;
-
-            int[] values = null;
-            int[] codewords = null;
-            if (!sparse)
-            {
-                codewords = new int[Entries];
-            }
-            else if (sortedEntries != 0)
-            {
-                codewordLengths = new int[sortedEntries];
-                codewords = new int[sortedEntries];
-                values = new int[sortedEntries];
-            }
-
-            if (!ComputeCodewords(sparse, sortedEntries, codewords, codewordLengths, len: Lengths, n: Entries, values: values)) throw new InvalidDataException();
-
-            PrefixList = Huffman.BuildPrefixedLinkedList(values ?? Enumerable.Range(0, codewords.Length).ToArray(), codewordLengths ?? Lengths, codewords, out PrefixBitLength, out PrefixOverflowTree);
         }
 
         bool ComputeCodewords(bool sparse, int sortedEntries, int[] codewords, int[] codewordLengths, int[] len, int n, int[] values)
