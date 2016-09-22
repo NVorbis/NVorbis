@@ -26,20 +26,23 @@ namespace NVorbis
         internal StreamReadBuffer(Stream source, int initialSize, int maxSize, bool minimalRead)
         {
             StreamWrapper wrapper;
-            if (!_lockObjects.TryGetValue(source, out wrapper))
+            lock(_lockObjects)
             {
-                _lockObjects.Add(source, new StreamWrapper { Source = source });
-                wrapper = _lockObjects[source];
-
-                if (source.CanSeek)
+                if (!_lockObjects.TryGetValue(source, out wrapper))
                 {
-                    // assume that this is a quick operation
-                    wrapper.EofOffset = source.Length;
+                    _lockObjects.Add(source, new StreamWrapper { Source = source });
+                    wrapper = _lockObjects[source];
+    
+                    if (source.CanSeek)
+                    {
+                        // assume that this is a quick operation
+                        wrapper.EofOffset = source.Length;
+                    }
                 }
-            }
-            else
-            {
-                wrapper.RefCount++;
+                else
+                {
+                    wrapper.RefCount++;
+                }
             }
 
             // make sure our initial size is a power of 2 (this makes resizing simpler to understand)
@@ -58,9 +61,12 @@ namespace NVorbis
 
         public void Dispose()
         {
-            if (--_wrapper.RefCount == 0)
+            lock( _lockObjects )
             {
-                _lockObjects.Remove(_wrapper.Source);
+                if (--_wrapper.RefCount == 0)
+                {
+                    _lockObjects.Remove(_wrapper.Source);
+                }
             }
         }
 
