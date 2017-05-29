@@ -88,7 +88,8 @@ namespace NVorbis.Ogg
         {
             _eosFound = true;
 
-            _container.DisposePacketReader(this);
+            if (_container != null)
+                _container.DisposePacketReader(this);
             _container = null;
 
             _current = null;
