@@ -5,18 +5,21 @@
     <RootNamespace>NVorbis</RootNamespace>
     <Description>A fully managed implementation of a Xiph.org Foundation Ogg Vorbis decoder.</Description>
     <Company>Andrew Ward</Company>
-    <Copyright>Copyright © Andrew Ward 2014</Copyright>
-    <AssemblyVersion>0.8.4.0</AssemblyVersion>
-    <FileVersion>0.8.4.0</FileVersion>
+    <Copyright>Copyright © Andrew Ward 2018</Copyright>
+    <AssemblyVersion>0.8.5.0</AssemblyVersion>
+    <FileVersion>0.8.5.0</FileVersion>
     <Authors>Andrew Ward</Authors>
-    <Version>0.8.4.0</Version>
-    <PackageLicenseUrl>http://nvorbis.codeplex.com/license</PackageLicenseUrl>
-    <PackageProjectUrl>http://nvorbis.codeplex.com/</PackageProjectUrl>
-    <PackageReleaseNotes>- BugFix: Fix forward seeking when target page ends with partial packet.
-- Mdct: Make transform thread-safe</PackageReleaseNotes>
+    <Version>0.8.5.0</Version>
+    <PackageLicenseUrl>https://github.com/ioctlLR/NVorbis/blob/master/LICENSE</PackageLicenseUrl>
+    <PackageProjectUrl>https://github.com/ioctlLR/NVorbis</PackageProjectUrl>
+    <PackageReleaseNotes>- .Net Standard 2.0 support.</PackageReleaseNotes>
     <PackageTags>ogg vorbis xiph audio c# sound .NET</PackageTags>
     <NeutralLanguage>en</NeutralLanguage>
-    <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <RepositoryUrl>https://github.com/ioctlLR/NVorbis</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 
 </Project>
