@@ -51,11 +51,8 @@
     <CodeAnalysisFailOnMissingRules>false</CodeAnalysisFailOnMissingRules>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="NAudio">
-      <HintPath>..\packages\NAudio.1.5\lib\NAudio.dll</HintPath>
-    </Reference>
-    <Reference Include="OpenTK">
-      <HintPath>..\packages\opentk_unoffical.1.1.788.3121\lib\OpenTK.dll</HintPath>
+    <Reference Include="OpenTK, Version=3.0.1.0, Culture=neutral, PublicKeyToken=bad199fe84eb3df4, processorArchitecture=MSIL">
+      <HintPath>..\packages\OpenTK.3.0.1\lib\net20\OpenTK.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
@@ -69,17 +66,12 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="OpenTKStreamingTest.cs" />
-    <Compile Include="NAudioDecodingTests.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\NVorbis\NVorbis.csproj">
       <Project>{A372E591-DFEF-49C4-9C82-98C4361EFCCD}</Project>
       <Name>NVorbis</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\NAudioSupport\NAudioSupport.csproj">
-      <Project>{6FC9AAA7-E7FE-4BD4-B813-582D4B3BDA0C}</Project>
-      <Name>NAudioSupport</Name>
     </ProjectReference>
     <ProjectReference Include="..\OpenTKSupport\OpenTKSupport.csproj">
       <Project>{7BABE72F-07E3-40E9-A65B-4EF98029AE6B}</Project>
@@ -99,6 +91,7 @@
       <Link>3test.ogg</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Include="OpenTK.dll.config" />
     <None Include="packages.config" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

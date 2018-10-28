@@ -13,7 +13,7 @@ Lib/obj/
 NAudioSupport/obj/
 TestApp/bin/
 TestApp/obj/
-
+.vs/
 
 [Tt]est[Rr]esult
 [Bb]uild[Ll]og.*
