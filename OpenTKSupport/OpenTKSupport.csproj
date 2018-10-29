@@ -22,6 +22,7 @@
     <PackageId>NVorbis.OpenTKSupport</PackageId>
     <Product>NVorbis.OpenTKSupport</Product>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <AssemblyName>NVorbis.OpenTKSupport</AssemblyName>
   </PropertyGroup>
 
   <ItemGroup>

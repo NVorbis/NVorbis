@@ -74,7 +74,7 @@
       <Name>NVorbis</Name>
     </ProjectReference>
     <ProjectReference Include="..\OpenTKSupport\OpenTKSupport.csproj">
-      <Project>{7BABE72F-07E3-40E9-A65B-4EF98029AE6B}</Project>
+      <Project>{7babe72f-07e3-40e9-a65b-4ef98029ae6b}</Project>
       <Name>OpenTKSupport</Name>
     </ProjectReference>
   </ItemGroup>
