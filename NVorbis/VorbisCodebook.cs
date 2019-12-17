@@ -8,26 +8,64 @@
 using System;
 using System.Linq;
 using System.IO;
+using System.Collections;
+using System.Collections.Generic;
 
 namespace NVorbis
 {
     class VorbisCodebook
     {
+        // This is "borrowed" from GitHub: MichalX2002/MonoGame.NVorbis
+        class FastRange : IReadOnlyList<int>
+        {
+            [ThreadStatic]
+            static FastRange _cachedRange;
+
+            internal static FastRange Get(int start, int count)
+            {
+                var fr = _cachedRange ?? (_cachedRange = new FastRange());
+                fr._start = start;
+                fr._count = count;
+                return fr;
+            }
+
+            int _start;
+            int _count;
+
+            private FastRange() { }
+
+            public int this[int index]
+            {
+                get
+                {
+                    if (index > _count) throw new ArgumentOutOfRangeException();
+                    return _start + index;
+                }
+            }
+
+            public int Count => _count;
+
+            public IEnumerator<int> GetEnumerator()
+            {
+                throw new NotSupportedException();
+            }
+
+            IEnumerator IEnumerable.GetEnumerator()
+            {
+                return GetEnumerator();
+            }
+        }
+
         internal static VorbisCodebook Init(VorbisStreamDecoder vorbis, DataPacket packet, int number)
         {
-            var temp = new VorbisCodebook();
-            temp.BookNum = number;
-            temp.Init(packet);
-            return temp;
+            return new VorbisCodebook(packet, number);
         }
 
-        private VorbisCodebook()
+        private VorbisCodebook(DataPacket packet, int number)
         {
+            // save off the book number
+            BookNum = number;
 
-        }
-
-        internal void Init(DataPacket packet)
-        {
             // first, check the sync pattern
             var chkVal = packet.ReadBits(24);
             if (chkVal != 0x564342UL) throw new InvalidDataException();
@@ -124,7 +162,9 @@ namespace NVorbis
 
                 if (!ComputeCodewords(sparse, sortedEntries, codewords, codewordLengths, len: Lengths, n: Entries, values: values)) throw new InvalidDataException();
 
-                PrefixList = Huffman.BuildPrefixedLinkedList(values ?? Enumerable.Range(0, codewords.Length).ToArray(), codewordLengths ?? Lengths, codewords, out PrefixBitLength, out PrefixOverflowTree);
+                var valueList = (IReadOnlyList<int>)values ?? FastRange.Get(0, codewords.Length);
+
+                PrefixList = Huffman.BuildPrefixedLinkedList(valueList, codewordLengths ?? Lengths, codewords, out PrefixBitLength, out PrefixOverflowTree);
             }
         }
 

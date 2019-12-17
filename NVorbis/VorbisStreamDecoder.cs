@@ -179,9 +179,25 @@ namespace NVorbis
             ResetDecoder(doFullReset);
         }
 
+        static readonly byte[] PacketSignatureStream = { 0x01, 0x76, 0x6f, 0x72, 0x62, 0x69, 0x73 };
+        static readonly byte[] PacketSignatureComments = { 0x03, 0x76, 0x6f, 0x72, 0x62, 0x69, 0x73 };
+        static readonly byte[] PacketSignatureBooks = { 0x05, 0x76, 0x6f, 0x72, 0x62, 0x69, 0x73 };
+
+        static bool ValidateHeader(DataPacket packet, byte[] expected)
+        {
+            for (var i = 0; i < expected.Length; i++)
+            {
+                if (expected[i] != packet.ReadByte())
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
         bool ProcessStreamHeader(DataPacket packet)
         {
-            if (!packet.ReadBytes(7).SequenceEqual(new byte[] { 0x01, 0x76, 0x6f, 0x72, 0x62, 0x69, 0x73 }))
+            if (!ValidateHeader(packet, PacketSignatureStream))
             {
                 // don't mark the packet as done... it might be used elsewhere
                 _glueBits += packet.Length * 8;
@@ -222,8 +238,9 @@ namespace NVorbis
 
         bool LoadComments(DataPacket packet)
         {
-            if (!packet.ReadBytes(7).SequenceEqual(new byte[] { 0x03, 0x76, 0x6f, 0x72, 0x62, 0x69, 0x73 }))
+            if (!ValidateHeader(packet, PacketSignatureComments))
             {
+                _glueBits += packet.Length * 8;
                 return false;
             }
 
@@ -247,8 +264,9 @@ namespace NVorbis
 
         bool LoadBooks(DataPacket packet)
         {
-            if (!packet.ReadBytes(7).SequenceEqual(new byte[] { 0x05, 0x76, 0x6f, 0x72, 0x62, 0x69, 0x73 }))
+            if (!ValidateHeader(packet, PacketSignatureBooks))
             {
+                _glueBits += packet.Length * 8;
                 return false;
             }
 

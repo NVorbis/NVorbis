@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net35</TargetFrameworks>
+    <TargetFrameworks>net45</TargetFrameworks>
     <RootNamespace>NVorbis.OpenTKSupport</RootNamespace>
     <Description>OpenTK support for NVorbis</Description>
     <Company>Renaud Bedard</Company>

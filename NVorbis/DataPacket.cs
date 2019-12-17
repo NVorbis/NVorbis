@@ -394,14 +394,14 @@ namespace NVorbis
         /// <returns>A byte array holding the data read.</returns>
         public byte[] ReadBytes(int count)
         {
-            var buf = new List<byte>(count);
+            var buf = new byte[count];
 
-            while (buf.Count < count)
+            for (var i = 0; i < count; i++)
             {
-                buf.Add(ReadByte());
+                buf[i] = ReadByte();
             }
 
-            return buf.ToArray();
+            return buf;
         }
 
         /// <summary>
@@ -414,7 +414,8 @@ namespace NVorbis
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is less than 0 or <paramref name="index"/> + <paramref name="count"/> is past the end of <paramref name="buffer"/>.</exception>
         public int Read(byte[] buffer, int index, int count)
         {
-            if (index < 0 || index + count > buffer.Length) throw new ArgumentOutOfRangeException("index");
+            if (index < 0 || index >= buffer.Length) throw new ArgumentOutOfRangeException("index");
+            if (count < 0 || index + count > buffer.Length) throw new ArgumentOutOfRangeException("count");
             for (int i = 0; i < count; i++)
             {
                 int cnt;
