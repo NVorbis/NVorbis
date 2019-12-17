@@ -197,7 +197,7 @@ namespace NVorbis.Ogg
 
         public bool CanSeek
         {
-            get { return _container.CanSeek; }
+            get { return true; }
         }
 
         // This is fast path... don't make the caller wait if we can help it...
@@ -248,9 +248,6 @@ namespace NVorbis.Ogg
 
         internal void ReadAllPages()
         {
-            if (!CanSeek) throw new InvalidOperationException();
-
-            // don't hold the lock any longer than we have to
             while (!_eosFound)
             {
                 _container.GatherNextPage(_streamSerial);
@@ -286,7 +283,6 @@ namespace NVorbis.Ogg
 
         public DataPacket GetPacket(int packetIndex)
         {
-            if (!CanSeek) throw new InvalidOperationException();
             if (packetIndex < 0) throw new ArgumentOutOfRangeException("index");
 
             // if _first is null, something is borked
