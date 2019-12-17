@@ -319,16 +319,21 @@ namespace NVorbis.Ogg
                     var b = _stream.ReadByte();
                     if (b == 0x4f)
                     {
-                        if (_stream.ReadByte() == 0x67 && _stream.ReadByte() == 0x67 && _stream.ReadByte() == 0x53)
-                        {
-                            // found it!
-                            startPos += cnt;
-                            break;
-                        }
-                        else
-                        {
-                            _stream.Seek(-3, SeekOrigin.Current);
-                        }
+                        if (_stream.ReadByte() == 0x67)
+						{
+							if (_stream.ReadByte() == 0x67)
+							{
+								if (_stream.ReadByte() == 0x53)
+								{
+									// found it!
+									startPos += cnt;
+									break;
+								}
+								_stream.Seek(-1, SeekOrigin.Current);
+							}
+							_stream.Seek(-1, SeekOrigin.Current);
+						}
+                        _stream.Seek(-1, SeekOrigin.Current);
                     }
                     else if (b == -1)
                     {
