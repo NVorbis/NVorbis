@@ -38,17 +38,15 @@ namespace NVorbis
         public VorbisReader(Stream stream, bool closeStreamOnDispose)
             : this()
         {
-            var bufferedStream = new BufferedReadStream(stream);
-            bufferedStream.CloseBaseStream = closeStreamOnDispose;
-
-            // try Ogg first
-            var oggContainer = new Ogg.ContainerReader(bufferedStream, closeStreamOnDispose);
+            var oggContainer = new Ogg.ContainerReader(stream, closeStreamOnDispose);
             if (!LoadContainer(oggContainer))
             {
                 // oops, not Ogg!
-                // we don't support any other container types yet, so error out
-                // TODO: Add Matroska fallback
-                bufferedStream.Close();
+                // we don't support any other container types here, so error out
+                if (closeStreamOnDispose)
+                {
+                    stream.Close();
+                }
                 throw new InvalidDataException("Could not determine container type!");
             }
             _containerReader = oggContainer;

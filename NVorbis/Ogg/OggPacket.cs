@@ -103,17 +103,5 @@ namespace NVorbis.Ogg
             }
             return b;
         }
-
-        public override void Done()
-        {
-            if (_mergedPacket != null)
-            {
-                _mergedPacket.Done();
-            }
-            else
-            {
-                _containerReader.PacketDiscardThrough(_offset + _length);
-            }
-        }
     }
 }
