@@ -15,7 +15,7 @@ namespace NVorbis
 {
     class VorbisCodebook
     {
-        // This is "borrowed" from GitHub: MichalX2002/MonoGame.NVorbis
+        // This is "borrowed" from GitHub: TechnologicalPizza/MonoGame.NVorbis
         class FastRange : IReadOnlyList<int>
         {
             [ThreadStatic]

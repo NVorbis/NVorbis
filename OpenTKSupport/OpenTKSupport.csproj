@@ -6,13 +6,13 @@
     <Description>OpenTK support for NVorbis</Description>
     <Company>Renaud Bedard</Company>
     <Copyright>Public Domain</Copyright>
-    <AssemblyVersion>1.2.0</AssemblyVersion>
-    <FileVersion>1.2.0</FileVersion>
+    <AssemblyVersion>1.3.0</AssemblyVersion>
+    <FileVersion>1.3.0</FileVersion>
     <Authors>Renaud Bedard</Authors>
-    <Version>1.2.0</Version>
-    <PackageLicenseUrl>https://github.com/ioctlLR/NVorbis/blob/master/OpenTKSupport/readme.txt</PackageLicenseUrl>
+    <Version>1.3.0</Version>
+    <PackageLicenseUrl></PackageLicenseUrl>
     <PackageProjectUrl>https://github.com/ioctlLR/NVorbis</PackageProjectUrl>
-    <PackageReleaseNotes>- Now using official OpenTK package.</PackageReleaseNotes>
+    <PackageReleaseNotes>- Changed from net35 to net45.</PackageReleaseNotes>
     <PackageTags>audio c# .NET sound vorbis OpenTK OpenAL</PackageTags>
     <NeutralLanguage>en</NeutralLanguage>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
@@ -23,6 +23,7 @@
     <Product>NVorbis.OpenTKSupport</Product>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <AssemblyName>NVorbis.OpenTKSupport</AssemblyName>
+    <PackageLicenseFile>readme.txt</PackageLicenseFile>
   </PropertyGroup>
 
   <ItemGroup>
@@ -31,6 +32,13 @@
 
   <ItemGroup>
     <ProjectReference Include="..\NVorbis\NVorbis.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="readme.txt">
+      <Pack>True</Pack>
+      <PackagePath></PackagePath>
+    </None>
   </ItemGroup>
 
 </Project>
