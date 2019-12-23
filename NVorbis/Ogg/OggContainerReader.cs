@@ -90,7 +90,10 @@ namespace NVorbis.Ogg
             _containerBits = 0L;
             _wasteBits = 0L;
 
-            _stream.Dispose();
+            if (_closeOnDispose)
+            {
+                _stream.Dispose();
+            }
         }
 
         /// <summary>
