@@ -75,7 +75,7 @@ namespace NVorbis
                 var mux = new int[_vorbis._channels];
                 if (submapCount > 1)
                 {
-                    for (int c = 0; c < ChannelSubmap.Length; c++)
+                    for (int c = 0; c < mux.Length; c++)
                     {
                         mux[c] = (int)packet.ReadBits(4);
                         if (mux[c] >= submapCount) throw new InvalidDataException();

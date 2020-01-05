@@ -7,7 +7,6 @@
  ***************************************************************************/
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.IO;
 
 namespace NVorbis
@@ -285,20 +284,24 @@ namespace NVorbis
 
             protected override void Init(DataPacket packet)
             {
+                var maximum_class = -1;
                 _partitionClass = new int[(int)packet.ReadBits(5)];
                 for (int i = 0; i < _partitionClass.Length; i++)
                 {
                     _partitionClass[i] = (int)packet.ReadBits(4);
+                    if (_partitionClass[i] > maximum_class)
+                    {
+                        maximum_class = _partitionClass[i];
+                    }
                 }
 
-                var maximum_class = _partitionClass.Max();
-                _classDimensions = new int[maximum_class + 1];
-                _classSubclasses = new int[maximum_class + 1];
-                _classMasterbooks = new VorbisCodebook[maximum_class + 1];
-                _classMasterBookIndex = new int[maximum_class + 1];
-                _subclassBooks = new VorbisCodebook[maximum_class + 1][];
-                _subclassBookIndex = new int[maximum_class + 1][];
-                for (int i = 0; i <= maximum_class; i++)
+                _classDimensions = new int[++maximum_class];
+                _classSubclasses = new int[maximum_class];
+                _classMasterbooks = new VorbisCodebook[maximum_class];
+                _classMasterBookIndex = new int[maximum_class];
+                _subclassBooks = new VorbisCodebook[maximum_class][];
+                _subclassBookIndex = new int[maximum_class][];
+                for (int i = 0; i < maximum_class; i++)
                 {
                     _classDimensions[i] = (int)packet.ReadBits(3) + 1;
                     _classSubclasses[i] = (int)packet.ReadBits(2);
