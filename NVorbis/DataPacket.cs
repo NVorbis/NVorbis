@@ -139,11 +139,6 @@ namespace NVorbis
                 {
                     bitsRead = _bitCount;
                     value = _bitBucket;
-                    _bitBucket = 0;
-                    _bitCount = 0;
-
-                    IsShort = true;
-
                     return value;
                 }
                 _bitBucket = (ulong)(val & 0xFF) << _bitCount | _bitBucket;
