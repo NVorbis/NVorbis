@@ -178,17 +178,20 @@ namespace NVorbis.Ogg
 
                 // while we're here, count up the number of packets in the page
                 var dataLen = 0;
+                var pktLen = 0;
                 short pktCnt = 0;
                 for (var j = 0; j < segCount; j++)
                 {
                     var segLen = _headerBuf[27 + j];
                     _crc.Update(segLen);
+                    pktLen += segLen;
                     dataLen += segLen;
                     if (segLen < 255 || j == segCount - 1)
                     {
-                        if (segLen > 0)
+                        if (pktLen > 0)
                         {
                             ++pktCnt;
+                            pktLen = 0;
                         }
                     }
                 }
