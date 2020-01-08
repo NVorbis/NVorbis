@@ -5,6 +5,7 @@
  * See COPYING for license terms (Ms-PL).                                   *
  *                                                                          *
  ***************************************************************************/
+using NVorbis.Contracts;
 using System;
 
 namespace NVorbis
@@ -16,20 +17,20 @@ namespace NVorbis
     public class NewStreamEventArgs : EventArgs
     {
         /// <summary>
-        /// Creates a new instance of <see cref="NewStreamEventArgs"/> with the specified <see cref="IPacketProvider"/>.
+        /// Creates a new instance of <see cref="NewStreamEventArgs"/> with the specified <see cref="IStreamDecoder"/>.
         /// </summary>
-        /// <param name="packetProvider">An <see cref="IPacketProvider"/> instance.</param>
-        public NewStreamEventArgs(IPacketProvider packetProvider)
+        /// <param name="streamDecoder">An <see cref="IStreamDecoder"/> instance.</param>
+        public NewStreamEventArgs(IStreamDecoder streamDecoder)
         {
-            if (packetProvider == null) throw new ArgumentNullException("packetProvider");
+            if (streamDecoder == null) throw new ArgumentNullException("packetProvider");
 
-            PacketProvider = packetProvider;
+            StreamDecoder = streamDecoder;
         }
 
         /// <summary>
-        /// Gets new the <see cref="IPacketProvider"/> instance.
+        /// Gets new the <see cref="IStreamDecoder"/> instance.
         /// </summary>
-        public IPacketProvider PacketProvider { get; private set; }
+        public IStreamDecoder StreamDecoder { get; private set; }
 
         /// <summary>
         /// Gets or sets whether to ignore the logical stream associated with the packet provider.

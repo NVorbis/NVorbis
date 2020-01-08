@@ -98,7 +98,7 @@ namespace NVorbis.OpenTKSupport
                     case ALSourceState.Stopped:
                         lock (prepareMutex)
                         {
-                            Reader.DecodedTime = TimeSpan.Zero;
+                            Reader.Streams[0].TimePosition = TimeSpan.Zero;
                             Ready = false;
                             Empty();
                         }
@@ -147,7 +147,7 @@ namespace NVorbis.OpenTKSupport
                 return;
 
             OggStreamer.Instance.RemoveStream(this);
-            Logger.Log(LogEvent.Pause, this); 
+            Logger.Log(LogEvent.Pause, this);
             AL.SourcePause(alSourceId);
             ALHelper.Check();
         }
@@ -158,7 +158,7 @@ namespace NVorbis.OpenTKSupport
                 return;
 
             OggStreamer.Instance.AddStream(this);
-            Logger.Log(LogEvent.Resume, this); 
+            Logger.Log(LogEvent.Resume, this);
             AL.SourcePlay(alSourceId);
             ALHelper.Check();
         }
@@ -168,7 +168,7 @@ namespace NVorbis.OpenTKSupport
             var state = AL.GetSourceState(alSourceId);
             if (state == ALSourceState.Playing || state == ALSourceState.Paused)
             {
-                Logger.Log(LogEvent.Stop, this); 
+                Logger.Log(LogEvent.Stop, this);
                 StopPlayback();
             }
 
@@ -413,7 +413,7 @@ namespace NVorbis.OpenTKSupport
         }
         internal bool RemoveStream(OggStream stream)
         {
-            lock (iterationMutex) 
+            lock (iterationMutex)
                 return streams.Remove(stream);
         }
 
@@ -421,16 +421,16 @@ namespace NVorbis.OpenTKSupport
         {
             int readSamples;
             lock (readMutex)
-            {   
-                readSamples = stream.Reader.ReadSamples(readSampleBuffer, 0, BufferSize);
+            {
+                readSamples = stream.Reader.Streams[0].ReadSamples(readSampleBuffer, 0, BufferSize, out _);
                 CastBuffer(readSampleBuffer, castBuffer, readSamples);
             }
-            AL.BufferData(bufferId, stream.Reader.Channels == 1 ? ALFormat.Mono16 : ALFormat.Stereo16, castBuffer,
-                          readSamples * sizeof (short), stream.Reader.SampleRate);
+            AL.BufferData(bufferId, stream.Reader.Streams[0].Channels == 1 ? ALFormat.Mono16 : ALFormat.Stereo16, castBuffer,
+                          readSamples * sizeof(short), stream.Reader.Streams[0].SampleRate);
             ALHelper.Check();
 
-            if (readSamples == BufferSize)  Logger.Log(LogEvent.NewPacket, stream);
-            else                            Logger.Log(LogEvent.LastPacket, stream);
+            if (readSamples == BufferSize) Logger.Log(LogEvent.NewPacket, stream);
+            else Logger.Log(LogEvent.LastPacket, stream);
             Logger.Log(LogEventSingle.MemoryUsage, () => GC.GetTotalMemory(true));
 
             return readSamples != BufferSize;
@@ -487,7 +487,7 @@ namespace NVorbis.OpenTKSupport
                             {
                                 if (stream.IsLooped)
                                 {
-                                    stream.Reader.DecodedTime = TimeSpan.Zero;
+                                    stream.Reader.Streams[0].TimePosition = TimeSpan.Zero;
                                     if (bufIdx == 0)
                                     {
                                         // we didn't have any buffers left over, so let's start from the beginning on the next cycle...

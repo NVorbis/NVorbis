@@ -12,7 +12,7 @@ using System.Text;
 
 namespace NVorbis.Ogg
 {
-    class Crc
+    class Crc : Contracts.Ogg.ICrc
     {
         const uint CRC32_POLY = 0x04c11db7;
         static uint[] crcTable = new uint[256];

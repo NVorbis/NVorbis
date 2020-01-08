@@ -16,6 +16,79 @@ namespace TestApp
 
         static void Main()
         {
+            var startMem = GC.GetTotalMemory(true);
+            var sw = Stopwatch.StartNew();
+            //using (var container = new NVorbis.Ogg.LightContainerReader(System.IO.File.OpenRead(@"C:\Users\Dad\Music\01 - 1812 Overture.ogg"), true))
+            //using (var reader = new NVorbis.VorbisReader(container))
+            //{
+            //    var buf = new float[reader.Streams[0].Channels * reader.Streams[0].SampleRate / 4];
+            //    while (reader.Streams[0].ReadSamples(buf, 0, buf.Length, out var isParmChange) > 0 || isParmChange)
+            //    {
+            //        if (isParmChange)
+            //        {
+            //            buf = new float[reader.Streams[0].Channels * reader.Streams[0].SampleRate / 4];
+            //            reader.Streams[0].ClearParameterChange();
+            //        }
+            //    }
+            //}
+            using (var container = new NVorbis.Ogg.ContainerReader(System.IO.File.OpenRead(@"C:\Users\Dad\Music\01 - 1812 Overture.ogg"), true))
+            {
+                if (container.Init())
+                {
+                    using (var decoder = new NVorbis.StreamDecoder(container.Streams[0]))
+                    //using (var bw = new System.IO.BinaryWriter(System.IO.File.Create(@"C:\Users\Dad\Music\01 - 1812 Overture.raw")))
+                    {
+                        var buf = new float[decoder.Channels * decoder.SampleRate / 4];
+                        //for (var i = 0; i < 4; i++)
+                        {
+                            //decoder.SeekTo(0);
+                            var ttl = 0L;
+                            int cnt;
+                            while ((cnt = decoder.ReadSamples(buf, 0, buf.Length, out var isParmChange)) > 0 || isParmChange)
+                            {
+                                ttl += cnt / decoder.Channels;
+                                if (ttl != decoder.SamplePosition)
+                                {
+
+                                }
+                                //for (var i = 0; i < cnt; i++)
+                                //{
+                                //    bw.Write(buf[i]);
+                                //}
+                                if (isParmChange)
+                                {
+                                    buf = new float[decoder.Channels * decoder.SampleRate / 4];
+                                    decoder.ClearParameterChange();
+                                }
+                            }
+                        }
+                    }
+                    //var stream = container.Streams[0];
+                    //NVorbis.Contracts.IPacket packet;
+                    //while ((packet = stream.GetNextPacket()) != null)
+                    //{
+                    //    int bitsRead;
+                    //    do
+                    //    {
+                    //        packet.TryPeekBits(32, out bitsRead);
+                    //        packet.SkipBits(bitsRead);
+                    //    }
+                    //    while (bitsRead > 0);
+
+                    //    packet.Done();
+
+                    //    if (packet.IsEndOfStream)
+                    //    {
+                    //        break;
+                    //    }
+                    //}
+                }
+            }
+            sw.Stop();
+            var endMem1 = GC.GetTotalMemory(false);
+            var endMem2 = GC.GetTotalMemory(true);
+            Console.WriteLine($"{sw.Elapsed.TotalSeconds}s ({endMem1 - startMem:N0} bytes, {endMem1 - endMem2:N0} collected)");
+            return;
 #if TRACE
             Trace.Listeners.Add(new ConsoleTraceListener());
 #endif
