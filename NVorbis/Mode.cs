@@ -131,13 +131,36 @@ namespace NVorbis
                 }
             }
 
-            var leftOverlapSize = (prevFlag ? _block1Size : _block0Size) / 4;
-            var rightOverlapSize = (nextFlag ? _block1Size : _block0Size) / 4;
+            var leftOverlapHalfSize = (prevFlag ? _block1Size : _block0Size) / 4;
+            var rightOverlapHalfSize = (nextFlag ? _block1Size : _block0Size) / 4;
 
-            packetStartindex = blockSize / 4 - leftOverlapSize;
-            packetTotalLength = blockSize / 4 * 3 + rightOverlapSize;
-            packetValidLength = packetTotalLength - rightOverlapSize * 2;
+            packetStartindex = blockSize / 4 - leftOverlapHalfSize;
+            packetTotalLength = blockSize / 4 * 3 + rightOverlapHalfSize;
+            packetValidLength = packetTotalLength - rightOverlapHalfSize * 2;
             return true;
+        }
+
+        public int GetPacketSampleCount(IPacket packet)
+        {
+            int blockSize;
+            bool prevFlag;
+            bool nextFlag;
+            if (_blockFlag)
+            {
+                blockSize = _block1Size;
+                prevFlag = packet.ReadBit();
+                nextFlag = packet.ReadBit();
+            }
+            else
+            {
+                blockSize = _block0Size;
+                prevFlag = nextFlag = false;
+            }
+
+            var leftOverlapHalfSize = (prevFlag ? _block1Size : _block0Size) / 4;
+            var rightOverlapHalfSize = (nextFlag ? _block1Size : _block0Size) / 4;
+
+            return blockSize / 4 * 3 - rightOverlapHalfSize - (blockSize / 4 - leftOverlapHalfSize);
         }
 
         public int BlockSize => _blockFlag ? _block1Size : _block0Size;

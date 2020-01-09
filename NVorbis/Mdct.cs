@@ -35,8 +35,6 @@ namespace NVorbis
             float[] _A, _B, _C;
             ushort[] _bitrev;
 
-            System.Threading.ThreadLocal<float[]> _buf2;
-
             public MdctImpl(int n)
             {
                 _n = n;
@@ -70,15 +68,13 @@ namespace NVorbis
                 {
                     _bitrev[i] = (ushort)(Utils.BitReverse((uint)i, _ld - 3) << 2);
                 }
-
-                _buf2 = new System.Threading.ThreadLocal<float[]>(() => new float[_n2]);
             }
 
             internal void CalcReverse(float[] buffer)
             {
-                float[] u, v, buf2;
+                float[] u, v;
 
-                buf2 = _buf2.Value;
+                var buf2 = new float[_n2];
 
                 // copy and reflect spectral data
                 // step 0

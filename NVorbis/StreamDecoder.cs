@@ -23,11 +23,11 @@ namespace NVorbis
         private bool _isParameterChange;
         private bool _hasClipped;
         private int _modeFieldBits;
+        private float[][] _nextPacketBuf;
         private float[][] _prevPacketBuf;
         private int _prevPacketStart;
         private int _prevPacketEnd;
         private int _prevPacketLen;
-        private float[][] _nextPacketBuf;
 
         public StreamDecoder(IPacketProvider packetProvider)
             : this(packetProvider, new Factory())
@@ -255,76 +255,57 @@ namespace NVorbis
                 return 0;
             }
 
-            // track total count written to buffer
+            // save off value to track when we're done with the request
             var idx = offset;
             var tgt = offset + count;
 
-            // read data from the output buffer until no more prepared data, done, or next packet is param change or resync
+            // try to fill the buffer
+            _hasClipped = false;
             while (idx < tgt && !isParameterChange && !_eosFound)
             {
-                // try to read in the previous packet's available samples
-                if (_prevPacketEnd > 0 && _prevPacketStart < _prevPacketEnd)
+                // first we read out any valid samples from the previous packet
+                var copyLen = Math.Min((tgt - idx) / _channels, _prevPacketEnd - _prevPacketStart);
+                if (copyLen > 0)
                 {
-                    for (; _prevPacketStart < _prevPacketEnd && idx < tgt; _prevPacketStart++)
+                    if (ClipSamples)
                     {
-                        for (var c = 0; c < _channels; c++)
-                        {
-                            buffer[idx++] = _prevPacketBuf[c][_prevPacketStart];
-                        }
+                        idx += ClippingCopyBuffer(_prevPacketBuf, ref _prevPacketStart, buffer, ref idx, copyLen, _channels, ref _hasClipped);
+                    }
+                    else
+                    {
+                        idx += CopyBuffer(_prevPacketBuf, ref _prevPacketStart, buffer, ref idx, copyLen, _channels);
                     }
                 }
 
-                // if more needed, grab the next packet and start overlapping
+                // then we grab the next packet, but only if we actually need more samples
                 if (idx < tgt)
                 {
-                    // if we enter here, it's because we don't have any more ready samples in the previous packet
-
+                    // decode the next packet now so we can start overlapping with it
                     var curPacket = DecodeNextPacket(out var startIndex, out var validLen, out var totalLen, out isParameterChange);
                     if (curPacket == null)
                     {
-                        _prevPacketBuf = null;
-                        _prevPacketStart = 0;
-                        _prevPacketEnd = 0;
-                        _prevPacketLen = 0;
+                        ResetDecoder();
                         _isParameterChange |= isParameterChange;
                         break;
                     }
 
-                    var i = startIndex;
+                    // start overlapping (if we don't have an previous packet data, just loop and the previous packet logic will handle things appropriately)
                     if (_prevPacketEnd > 0)
                     {
-                        // read out the overlapped samples from both packets
-                        for (; _prevPacketStart < _prevPacketLen && i < validLen && idx < tgt; _prevPacketStart++, i++)
-                        {
-                            for (var c = 0; c < _channels; c++)
-                            {
-                                buffer[idx++] = _prevPacketBuf[c][_prevPacketStart] + curPacket[c][i];
-                            }
-                        }
-
-                        // corner case: if we don't read enough samples to finish out the previous packet, we'll just update curPacket's data prior to moving it to previous
-                        if (_prevPacketStart < _prevPacketLen)
-                        {
-                            for (var j = i; _prevPacketStart < _prevPacketLen; _prevPacketStart++, j++)
-                            {
-                                for (var c = 0; c < _channels; c++)
-                                {
-                                    curPacket[c][j] += _prevPacketBuf[c][_prevPacketStart];
-                                }
-                            }
-                        }
+                        // overlap the first samples in the packet with the previous packet, then loop
+                        OverlapBuffers(_prevPacketBuf, curPacket, _prevPacketStart, _prevPacketLen, startIndex, _channels);
+                        _prevPacketStart = startIndex;
                     }
                     else if (_prevPacketBuf == null)
                     {
-                        // first in the series, so it doesn't have any good data before the valid length
-                        i = validLen;
+                        // first packet, so it doesn't have any good data before the valid length
+                        _prevPacketStart = validLen;
                     }
 
                     // keep the old buffer so the GC doesn't have to reallocate every packet
                     _nextPacketBuf = _prevPacketBuf;
 
                     // save off our current packet's data for the next pass
-                    _prevPacketStart = i;
                     _prevPacketEnd = validLen;
                     _prevPacketLen = totalLen;
                     _prevPacketBuf = curPacket;
@@ -335,18 +316,34 @@ namespace NVorbis
 
             _currentPosition += count / _channels;
 
-            // if clipping enabled, clip samples
-            if (ClipSamples)
+            // return count of samples written
+            return count;
+        }
+
+        private static int ClippingCopyBuffer(float[][] source, ref int sourceIndex, float[] target, ref int targetIndex, int count, int channels, ref bool hasClipped)
+        {
+            var endIndex = sourceIndex + count;
+            for (; sourceIndex < endIndex; sourceIndex++)
             {
-                _hasClipped = false;
-                for (var i = 0; i < count; i++, offset++)
+                for (var ch = 0; ch < channels; ch++)
                 {
-                    buffer[offset] = Utils.ClipValue(buffer[offset], ref _hasClipped);
+                    target[targetIndex++] = Utils.ClipValue(source[ch][sourceIndex], ref hasClipped);
                 }
             }
+            return count * channels;
+        }
 
-            // return count of sample written
-            return count;
+        private static int CopyBuffer(float[][] source, ref int sourceIndex, float[] target, ref int targetIndex, int count, int channels)
+        {
+            var endIndex = sourceIndex + count;
+            for (; sourceIndex < endIndex; sourceIndex++)
+            {
+                for (var ch = 0; ch < channels; ch++)
+                {
+                    target[targetIndex++] = source[ch][sourceIndex];
+                }
+            }
+            return count * channels;
         }
 
         private float[][] DecodeNextPacket(out int packetStartindex, out int packetValidLength, out int packetTotalLength, out bool isParameterChange)
@@ -392,7 +389,7 @@ namespace NVorbis
                 var mode = _modes[(int)packet.ReadBits(_modeFieldBits)];
                 if (_nextPacketBuf == null)
                 {
-                    var _nextPacketBuf = new float[_channels][];
+                    _nextPacketBuf = new float[_channels][];
                     for (var i = 0; i < _channels; i++)
                     {
                         _nextPacketBuf[i] = new float[_block1Size];
@@ -407,6 +404,17 @@ namespace NVorbis
             finally
             {
                 packet?.Done();
+            }
+        }
+
+        private static void OverlapBuffers(float[][] previous, float[][] next, int prevStart, int prevLen, int nextStart, int channels)
+        {
+            for (; prevStart < prevLen; prevStart++, nextStart++)
+            {
+                for (var c = 0; c < channels; c++)
+                {
+                    next[c][nextStart] += previous[c][prevStart];
+                }
             }
         }
 
@@ -481,21 +489,15 @@ namespace NVorbis
             if (lastPacket == null || curPacket.IsResync) return 0;
 
             // make sure they are audio packets
-            if (curPacket.ReadBit()) return 0;
-            if (lastPacket.ReadBit()) return 0;
+            if (curPacket.ReadBit() || lastPacket.ReadBit()) return 0;
 
             // get the current packet's information
             var modeIdx = (int)curPacket.ReadBits(_modeFieldBits);
-            if (modeIdx < 0 || modeIdx >= _modes.Length) return 0;
+            if (modeIdx < 0 || modeIdx >= _modes.Length) return 0;  // invalid mode, so by definition there's not any audio data here
             var mode = _modes[modeIdx];
 
-            // get the last packet's information
-            modeIdx = (int)lastPacket.ReadBits(_modeFieldBits);
-            if (modeIdx < 0 || modeIdx >= _modes.Length) return 0;
-            var prevMode = _modes[modeIdx];
-
-            // now calculate the totals...
-            return mode.BlockSize / 4 + prevMode.BlockSize / 4;
+            // ask the mode to calculate the length for us
+            return mode.GetPacketSampleCount(curPacket);
         }
 
         public void Dispose()
