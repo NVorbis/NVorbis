@@ -148,30 +148,32 @@ namespace NVorbis
                     {
                         float newM, newA;
 
-                        if (magnitude[j] > 0)
+                        var oldM = magnitude[j];
+                        var oldA = angle[j];
+                        if (oldM > 0)
                         {
-                            if (angle[j] > 0)
+                            if (oldA > 0)
                             {
-                                newM = magnitude[j];
-                                newA = magnitude[j] - angle[j];
+                                newM = oldM;
+                                newA = oldM - oldA;
                             }
                             else
                             {
-                                newA = magnitude[j];
-                                newM = magnitude[j] + angle[j];
+                                newA = oldM;
+                                newM = oldM + oldA;
                             }
                         }
                         else
                         {
-                            if (angle[j] > 0)
+                            if (oldA > 0)
                             {
-                                newM = magnitude[j];
-                                newA = magnitude[j] + angle[j];
+                                newM = oldM;
+                                newA = oldM + oldA;
                             }
                             else
                             {
-                                newA = magnitude[j];
-                                newM = magnitude[j] - angle[j];
+                                newA = oldM;
+                                newM = oldM - oldA;
                             }
                         }
 

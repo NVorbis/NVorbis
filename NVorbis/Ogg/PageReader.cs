@@ -1,9 +1,7 @@
-﻿using NVorbis.Contracts;
-using NVorbis.Contracts.Ogg;
+﻿using NVorbis.Contracts.Ogg;
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Threading;
 
 namespace NVorbis.Ogg

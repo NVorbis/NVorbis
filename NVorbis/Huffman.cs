@@ -6,6 +6,7 @@
  *                                                                          *
  ***************************************************************************/
 using System;
+using System.Collections.Generic;
 
 namespace NVorbis
 {
@@ -13,7 +14,7 @@ namespace NVorbis
     {
         const int MAX_TABLE_BITS = 10;
 
-        static internal System.Collections.Generic.List<HuffmanListNode> BuildPrefixedLinkedList(System.Collections.Generic.IReadOnlyList<int> values, int[] lengthList, int[] codeList, out int tableBits, out HuffmanListNode firstOverflowNode)
+        static internal List<HuffmanListNode> BuildPrefixedLinkedList(IReadOnlyList<int> values, int[] lengthList, int[] codeList, out int tableBits, out HuffmanListNode firstOverflowNode)
         {
             HuffmanListNode[] list = new HuffmanListNode[lengthList.Length];
 
@@ -37,7 +38,7 @@ namespace NVorbis
 
             tableBits = maxLen > MAX_TABLE_BITS ? MAX_TABLE_BITS : maxLen;
 
-            var prefixList = new System.Collections.Generic.List<HuffmanListNode>(1 << tableBits);
+            var prefixList = new List<HuffmanListNode>(1 << tableBits);
             firstOverflowNode = null;
             for (int i = 0; i < list.Length && list[i].Length < 99999; i++)
             {

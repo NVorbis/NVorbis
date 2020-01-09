@@ -29,8 +29,8 @@ namespace NVorbis
 
         public void Init(IPacket packet, int channels, int block0Size, int block1Size, ICodebook[] codebooks)
         {
-            _partitionClass = new int[(int)packet.ReadBits(5)];
             var maximum_class = -1;
+            _partitionClass = new int[(int)packet.ReadBits(5)];
             for (int i = 0; i < _partitionClass.Length; i++)
             {
                 _partitionClass[i] = (int)packet.ReadBits(4);
@@ -40,13 +40,13 @@ namespace NVorbis
                 }
             }
 
-            _classDimensions = new int[maximum_class + 1];
-            _classSubclasses = new int[maximum_class + 1];
-            _classMasterbooks = new Codebook[maximum_class + 1];
-            _classMasterBookIndex = new int[maximum_class + 1];
-            _subclassBooks = new Codebook[maximum_class + 1][];
-            _subclassBookIndex = new int[maximum_class + 1][];
-            for (int i = 0; i <= maximum_class; i++)
+            _classDimensions = new int[++maximum_class];
+            _classSubclasses = new int[maximum_class];
+            _classMasterbooks = new ICodebook[maximum_class];
+            _classMasterBookIndex = new int[maximum_class];
+            _subclassBooks = new ICodebook[maximum_class][];
+            _subclassBookIndex = new int[maximum_class][];
+            for (int i = 0; i < maximum_class; i++)
             {
                 _classDimensions[i] = (int)packet.ReadBits(3) + 1;
                 _classSubclasses[i] = (int)packet.ReadBits(2);
@@ -56,7 +56,7 @@ namespace NVorbis
                     _classMasterbooks[i] = codebooks[_classMasterBookIndex[i]];
                 }
 
-                _subclassBooks[i] = new Codebook[1 << _classSubclasses[i]];
+                _subclassBooks[i] = new ICodebook[1 << _classSubclasses[i]];
                 _subclassBookIndex[i] = new int[_subclassBooks[i].Length];
                 for (int j = 0; j < _subclassBooks[i].Length; j++)
                 {
