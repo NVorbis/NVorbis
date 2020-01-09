@@ -74,7 +74,7 @@ namespace NVorbis
             }
 
             // now the lookups
-            _books = new Codebook[_classifications][];
+            _books = new ICodebook[_classifications][];
 
             acc = 0;
             var maxstage = 0;
@@ -82,7 +82,7 @@ namespace NVorbis
             for (int j = 0; j < _classifications; j++)
             {
                 stages = Utils.ilog(_cascade[j]);
-                _books[j] = new Codebook[stages];
+                _books[j] = new ICodebook[stages];
                 if (stages > 0)
                 {
                     maxstage = Math.Max(maxstage, stages);

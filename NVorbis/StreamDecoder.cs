@@ -32,10 +32,6 @@ namespace NVorbis
         public StreamDecoder(IPacketProvider packetProvider)
             : this(packetProvider, new Factory())
         {
-            if (!TryInit())
-            {
-                throw new ArgumentException("Could not initialize decoder!", nameof(packetProvider));
-            }
         }
 
         internal StreamDecoder(IPacketProvider packetProvider, IFactory factory)
@@ -44,19 +40,18 @@ namespace NVorbis
             _factory = factory ?? throw new ArgumentNullException(nameof(factory));
 
             _packetProvider.ParameterChangeCallback = SetParameterChangePacket;
-        }
 
-        internal bool TryInit()
-        {
             _currentPosition = 0L;
 
-            return ProcessParameterChange();
+            if (!ProcessParameterChange())
+            {
+                _packetProvider.ParameterChangeCallback = null;
+                _packetProvider = null;
+                throw new ArgumentException("Invalid Vorbis stream!", nameof(packetProvider));
+            }
         }
 
-        private void SetParameterChangePacket(IPacket packet)
-        {
-            _parameterChangePacket = packet ?? throw new ArgumentNullException(nameof(packet));
-        }
+        #region Init
 
         private bool ProcessParameterChange()
         {
@@ -230,6 +225,20 @@ namespace NVorbis
             return true;
         }
 
+        #endregion
+
+        #region State Change
+
+        private void SetParameterChangePacket(IPacket packet)
+        {
+            _parameterChangePacket = packet ?? throw new ArgumentNullException(nameof(packet));
+        }
+
+        public void ClearParameterChange()
+        {
+            _isParameterChange = false;
+        }
+
         private void ResetDecoder()
         {
             _prevPacketBuf = null;
@@ -238,12 +247,12 @@ namespace NVorbis
             _prevPacketLen = 0;
             _nextPacketBuf = null;
             _isParameterChange = false;
+            _eosFound = false;
         }
 
-        public void ClearParameterChange()
-        {
-            _isParameterChange = false;
-        }
+        #endregion
+
+        #region Decoding
 
         public int ReadSamples(float[] buffer, int offset, int count, out bool isParameterChange)
         {
@@ -261,7 +270,7 @@ namespace NVorbis
 
             // try to fill the buffer
             _hasClipped = false;
-            while (idx < tgt && !isParameterChange && !_eosFound)
+            while (idx < tgt)
             {
                 // first we read out any valid samples from the previous packet
                 var copyLen = Math.Min((tgt - idx) / _channels, _prevPacketEnd - _prevPacketStart);
@@ -277,16 +286,39 @@ namespace NVorbis
                     }
                 }
 
+                // if we're in a parameter change, no more data should be decoded until the caller acks
+                if (isParameterChange)
+                {
+                    break;
+                }
+
+                // if we've found the end of the stream, no more data is available
+                if (_eosFound)
+                {
+                    break;
+                }
+
                 // then we grab the next packet, but only if we actually need more samples
                 if (idx < tgt)
                 {
                     // decode the next packet now so we can start overlapping with it
-                    var curPacket = DecodeNextPacket(out var startIndex, out var validLen, out var totalLen, out isParameterChange);
+                    var curPacket = DecodeNextPacket(out var startIndex, out var validLen, out var totalLen, out isParameterChange, out var maxSamplePosition);
                     if (curPacket == null)
                     {
                         ResetDecoder();
                         _isParameterChange |= isParameterChange;
                         break;
+                    }
+
+                    // if we get a max sample position, back off our valid length to match
+                    if (maxSamplePosition.HasValue)
+                    {
+                        var actualEnd = _currentPosition + (idx - offset) / _channels + validLen - startIndex;
+                        var diff = (int)(maxSamplePosition.Value - actualEnd);
+                        if (diff < 0)
+                        {
+                            validLen += diff;
+                        }
                     }
 
                     // start overlapping (if we don't have an previous packet data, just loop and the previous packet logic will handle things appropriately)
@@ -346,12 +378,13 @@ namespace NVorbis
             return count * channels;
         }
 
-        private float[][] DecodeNextPacket(out int packetStartindex, out int packetValidLength, out int packetTotalLength, out bool isParameterChange)
+        private float[][] DecodeNextPacket(out int packetStartindex, out int packetValidLength, out int packetTotalLength, out bool isParameterChange, out long? maxSamplePosition)
         {
             packetStartindex = 0;
             packetValidLength = 0;
             packetTotalLength = 0;
             isParameterChange = false;
+            maxSamplePosition = null;
 
             IPacket packet = null;
             try
@@ -379,6 +412,12 @@ namespace NVorbis
                     return null;
                 }
 
+                // if the packet is flagged as the end of the stream, we can safely mark _eosFound
+                if (packet.IsEndOfStream)
+                {
+                    _eosFound = true;
+                }
+
                 // make sure the packet starts with a 0 bit as per the spec
                 if (packet.ReadBit())
                 {
@@ -397,6 +436,11 @@ namespace NVorbis
                 }
                 if (mode.Decode(packet, _nextPacketBuf, out packetStartindex, out packetValidLength, out packetTotalLength))
                 {
+                    // per the spec, do not decode more samples than the last granulePosition
+                    if (packet.IsEndOfStream && packet.PageGranulePosition > 0)
+                    {
+                        maxSamplePosition = packet.PageGranulePosition;
+                    }
                     return _nextPacketBuf;
                 }
                 return null;
@@ -418,6 +462,10 @@ namespace NVorbis
             }
         }
 
+        #endregion
+
+        #region Seeking
+
         public void SeekTo(TimeSpan timePosition)
         {
             SeekTo((long)(SampleRate * timePosition.TotalSeconds));
@@ -427,84 +475,86 @@ namespace NVorbis
         {
             if (samplePosition < 0) throw new ArgumentOutOfRangeException(nameof(samplePosition));
 
-            IPacket packet;
-            if (samplePosition > 0)
+            if (samplePosition == 0)
             {
-                packet = _packetProvider.FindPacket(samplePosition, GetPacketLength);
+                // short circuit for the looping case...
+                _packetProvider.SeekToPacket(_packetProvider.GetPacket(3), 0);
+                _currentPosition = 0;
+                ResetDecoder();
+            }
+            else
+            {
+                // gotta actually look for the correct packet...
+                var packet = _packetProvider.FindPacket(samplePosition, GetPacketGranules);
                 if (packet == null)
                 {
                     throw new ArgumentOutOfRangeException(nameof(samplePosition));
                 }
-            }
-            else
-            {
-                packet = _packetProvider.GetPacket(4);
-            }
 
-            // seek the stream
-            _packetProvider.SeekToPacket(packet, 1);
+                // update our position to match the actual position at the end of the previous packet
+                // this works because we'll never decode anything prior to the current packet's samples
+                _currentPosition = packet.GranulePosition - GetPacketGranules(packet, false);
 
-            // now figure out where we are and how many samples we need to discard...
-            // note that we use the granule position of the "current" packet, since it will be discarded no matter what
-
-            // get the packet that we'll decode next
-            var lastPacket = _packetProvider.PeekNextPacket();
-
-            // now read samples until we are exactly at the granule position requested
-            if (samplePosition > 0)
-            {
-                // we had to seek to somewhere beyond the first packet with audio data, so figure out what that granule position would be
-                // packet.GranulePosition will be set from _packetProvider.FindPacket(...)
-                _currentPosition = packet.GranulePosition - GetPacketLength(packet, lastPacket);
-            }
-            else
-            {
-                // we merely did a seek to the first data packet, so the granule position is by definition 0
-                _currentPosition = 0;
-            }
-            //_preparedLength = 0;
-            _eosFound = false;
-
-            // make sure we reset everything
-            lastPacket.Done();
-            packet.Done();
-            ResetDecoder();
-
-            var cnt = (int)((samplePosition - SamplePosition) * _channels);
-            if (cnt > 0)
-            {
-                var seekBuffer = new float[cnt];
-                while (cnt > 0)
+                // if we did a seek to within the first audio packet returning data, _currentPosition might be negative
+                if (_currentPosition < 0)
                 {
-                    var temp = ReadSamples(seekBuffer, 0, cnt, out _);
-                    if (temp == 0) break;   // we're at the end...
-                    cnt -= temp;
+                    // so the fix is to seek to the very first audio packet and allow the logic below to accomplish the rest of the seek
+                    packet.Done();
+                    packet = _packetProvider.GetPacket(4);
+
+                    _currentPosition = 0;
+                }
+
+                // seek the stream to the packet _before_ the found packet
+                _packetProvider.SeekToPacket(packet, 1);
+
+                // make sure we reset everything
+                packet.Done();
+                ResetDecoder();
+
+                // now decode samples until we're in exactly the right spot...
+                var cnt = (int)((samplePosition - SamplePosition) * _channels);
+                if (cnt > 0)
+                {
+                    var seekBuffer = new float[cnt];
+                    while (cnt > 0)
+                    {
+                        var temp = ReadSamples(seekBuffer, 0, cnt, out _);
+                        if (temp == 0) break;   // we're at the end...
+                        cnt -= temp;
+                    }
                 }
             }
         }
 
-        private int GetPacketLength(IPacket curPacket, IPacket lastPacket)
+        private int GetPacketGranules(IPacket curPacket, bool isFirst)
         {
-            // if we don't have a previous packet, or we're re-syncing, this packet has no audio data to return
-            if (lastPacket == null || curPacket.IsResync) return 0;
+            // if it's a resync, there's not any audio data to return
+            if (curPacket.IsResync) return 0;
 
-            // make sure they are audio packets
-            if (curPacket.ReadBit() || lastPacket.ReadBit()) return 0;
+            // if it's not an audio packet, there's no audio data (seems obvious, though...)
+            if (curPacket.ReadBit()) return 0;
 
-            // get the current packet's information
+            // OK, let's ask the appropriate mode how long this packet actually is
+
+            // first we need to know which mode...
             var modeIdx = (int)curPacket.ReadBits(_modeFieldBits);
-            if (modeIdx < 0 || modeIdx >= _modes.Length) return 0;  // invalid mode, so by definition there's not any audio data here
-            var mode = _modes[modeIdx];
 
-            // ask the mode to calculate the length for us
-            return mode.GetPacketSampleCount(curPacket);
+            // if we got an invalid mode value, we can't decode any audio data anyway...
+            if (modeIdx < 0 || modeIdx >= _modes.Length) return 0;
+
+            return _modes[modeIdx].GetPacketSampleCount(curPacket, isFirst);
         }
+
+        #endregion
 
         public void Dispose()
         {
             _packetProvider?.Dispose();
             _packetProvider = null;
         }
+
+        #region Properties
 
         public int Channels => _channels;
 
@@ -537,5 +587,7 @@ namespace NVorbis
         public bool ClipSamples { get; set; }
 
         public bool HasClipped => _hasClipped;
+
+        #endregion
     }
 }

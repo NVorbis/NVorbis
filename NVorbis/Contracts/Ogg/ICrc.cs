@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-
-namespace NVorbis.Contracts.Ogg
+﻿namespace NVorbis.Contracts.Ogg
 {
     interface ICrc
     {

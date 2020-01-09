@@ -1,11 +1,4 @@
-﻿/****************************************************************************
- * NVorbis                                                                  *
- * Copyright (C) 2014, Andrew Ward <afward@gmail.com>                       *
- *                                                                          *
- * See COPYING for license terms (Ms-PL).                                   *
- *                                                                          *
- ***************************************************************************/
-using NVorbis.Contracts;
+﻿using NVorbis.Contracts;
 using System;
 
 namespace NVorbis

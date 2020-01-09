@@ -1,10 +1,9 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace NVorbis.Contracts
 {
+    public delegate int GetPacketGranuleCount(IPacket packet, bool isFirst);
+
     public interface IPacketProvider : IDisposable
     {
         int StreamSerial { get; }
@@ -19,7 +18,7 @@ namespace NVorbis.Contracts
 
         long GetGranuleCount();
 
-        IPacket FindPacket(long granulePos, Func<IPacket, IPacket, int> packetGranuleCountCallback);
+        IPacket FindPacket(long granulePos, GetPacketGranuleCount getPacketGranuleCount);
 
         void SeekToPacket(IPacket packet, int preRoll);
     }

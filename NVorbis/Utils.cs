@@ -1,11 +1,4 @@
-﻿/****************************************************************************
- * NVorbis                                                                  *
- * Copyright (C) 2014, Andrew Ward <afward@gmail.com>                       *
- *                                                                          *
- * See COPYING for license terms (Ms-PL).                                   *
- *                                                                          *
- ***************************************************************************/
-namespace NVorbis
+﻿namespace NVorbis
 {
     static class Utils
     {

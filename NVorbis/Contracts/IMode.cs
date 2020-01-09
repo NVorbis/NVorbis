@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-
-namespace NVorbis.Contracts
+﻿namespace NVorbis.Contracts
 {
     interface IMode
     {
@@ -13,6 +9,6 @@ namespace NVorbis.Contracts
 
         bool Decode(IPacket packet, float[][] buffer, out int packetStartindex, out int packetValidLength, out int packetTotalLength);
 
-        int GetPacketSampleCount(IPacket packet);
+        int GetPacketSampleCount(IPacket packet, bool isFirst);
     }
 }

@@ -3,13 +3,12 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
-using System.Text;
 
 namespace NVorbis
 {
     class Codebook : ICodebook
     {
-        // This is "borrowed" from GitHub: TechnologicalPizza/MonoGame.NVorbis
+        // This class is "borrowed" from GitHub: TechnologicalPizza/MonoGame.NVorbis
         class FastRange : IReadOnlyList<int>
         {
             [ThreadStatic]

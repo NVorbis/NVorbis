@@ -1,7 +1,5 @@
 ﻿using NVorbis.Contracts;
 using System;
-using System.Collections.Generic;
-using System.Text;
 
 namespace NVorbis
 {
@@ -140,7 +138,7 @@ namespace NVorbis
             return true;
         }
 
-        public int GetPacketSampleCount(IPacket packet)
+        public int GetPacketSampleCount(IPacket packet, bool isFirst)
         {
             int blockSize;
             bool prevFlag;
@@ -160,7 +158,7 @@ namespace NVorbis
             var leftOverlapHalfSize = (prevFlag ? _block1Size : _block0Size) / 4;
             var rightOverlapHalfSize = (nextFlag ? _block1Size : _block0Size) / 4;
 
-            return blockSize / 4 * 3 - rightOverlapHalfSize - (blockSize / 4 - leftOverlapHalfSize);
+            return blockSize / 4 * 3 - rightOverlapHalfSize - (blockSize / 4 + (isFirst ? leftOverlapHalfSize : -leftOverlapHalfSize));
         }
 
         public int BlockSize => _blockFlag ? _block1Size : _block0Size;

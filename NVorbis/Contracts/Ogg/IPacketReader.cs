@@ -1,11 +1,12 @@
-﻿using NVorbis.Ogg;
-
-namespace NVorbis.Contracts.Ogg
+﻿namespace NVorbis.Contracts.Ogg
 {
-    interface IPacketReader
+    interface IPacketReader : IPacketProvider
     {
-        void AddPage(PageFlags flags, bool isResync, int seqNbr, long pageOffset, short packetCount, long granulePos);
+        int PagesRead { get; }
+
+        void AddPage(PageFlags flags, bool isResync, int seqNbr, long pageOffset);
         void InvalidatePacketCache(IPacket packet);
+        int GetTotalPageCount();
         void SetEndOfStream();
     }
 }

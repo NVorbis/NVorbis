@@ -24,9 +24,10 @@ namespace NVorbis.Contracts.Ogg
         PageFlags PageFlags { get; }
         long GranulePosition { get; }
         short PacketCount { get; }
-        bool IsResync { get; }
+        bool? IsResync { get; }
+        bool IsContinued { get; }
 
-        List<Tuple<long, int>> GetPackets(out bool lastContinues);
+        List<Tuple<long, int>> GetPackets();
 
         int Read(long offset, byte[] buffer, int index, int count);
     }

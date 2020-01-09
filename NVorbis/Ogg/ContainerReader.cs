@@ -1,4 +1,5 @@
 ﻿using NVorbis.Contracts;
+using NVorbis.Contracts.Ogg;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -10,7 +11,9 @@ namespace NVorbis.Ogg
     /// </summary>
     public sealed class ContainerReader : IContainerReader
     {
-        Contracts.Ogg.IPageReader _reader;
+        internal static Func<Stream, bool, Func<IPacketProvider, bool>, IPageReader> CreatePageReader { get; set; } = (s, cod, cb) => new PageReader(s, cod, cb);
+
+        IPageReader _reader;
         List<IPacketProvider> _streams;
 
         /// <summary>
@@ -46,18 +49,18 @@ namespace NVorbis.Ogg
             {
                 throw new ArgumentException("Stream must be seek-able!", nameof(stream));
             }
-            _reader = new PageReader(stream, closeOnDispose, ProcessNewStream);
+            _reader = CreatePageReader(stream, closeOnDispose, ProcessNewStream);
             _streams = new List<IPacketProvider>();
-        }
 
-        /// <summary>
-        /// Initializes the container and finds the first stream.
-        /// </summary>
-        /// <returns><c>True</c> if a valid logical stream is found, otherwise <c>False</c>.</returns>
-        public bool Init()
-        {
-            // if we find a stream at all, init was successful
-            return FindNextStream();
+            if (!FindNextStream())
+            {
+                if (closeOnDispose)
+                {
+                    _reader.Dispose();
+                }
+                _reader = null;
+                throw new ArgumentException("Could not find any streams in the container!  Is it an Ogg format file?", nameof(stream));
+            }
         }
 
         /// <summary>
@@ -85,7 +88,7 @@ namespace NVorbis.Ogg
             }
         }
 
-        private bool ProcessNewStream(PacketProvider packetProvider)
+        private bool ProcessNewStream(IPacketProvider packetProvider)
         {
             var relock = _reader.Release();
             try
@@ -105,39 +108,6 @@ namespace NVorbis.Ogg
                 }
             }
         }
-
-        /// <summary>
-        /// Retrieves the number of pages read in the logical stream having the specified stream serial.
-        /// </summary>
-        /// <param name="streamSerial">The serial number of the logical stream to query.</param>
-        /// <returns>The number of pages read in the logical stream if found, otherwise 0.</returns>
-        //public int GetStreamPageCount(int streamSerial) => _reader.GetStreamPagesRead(streamSerial);
-
-        /// <summary>
-        /// Retrieves the total number of pages in the logical stream having the specified stream serial.
-        /// </summary>
-        /// <param name="streamSerial">The serial number of the logical stream to query.</param>
-        /// <returns>The total number of pages in the logical stream if found, otherwise 0.</returns>
-        /// <exception cref="InvalidOperationException"><see cref="IContainerReader.CanSeek"/> is <c>False</c>.</exception>
-        //public int GetStreamTotalPageCount(int streamSerial) => _reader.GetStreamTotalPageCount(streamSerial);
-
-        /// <summary>
-        /// Retrieves the total number of pages in the container.
-        /// </summary>
-        /// <returns>The total number of pages.</returns>
-        //public int GetTotalPageCount()
-        //{
-        //    _reader.Lock();
-        //    try
-        //    {
-        //        _reader.ReadAllPages();
-        //        return _reader.PageCount;
-        //    }
-        //    finally
-        //    {
-        //        _reader.Release();
-        //    }
-        //}
 
         /// <summary>
         /// Cleans up

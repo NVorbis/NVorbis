@@ -1,4 +1,5 @@
 ﻿using NVorbis.Contracts;
+using NVorbis.Contracts.Ogg;
 using System;
 using System.Collections.Generic;
 
@@ -48,8 +49,8 @@ namespace NVorbis.Ogg
             User4 = 0x80,
         }
 
-        PageReader _reader;                 // IntPtr
-        PacketProvider _packetProvider;     // IntPtr
+        IPageReader _reader;                // IntPtr
+        IPacketReader _packetProvider;      // IntPtr
         IList<Tuple<long, int>> _dataSrc;   // IntPtr + segment_count * 12
         int _dataIndex;                     // 4
         int _dataOfs;                       // 4
@@ -62,10 +63,11 @@ namespace NVorbis.Ogg
         PacketFlags _packetFlags;   // 1
         int _granuleCount;          // 4
 
-        internal Packet(PageReader reader, PacketProvider packetProvider, int index, IList<Tuple<long, int>> data)
+        internal Packet(IPageReader reader, IPacketReader packetProvider, int pageIndex, int index, IList<Tuple<long, int>> data)
         {
             _reader = reader;
             _packetProvider = packetProvider;
+            PageIndex = pageIndex;
             Index = index;
             _dataSrc = data;
         }
@@ -77,6 +79,7 @@ namespace NVorbis.Ogg
         }
 
         internal int Index { get; }
+        internal int PageIndex { get; }
 
         public bool IsResync
         {
@@ -280,7 +283,7 @@ namespace NVorbis.Ogg
         int ReadNextByte()
         {
             if (_dataIndex == _dataSrc.Count) return -1;
-            
+
             if (_dataOfs == 0)
             {
                 var ofs = _dataSrc[_dataIndex].Item1;
@@ -302,7 +305,7 @@ namespace NVorbis.Ogg
             }
 
             var b = _dataBuf[_dataOfs];
-            
+
             if (++_dataOfs == _dataSrc[_dataIndex].Item2)
             {
                 _dataOfs = 0;
@@ -311,7 +314,7 @@ namespace NVorbis.Ogg
                     _dataBuf = null;
                 }
             }
-            
+
             return b;
         }
     }

@@ -1,7 +1,5 @@
 ﻿using NVorbis.Contracts;
 using System;
-using System.Collections.Generic;
-using System.Text;
 
 namespace NVorbis
 {
@@ -136,7 +134,7 @@ namespace NVorbis
             }
 
             // inverse coupling
-            for (var i = _couplingAngle.Length - 1; i >=0; i--)
+            for (var i = _couplingAngle.Length - 1; i >= 0; i--)
             {
                 if (floorData[_couplingAngle[i]].ExecuteChannel || floorData[_couplingMangitude[i]].ExecuteChannel)
                 {

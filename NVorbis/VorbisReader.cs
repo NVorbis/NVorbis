@@ -7,6 +7,9 @@ namespace NVorbis
 {
     public sealed class VorbisReader : IDisposable
     {
+        internal static Func<Stream, bool, IContainerReader> CreateContainerReader { get; set; } = (s, cod) => new Ogg.ContainerReader(s, cod);
+        internal static Func<IPacketProvider, IStreamDecoder> CreateStreamDecoder { get; set; } = pp => new StreamDecoder(pp, new Factory());
+
         private List<IStreamDecoder> _decoders;
         private IContainerReader _containerReader;
         private bool _isOwned;
@@ -19,7 +22,7 @@ namespace NVorbis
         }
 
         public VorbisReader(Stream stream, bool isOwned = true)
-            : this(new Ogg.ContainerReader(stream, isOwned))
+            : this(CreateContainerReader(stream, isOwned), true)
         {
         }
 
@@ -52,9 +55,9 @@ namespace NVorbis
 
         private bool ProcessNewStream(IPacketProvider packetProvider)
         {
-            var decoder = new StreamDecoder(packetProvider, new Factory());
-            if (decoder.TryInit())
+            try
             {
+                var decoder = CreateStreamDecoder(packetProvider);
                 var ea = new NewStreamEventArgs(decoder);
                 NewStream?.Invoke(this, ea);
                 if (!ea.IgnoreStream)
@@ -63,6 +66,9 @@ namespace NVorbis
                     decoder.ClipSamples = true;
                     return true;
                 }
+            }
+            catch
+            {
             }
             return false;
         }

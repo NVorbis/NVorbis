@@ -1,4 +1,5 @@
-﻿using NVorbis.Contracts.Ogg;
+﻿using NVorbis.Contracts;
+using NVorbis.Contracts.Ogg;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -8,18 +9,21 @@ namespace NVorbis.Ogg
 {
     internal class PageReader : IPageReader
     {
-        private readonly Dictionary<int, PacketProvider> _packetProviders = new Dictionary<int, PacketProvider>();
+        internal static Func<ICrc> CreateCrc { get; set; } = () => new Crc();
+        internal static Func<IPageReader, IPacketReader> CreatePacketProvider { get; set; } = pr => new PacketProvider(pr);
+
+        private readonly Dictionary<int, IPacketReader> _packetProviders = new Dictionary<int, IPacketReader>();
         private readonly HashSet<int> _ignoredSerials = new HashSet<int>();
-        private readonly Crc _crc = new Crc();
+        private readonly ICrc _crc = CreateCrc();
         private readonly object _readLock = new object();
         private readonly byte[] _headerBuf = new byte[282];
 
         private Stream _stream;
         private bool _closeOnDispose;
-        private readonly Func<PacketProvider, bool> _newStreamCallback;
+        private readonly Func<IPacketProvider, bool> _newStreamCallback;
         private long _nextPageOffset;
 
-        public PageReader(Stream stream, bool closeOnDispose, Func<PacketProvider, bool> newStreamCallback)
+        public PageReader(Stream stream, bool closeOnDispose, Func<IPacketProvider, bool> newStreamCallback)
         {
             _stream = stream;
             _closeOnDispose = closeOnDispose;
@@ -56,7 +60,8 @@ namespace NVorbis.Ogg
         public PageFlags PageFlags { get; private set; }
         public long GranulePosition { get; private set; }
         public short PacketCount { get; private set; }
-        public bool IsResync { get; private set; }
+        public bool? IsResync { get; private set; }
+        public bool IsContinued { get; private set; }
 
         // look for the next page header, decode it, and check CRC
         public bool ReadNextPage()
@@ -97,10 +102,9 @@ namespace NVorbis.Ogg
                         cnt += _stream.Read(_headerBuf, cnt, _headerBuf.Length - cnt);
 
                         // try to load the page
-                        if (CheckPage(pageOffset, out var pktCnt, out var nextPageOffset))
+                        if (CheckPage(pageOffset, out var nextPageOffset))
                         {
                             // good packet!
-                            PacketCount = pktCnt;
                             _nextPageOffset = nextPageOffset;
 
                             // try to add it to the appropriate packet provider; if it returns false, we're ignoring the page's logical stream
@@ -153,7 +157,7 @@ namespace NVorbis.Ogg
             return false;
         }
 
-        private bool CheckPage(long pageOffset, out short packetCount, out long nextPageOffset)
+        private bool CheckPage(long pageOffset, out long nextPageOffset)
         {
             if (DecodeHeader())
             {
@@ -172,31 +176,14 @@ namespace NVorbis.Ogg
                 _crc.Update(0);
                 _crc.Update(segCount);
 
-                // while we're here, count up the number of packets in the page
+                // get the total size of the data while updating the CRC
                 var dataLen = 0;
-                var pktLen = 0;
-                short pktCnt = 0;
                 for (var j = 0; j < segCount; j++)
                 {
                     var segLen = _headerBuf[27 + j];
                     _crc.Update(segLen);
-                    pktLen += segLen;
-                    if (segLen < 255)
-                    {
-                        if (pktLen > 0)
-                        {
-                            ++pktCnt;
-                            dataLen += pktLen;
-                            pktLen = 0;
-                        }
-                    }
+                    dataLen += segLen;
                 }
-                if (pktLen > 0)
-                {
-                    ++pktCnt;
-                    dataLen += pktLen;
-                }
-                packetCount = pktCnt;
 
                 // finish calculating the CRC
                 _stream.Position = pageOffset + 27 + segCount;
@@ -221,7 +208,6 @@ namespace NVorbis.Ogg
                     return true;
                 }
             }
-            packetCount = 0;
             nextPageOffset = 0;
             return false;
         }
@@ -236,7 +222,8 @@ namespace NVorbis.Ogg
                     return false;
                 }
 
-                var packetProvider = new PacketProvider(this);
+                var packetProvider = CreatePacketProvider(this);
+                packetProvider.AddPage(PageFlags, IsResync.Value, SequenceNumber, PageOffset);
                 _packetProviders.Add(StreamSerial, packetProvider);
                 if (!_newStreamCallback(packetProvider))
                 {
@@ -248,7 +235,7 @@ namespace NVorbis.Ogg
             }
             else
             {
-                _packetProviders[StreamSerial].AddPage(PageFlags, IsResync, SequenceNumber, PageOffset, PacketCount, GranulePosition);
+                _packetProviders[StreamSerial].AddPage(PageFlags, IsResync.Value, SequenceNumber, PageOffset);
             }
 
             return true;
@@ -260,6 +247,15 @@ namespace NVorbis.Ogg
             if (!CheckLock()) throw new InvalidOperationException("Must be locked prior to reading!");
 
             // this should be safe; we've already checked the page by now
+
+            if (offset == PageOffset)
+            {
+                // short circuit for when we've already loaded the page
+                return true;
+            }
+
+            // we don't actually know anymore if the page is a resync; don't try to say one way or the other
+            IsResync = null;
 
             _stream.Position = offset;
             _stream.Read(_headerBuf, 0, 27);
@@ -281,17 +277,39 @@ namespace NVorbis.Ogg
                 GranulePosition = BitConverter.ToInt64(_headerBuf, 6);
                 StreamSerial = BitConverter.ToInt32(_headerBuf, 14);
                 SequenceNumber = BitConverter.ToInt32(_headerBuf, 18);
+                var pktLen = 0;
+                short pktCnt = 0;
+                for (var j = 0; j < _headerBuf[26]; j++)
+                {
+                    var segLen = _headerBuf[27 + j];
+                    pktLen += segLen;
+                    if (segLen < 255)
+                    {
+                        if (pktLen > 0)
+                        {
+                            ++pktCnt;
+                            pktLen = 0;
+                        }
+                    }
+                }
+                // if the pktLen has a value left and the last segment isn't 255 (continued), count the packet
+                if (pktLen > 0 && !(IsContinued = _headerBuf[26 + _headerBuf[26]] == 255))
+                {
+                    ++pktCnt;
+                }
+                PacketCount = pktCnt;
                 return true;
             }
             return false;
         }
 
-        public List<Tuple<long, int>> GetPackets(out bool lastContinues)
+        public List<Tuple<long, int>> GetPackets()
         {
+            if (!CheckLock()) throw new InvalidOperationException("Must be locked!");
+
             var segCnt = _headerBuf[26];
             var dataOffset = PageOffset + 27 + segCnt;
             var packets = new List<Tuple<long, int>>(segCnt);
-            lastContinues = false;
 
             if (segCnt > 0)
             {
@@ -312,7 +330,6 @@ namespace NVorbis.Ogg
                 if (size > 0)
                 {
                     packets.Add(new Tuple<long, int>(dataOffset, size));
-                    lastContinues = true;
                 }
             }
             return packets;
