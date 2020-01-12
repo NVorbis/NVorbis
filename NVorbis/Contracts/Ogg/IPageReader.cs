@@ -26,6 +26,7 @@ namespace NVorbis.Contracts.Ogg
         short PacketCount { get; }
         bool? IsResync { get; }
         bool IsContinued { get; }
+        int PageOverhead { get; }
 
         List<Tuple<long, int>> GetPackets();
 

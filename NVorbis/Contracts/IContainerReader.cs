@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace NVorbis.Contracts
 {
     /// <summary>
-    /// Provides a interface for a Vorbis logical stream container.
+    /// Provides an interface for a Vorbis logical stream container.
     /// </summary>
     public interface IContainerReader : IDisposable
     {
@@ -27,6 +27,12 @@ namespace NVorbis.Contracts
         /// Gets the number of bits that were skipped due to container framing and overhead.
         /// </summary>
         long WasteBits { get; }
+
+        /// <summary>
+        /// Attempts to initialize the container.
+        /// </summary>
+        /// <returns><see langword="true"/> if successful, otherwise <see langword="false"/>.</returns>
+        bool TryInit();
 
         /// <summary>
         /// Searches for the next logical stream in the container.

@@ -22,10 +22,10 @@ namespace NVorbis
 
         class MdctImpl
         {
-            int _n, _n2, _n4, _n8, _ld;
+            readonly int _n, _n2, _n4, _n8, _ld;
 
-            float[] _A, _B, _C;
-            ushort[] _bitrev;
+            readonly float[] _a, _b, _c;
+            readonly ushort[] _bitrev;
 
             public MdctImpl(int n)
             {
@@ -37,21 +37,21 @@ namespace NVorbis
                 _ld = Utils.ilog(n) - 1;
 
                 // first, calc the "twiddle factors"
-                _A = new float[_n2];
-                _B = new float[_n2];
-                _C = new float[_n4];
+                _a = new float[_n2];
+                _b = new float[_n2];
+                _c = new float[_n4];
                 int k, k2;
                 for (k = k2 = 0; k < _n4; ++k, k2 += 2)
                 {
-                    _A[k2] = (float)Math.Cos(4 * k * M_PI / n);
-                    _A[k2 + 1] = (float)-Math.Sin(4 * k * M_PI / n);
-                    _B[k2] = (float)Math.Cos((k2 + 1) * M_PI / n / 2) * .5f;
-                    _B[k2 + 1] = (float)Math.Sin((k2 + 1) * M_PI / n / 2) * .5f;
+                    _a[k2] = (float)Math.Cos(4 * k * M_PI / n);
+                    _a[k2 + 1] = (float)-Math.Sin(4 * k * M_PI / n);
+                    _b[k2] = (float)Math.Cos((k2 + 1) * M_PI / n / 2) * .5f;
+                    _b[k2 + 1] = (float)Math.Sin((k2 + 1) * M_PI / n / 2) * .5f;
                 }
                 for (k = k2 = 0; k < _n8; ++k, k2 += 2)
                 {
-                    _C[k2] = (float)Math.Cos(2 * (k2 + 1) * M_PI / n);
-                    _C[k2 + 1] = (float)-Math.Sin(2 * (k2 + 1) * M_PI / n);
+                    _c[k2] = (float)Math.Cos(2 * (k2 + 1) * M_PI / n);
+                    _c[k2 + 1] = (float)-Math.Sin(2 * (k2 + 1) * M_PI / n);
                 }
 
                 // now, calc the bit reverse table
@@ -78,8 +78,8 @@ namespace NVorbis
                     var e_stop = _n2;// buffer
                     while (e != e_stop)
                     {
-                        buf2[d + 1] = (buffer[e] * _A[AA] - buffer[e + 2] * _A[AA + 1]);
-                        buf2[d] = (buffer[e] * _A[AA + 1] + buffer[e + 2] * _A[AA]);
+                        buf2[d + 1] = (buffer[e] * _a[AA] - buffer[e + 2] * _a[AA + 1]);
+                        buf2[d] = (buffer[e] * _a[AA + 1] + buffer[e + 2] * _a[AA]);
                         d -= 2;
                         AA += 2;
                         e += 4;
@@ -88,8 +88,8 @@ namespace NVorbis
                     e = _n2 - 3;
                     while (d >= 0)
                     {
-                        buf2[d + 1] = (-buffer[e + 2] * _A[AA] - -buffer[e] * _A[AA + 1]);
-                        buf2[d] = (-buffer[e + 2] * _A[AA + 1] + -buffer[e] * _A[AA]);
+                        buf2[d + 1] = (-buffer[e + 2] * _a[AA] - -buffer[e] * _a[AA + 1]);
+                        buf2[d] = (-buffer[e + 2] * _a[AA + 1] + -buffer[e] * _a[AA]);
                         d -= 2;
                         AA += 2;
                         e -= 4;
@@ -119,15 +119,15 @@ namespace NVorbis
                         v40_20 = v[e0] - v[e1];
                         u[d0 + 1] = v[e0 + 1] + v[e1 + 1];
                         u[d0] = v[e0] + v[e1];
-                        u[d1 + 1] = v41_21 * _A[AA + 4] - v40_20 * _A[AA + 5];
-                        u[d1] = v40_20 * _A[AA + 4] + v41_21 * _A[AA + 5];
+                        u[d1 + 1] = v41_21 * _a[AA + 4] - v40_20 * _a[AA + 5];
+                        u[d1] = v40_20 * _a[AA + 4] + v41_21 * _a[AA + 5];
 
                         v41_21 = v[e0 + 3] - v[e1 + 3];
                         v40_20 = v[e0 + 2] - v[e1 + 2];
                         u[d0 + 3] = v[e0 + 3] + v[e1 + 3];
                         u[d0 + 2] = v[e0 + 2] + v[e1 + 2];
-                        u[d1 + 3] = v41_21 * _A[AA] - v40_20 * _A[AA + 1];
-                        u[d1 + 2] = v40_20 * _A[AA] + v41_21 * _A[AA + 1];
+                        u[d1 + 3] = v41_21 * _a[AA] - v40_20 * _a[AA + 1];
+                        u[d1 + 2] = v40_20 * _a[AA] + v41_21 * _a[AA + 1];
 
                         AA -= 8;
 
@@ -226,8 +226,8 @@ namespace NVorbis
                         a02 = v[d] - v[e + 2];
                         a11 = v[d + 1] + v[e + 3];
 
-                        b0 = _C[c + 1] * a02 + _C[c] * a11;
-                        b1 = _C[c + 1] * a11 - _C[c] * a02;
+                        b0 = _c[c + 1] * a02 + _c[c] * a11;
+                        b1 = _c[c + 1] * a11 - _c[c] * a02;
 
                         b2 = v[d] + v[e + 2];
                         b3 = v[d + 1] - v[e + 3];
@@ -240,8 +240,8 @@ namespace NVorbis
                         a02 = v[d + 2] - v[e];
                         a11 = v[d + 3] + v[e + 1];
 
-                        b0 = _C[c + 3] * a02 + _C[c + 2] * a11;
-                        b1 = _C[c + 3] * a11 - _C[c + 2] * a02;
+                        b0 = _c[c + 3] * a02 + _c[c + 2] * a11;
+                        b1 = _c[c + 3] * a11 - _c[c + 2] * a02;
 
                         b2 = v[d + 2] + v[e];
                         b3 = v[d + 3] - v[e + 1];
@@ -269,16 +269,16 @@ namespace NVorbis
                     {
                         float p0, p1, p2, p3;
 
-                        p3 = buf2[e + 6] * _B[b + 7] - buf2[e + 7] * _B[b + 6];
-                        p2 = -buf2[e + 6] * _B[b + 6] - buf2[e + 7] * _B[b + 7];
+                        p3 = buf2[e + 6] * _b[b + 7] - buf2[e + 7] * _b[b + 6];
+                        p2 = -buf2[e + 6] * _b[b + 6] - buf2[e + 7] * _b[b + 7];
 
                         buffer[d0] = p3;
                         buffer[d1 + 3] = -p3;
                         buffer[d2] = p2;
                         buffer[d3 + 3] = p2;
 
-                        p1 = buf2[e + 4] * _B[b + 5] - buf2[e + 5] * _B[b + 4];
-                        p0 = -buf2[e + 4] * _B[b + 4] - buf2[e + 5] * _B[b + 5];
+                        p1 = buf2[e + 4] * _b[b + 5] - buf2[e + 5] * _b[b + 4];
+                        p0 = -buf2[e + 4] * _b[b + 4] - buf2[e + 5] * _b[b + 5];
 
                         buffer[d0 + 1] = p1;
                         buffer[d1 + 2] = -p1;
@@ -286,16 +286,16 @@ namespace NVorbis
                         buffer[d3 + 2] = p0;
 
 
-                        p3 = buf2[e + 2] * _B[b + 3] - buf2[e + 3] * _B[b + 2];
-                        p2 = -buf2[e + 2] * _B[b + 2] - buf2[e + 3] * _B[b + 3];
+                        p3 = buf2[e + 2] * _b[b + 3] - buf2[e + 3] * _b[b + 2];
+                        p2 = -buf2[e + 2] * _b[b + 2] - buf2[e + 3] * _b[b + 3];
 
                         buffer[d0 + 2] = p3;
                         buffer[d1 + 1] = -p3;
                         buffer[d2 + 2] = p2;
                         buffer[d3 + 1] = p2;
 
-                        p1 = buf2[e] * _B[b + 1] - buf2[e + 1] * _B[b];
-                        p0 = -buf2[e] * _B[b] - buf2[e + 1] * _B[b + 1];
+                        p1 = buf2[e] * _b[b + 1] - buf2[e + 1] * _b[b];
+                        p0 = -buf2[e] * _b[b] - buf2[e + 1] * _b[b + 1];
 
                         buffer[d0 + 3] = p1;
                         buffer[d1] = -p1;
@@ -325,32 +325,32 @@ namespace NVorbis
                     k01_21 = e[ee0 - 1] - e[ee2 - 1];
                     e[ee0] += e[ee2];
                     e[ee0 - 1] += e[ee2 - 1];
-                    e[ee2] = k00_20 * _A[a] - k01_21 * _A[a + 1];
-                    e[ee2 - 1] = k01_21 * _A[a] + k00_20 * _A[a + 1];
+                    e[ee2] = k00_20 * _a[a] - k01_21 * _a[a + 1];
+                    e[ee2 - 1] = k01_21 * _a[a] + k00_20 * _a[a + 1];
                     a += 8;
 
                     k00_20 = e[ee0 - 2] - e[ee2 - 2];
                     k01_21 = e[ee0 - 3] - e[ee2 - 3];
                     e[ee0 - 2] += e[ee2 - 2];
                     e[ee0 - 3] += e[ee2 - 3];
-                    e[ee2 - 2] = k00_20 * _A[a] - k01_21 * _A[a + 1];
-                    e[ee2 - 3] = k01_21 * _A[a] + k00_20 * _A[a + 1];
+                    e[ee2 - 2] = k00_20 * _a[a] - k01_21 * _a[a + 1];
+                    e[ee2 - 3] = k01_21 * _a[a] + k00_20 * _a[a + 1];
                     a += 8;
 
                     k00_20 = e[ee0 - 4] - e[ee2 - 4];
                     k01_21 = e[ee0 - 5] - e[ee2 - 5];
                     e[ee0 - 4] += e[ee2 - 4];
                     e[ee0 - 5] += e[ee2 - 5];
-                    e[ee2 - 4] = k00_20 * _A[a] - k01_21 * _A[a + 1];
-                    e[ee2 - 5] = k01_21 * _A[a] + k00_20 * _A[a + 1];
+                    e[ee2 - 4] = k00_20 * _a[a] - k01_21 * _a[a + 1];
+                    e[ee2 - 5] = k01_21 * _a[a] + k00_20 * _a[a + 1];
                     a += 8;
 
                     k00_20 = e[ee0 - 6] - e[ee2 - 6];
                     k01_21 = e[ee0 - 7] - e[ee2 - 7];
                     e[ee0 - 6] += e[ee2 - 6];
                     e[ee0 - 7] += e[ee2 - 7];
-                    e[ee2 - 6] = k00_20 * _A[a] - k01_21 * _A[a + 1];
-                    e[ee2 - 7] = k01_21 * _A[a] + k00_20 * _A[a + 1];
+                    e[ee2 - 6] = k00_20 * _a[a] - k01_21 * _a[a + 1];
+                    e[ee2 - 7] = k01_21 * _a[a] + k00_20 * _a[a + 1];
                     a += 8;
 
                     ee0 -= 8;
@@ -372,8 +372,8 @@ namespace NVorbis
                     k01_21 = e[e0 - 1] - e[e2 - 1];
                     e[e0] += e[e2];
                     e[e0 - 1] += e[e2 - 1];
-                    e[e2] = k00_20 * _A[a] - k01_21 * _A[a + 1];
-                    e[e2 - 1] = k01_21 * _A[a] + k00_20 * _A[a + 1];
+                    e[e2] = k00_20 * _a[a] - k01_21 * _a[a + 1];
+                    e[e2 - 1] = k01_21 * _a[a] + k00_20 * _a[a + 1];
 
                     a += k1;
 
@@ -381,8 +381,8 @@ namespace NVorbis
                     k01_21 = e[e0 - 3] - e[e2 - 3];
                     e[e0 - 2] += e[e2 - 2];
                     e[e0 - 3] += e[e2 - 3];
-                    e[e2 - 2] = k00_20 * _A[a] - k01_21 * _A[a + 1];
-                    e[e2 - 3] = k01_21 * _A[a] + k00_20 * _A[a + 1];
+                    e[e2 - 2] = k00_20 * _a[a] - k01_21 * _a[a + 1];
+                    e[e2 - 3] = k01_21 * _a[a] + k00_20 * _a[a + 1];
 
                     a += k1;
 
@@ -390,8 +390,8 @@ namespace NVorbis
                     k01_21 = e[e0 - 5] - e[e2 - 5];
                     e[e0 - 4] += e[e2 - 4];
                     e[e0 - 5] += e[e2 - 5];
-                    e[e2 - 4] = k00_20 * _A[a] - k01_21 * _A[a + 1];
-                    e[e2 - 5] = k01_21 * _A[a] + k00_20 * _A[a + 1];
+                    e[e2 - 4] = k00_20 * _a[a] - k01_21 * _a[a + 1];
+                    e[e2 - 5] = k01_21 * _a[a] + k00_20 * _a[a + 1];
 
                     a += k1;
 
@@ -399,8 +399,8 @@ namespace NVorbis
                     k01_21 = e[e0 - 7] - e[e2 - 7];
                     e[e0 - 6] += e[e2 - 6];
                     e[e0 - 7] += e[e2 - 7];
-                    e[e2 - 6] = k00_20 * _A[a] - k01_21 * _A[a + 1];
-                    e[e2 - 7] = k01_21 * _A[a] + k00_20 * _A[a + 1];
+                    e[e2 - 6] = k00_20 * _a[a] - k01_21 * _a[a + 1];
+                    e[e2 - 7] = k01_21 * _a[a] + k00_20 * _a[a + 1];
 
                     a += k1;
 
@@ -411,14 +411,14 @@ namespace NVorbis
 
             void step3_inner_s_loop(int n, float[] e, int i_off, int k_off, int a, int a_off, int k0)
             {
-                var A0 = _A[a];
-                var A1 = _A[a + 1];
-                var A2 = _A[a + a_off];
-                var A3 = _A[a + a_off + 1];
-                var A4 = _A[a + a_off * 2];
-                var A5 = _A[a + a_off * 2 + 1];
-                var A6 = _A[a + a_off * 3];
-                var A7 = _A[a + a_off * 3 + 1];
+                var A0 = _a[a];
+                var A1 = _a[a + 1];
+                var A2 = _a[a + a_off];
+                var A3 = _a[a + a_off + 1];
+                var A4 = _a[a + a_off * 2];
+                var A5 = _a[a + a_off * 2 + 1];
+                var A6 = _a[a + a_off * 3];
+                var A7 = _a[a + a_off * 3 + 1];
 
                 float k00, k11;
 
@@ -463,7 +463,7 @@ namespace NVorbis
             void step3_inner_s_loop_ld654(int n, float[] e, int i_off, int base_n)
             {
                 var a_off = base_n >> 3;
-                var A2 = _A[a_off];
+                var A2 = _a[a_off];
                 var z = i_off;          // e
                 var @base = z - 16 * n; // e
 

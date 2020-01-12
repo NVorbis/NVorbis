@@ -5,7 +5,7 @@ using System.Collections.Generic;
 
 namespace NVorbis.Ogg
 {
-    internal class Packet : IPacket
+    internal class Packet : IPacket, IEquatable<Packet>
     {
         /// <summary>
         /// Defines flags to apply to the current packet
@@ -27,26 +27,26 @@ namespace NVorbis.Ogg
             /// </summary>
             IsShort = 0x04,
             /// <summary>
-            /// Packet has a granule count defined.
+            /// Packet is the start of a new header sequence in the stream.
             /// </summary>
-            HasGranuleCount = 0x08,
+            IsParameterChange = 0x08,
 
             /// <summary>
             /// Flag for use by inheritors.
             /// </summary>
-            User1 = 0x10,
+            User0 = 0x10,
             /// <summary>
             /// Flag for use by inheritors.
             /// </summary>
-            User2 = 0x20,
+            User1 = 0x20,
             /// <summary>
             /// Flag for use by inheritors.
             /// </summary>
-            User3 = 0x40,
+            User2 = 0x40,
             /// <summary>
             /// Flag for use by inheritors.
             /// </summary>
-            User4 = 0x80,
+            User3 = 0x80,
         }
 
         IPageReader _reader;                // IntPtr
@@ -58,10 +58,10 @@ namespace NVorbis.Ogg
 
         ulong _bitBucket;           // 8
         int _bitCount;              // 4
-        int _readBits;              // 4
         byte _overflowBits;         // 1
         PacketFlags _packetFlags;   // 1
-        int _granuleCount;          // 4
+        int _readBits;              // 4
+        int _containerOverheadBits; // 4
 
         internal Packet(IPageReader reader, IPacketReader packetProvider, int pageIndex, int index, IList<Tuple<long, int>> data)
         {
@@ -70,6 +70,13 @@ namespace NVorbis.Ogg
             PageIndex = pageIndex;
             Index = index;
             _dataSrc = data;
+        }
+
+        public void Reset()
+        {
+            _dataIndex = 0;
+            _dataOfs = 0;
+            _dataBuf = null;
         }
 
         public void Done()
@@ -97,29 +104,37 @@ namespace NVorbis.Ogg
 
         public long PageGranulePosition { get; internal set; }
 
+        public bool IsParameterChange
+        {
+            get => GetFlag(PacketFlags.IsParameterChange);
+            internal set => SetFlag(PacketFlags.IsParameterChange, value);
+        }
+
         public bool IsEndOfStream
         {
             get => GetFlag(PacketFlags.IsEndOfStream);
             internal set => SetFlag(PacketFlags.IsEndOfStream, value);
         }
 
-        public long BitsRead => _readBits;
+        public int BitsRead => _readBits;
 
-        public int? GranuleCount
+        public int BitsRemaining
         {
-            get => GetFlag(PacketFlags.HasGranuleCount) ? _granuleCount : (int?)null;
-            set
+            get
             {
-                if (value.HasValue)
+                var ttl = _dataSrc[0].Item2;
+                for (var i = 1; i < _dataSrc.Count; i++)
                 {
-                    _granuleCount = value.Value;
-                    SetFlag(PacketFlags.HasGranuleCount, true);
+                    ttl += _dataSrc[i].Item2;
                 }
-                else
-                {
-                    SetFlag(PacketFlags.HasGranuleCount, false);
-                }
+                return ttl * 8 - _readBits;
             }
+        }
+
+        public int ContainerOverheadBits
+        {
+            get => _containerOverheadBits;
+            internal set => _containerOverheadBits = value;
         }
 
         public void SkipBits(int count)
@@ -240,7 +255,7 @@ namespace NVorbis.Ogg
             // short-circuit 0
             if (count == 0) return 0UL;
 
-            var value = TryPeekBits(count, out int temp);
+            var value = TryPeekBits(count, out _);
 
             SkipBits(count);
 
@@ -316,6 +331,11 @@ namespace NVorbis.Ogg
             }
 
             return b;
+        }
+
+        bool IEquatable<Packet>.Equals(Packet other)
+        {
+            return PageIndex == other.PageIndex && Index == other.Index;
         }
     }
 }

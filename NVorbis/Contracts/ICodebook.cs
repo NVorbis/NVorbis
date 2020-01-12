@@ -2,7 +2,7 @@
 {
     interface ICodebook
     {
-        void Init(IPacket packet);
+        void Init(IPacket packet, IHuffman huffman);
 
         int Dimensions { get; }
         int Entries { get; }

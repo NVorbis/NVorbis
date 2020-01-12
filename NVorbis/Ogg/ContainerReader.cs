@@ -51,16 +51,15 @@ namespace NVorbis.Ogg
             }
             _reader = CreatePageReader(stream, closeOnDispose, ProcessNewStream);
             _streams = new List<IPacketProvider>();
+        }
 
-            if (!FindNextStream())
-            {
-                if (closeOnDispose)
-                {
-                    _reader.Dispose();
-                }
-                _reader = null;
-                throw new ArgumentException("Could not find any streams in the container!  Is it an Ogg format file?", nameof(stream));
-            }
+        /// <summary>
+        /// Attempts to initialize the container.
+        /// </summary>
+        /// <returns><see langword="true"/> if successful, otherwise <see langword="false"/>.</returns>
+        public bool TryInit()
+        {
+            return FindNextStream();
         }
 
         /// <summary>

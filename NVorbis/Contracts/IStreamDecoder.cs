@@ -34,14 +34,9 @@ namespace NVorbis.Contracts
         int LowerBitrate { get; }
 
         /// <summary>
-        /// Gets the vendor string from the stream's header.
+        /// Gets the tag data from the stream's header.
         /// </summary>
-        string Vendor { get; }
-
-        /// <summary>
-        /// Gets the list of tag data stored in the stream's header.
-        /// </summary>
-        IReadOnlyList<string> Comments { get; }
+        ITagData Tags { get; }
 
         /// <summary>
         /// Gets the total duration of the decoded stream.
@@ -69,9 +64,14 @@ namespace NVorbis.Contracts
         bool ClipSamples { get; set; }
 
         /// <summary>
-        /// Gets whether the last call to <see cref="ReadSamples(float[], int, int, out bool)"/> returned any clipped samples.
+        /// Gets whether <see cref="ReadSamples(float[], int, int, out bool)"/> has returned any clipped samples.
         /// </summary>
         bool HasClipped { get; }
+
+        /// <summary>
+        /// Gets the <see cref="IStreamStats"/> instance for this stream.
+        /// </summary>
+        IStreamStats Stats { get; }
 
         /// <summary>
         /// Seeks the stream to the specified time.
@@ -90,16 +90,11 @@ namespace NVorbis.Contracts
         /// </summary>
         /// <param name="buffer">The buffer to read the samples into.</param>
         /// <param name="offset">The index to start reading samples into the buffer.</param>
-        /// <param name="count">The number of samples that should be read into the buffer.</param>
+        /// <param name="count">The number of samples that should be read into the buffer.  Must be a multiple of <see cref="Channels"/>.</param>
         /// <param name="isParameterChange"><see langword="true"/> if subsequent data will have a different <see cref="Channels"/> or <see cref="SampleRate"/>.</param>
-        /// <returns>The number of samples read into the buffer.  If <paramref name="isParameterChange"/> is <see langword="true"/>, will be <c>0</c>.</returns>
+        /// <returns>The number of samples read into the buffer.  If <paramref name="isParameterChange"/> is <see langword="true"/>, this will be <c>0</c>.</returns>
         /// <exception cref="ArgumentOutOfRangeException">Thrown when the buffer is too small or <paramref name="offset"/> is less than zero.</exception>
         /// <remarks>The data populated into <paramref name="buffer"/> is interleaved by channel in normal PCM fashion: Left, Right, Left, Right, Left, Right</remarks>
         int ReadSamples(float[] buffer, int offset, int count, out bool isParameterChange);
-
-        /// <summary>
-        /// Acknowledges a parameter change as signalled by <see cref="ReadSamples(float[], int, int, out bool)"/>.
-        /// </summary>
-        void ClearParameterChange();
     }
 }

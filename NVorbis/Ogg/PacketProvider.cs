@@ -7,24 +7,25 @@ namespace NVorbis.Ogg
 {
     internal class PacketProvider : IPacketReader
     {
-        List<long> _pageOffsets = new List<long>();
+        private readonly List<long> _pageOffsets = new List<long>();
 
-        IPageReader _reader;
-        int _lastSeqNbr;
-        bool _hasAllPages;
+        private IPageReader _reader;
+        private int _lastSeqNbr;
+        private bool _hasAllPages;
 
-        int _pageIndex;
-        int _packetIndex;
+        private int _pageIndex;
+        private int _packetIndex;
 
-        Packet _lastPacket;
+        private Packet _lastPacket;
 
-        long _cachedPageOffset = -1;
-        long _cachedPageGranulePos;
-        bool _cachedPageIsResync;
-        bool _cachedPageIsContinuation;
-        bool _cachedPageIsContinued;
-        int _cachedPagePacketCount;
-        List<Tuple<long, int>> _cachedPagePackets;
+        private long _cachedPageOffset = -1;
+        private long _cachedPageGranulePos;
+        private bool _cachedPageIsResync;
+        private bool _cachedPageIsContinuation;
+        private bool _cachedPageIsContinued;
+        private int _cachedPagePacketCount;
+        private List<Tuple<long, int>> _cachedPagePackets;
+        private int _cachedPageOverhead;
 
         internal PacketProvider(IPageReader reader)
         {
@@ -40,8 +41,6 @@ namespace NVorbis.Ogg
         public long ContainerBits => _reader?.ContainerBits ?? 0;
 
         public int PagesRead => _pageOffsets.Count;
-
-        public Action<IPacket> ParameterChangeCallback { get; set; }
 
         public void AddPage(PageFlags flags, bool isResync, int seqNbr, long pageOffset)
         {
@@ -71,7 +70,8 @@ namespace NVorbis.Ogg
 
         public void InvalidatePacketCache(IPacket packet)
         {
-            if (_lastPacket == packet)
+            // explicitly do a referential equality check so two packets of the same page & index don't clobber each other's cache
+            if (ReferenceEquals(_lastPacket, packet))
             {
                 _lastPacket = null;
             }
@@ -111,93 +111,6 @@ namespace NVorbis.Ogg
             return _pageOffsets.Count;
         }
 
-        public IPacket FindPacket(long granulePos, GetPacketGranuleCount getPacketGranuleCount)
-        {
-            if (_reader == null) throw new ObjectDisposedException(nameof(PacketProvider));
-
-            // look for the page that contains the granulePos requested, then...
-            var pageIdx = -1;
-            int? firstGranulePage = null;
-            while (true)
-            {
-                if (!GetPage(++pageIdx, out var pageGranulePos, out _, out var isContinuation, out var isContinued, out var packetCount) && _hasAllPages)
-                {
-                    // couldn't find it...
-                    return null;
-                }
-
-                if (pageGranulePos > 0 && !firstGranulePage.HasValue)
-                {
-                    firstGranulePage = pageIdx;
-                }
-
-                if (pageGranulePos >= granulePos)
-                {
-                    // backtrack from the last packet...
-                    var packetIndex = packetCount - 1;
-                    if (isContinued)
-                    {
-                        // continued packets don't count
-                        --packetIndex;
-                    }
-
-                    if (packetIndex > 0)
-                    {
-                        IPacket pkt;
-                        while (--packetIndex > 0)
-                        {
-                            pkt = GetPacket(pageIdx, packetIndex, out _);
-
-                            pkt.GranulePosition = pageGranulePos;
-
-                            pageGranulePos -= getPacketGranuleCount(pkt, false);
-                            if (pageGranulePos < granulePos)
-                            {
-                                InvalidatePacketCache(pkt);
-                                var tmpPkt = GetPacket(pageIdx, packetIndex, out _);
-                                tmpPkt.GranulePosition = pkt.GranulePosition;
-                                return tmpPkt;
-                            }
-                        }
-
-                        // we're down to the "first" packet in the list...
-                        if (!isContinuation)
-                        {
-                            // ... which means it's the target packet if we're not a continuation.
-                            pkt = GetPacket(pageIdx, 0, out _);
-                            if ((firstGranulePage ?? -1) == pageIdx)
-                            {
-                                // crap...  it's the very first decodable packet...  we gotta give it a better granule position...
-                                pageGranulePos = getPacketGranuleCount(pkt, true);
-
-                                // now that we've used bits in that copy, clean up and get a new copy
-                                pkt.Done();
-                                pkt = GetPacket(pageIdx, 0, out _);
-                            }
-                            pkt.GranulePosition = pageGranulePos;
-                            return pkt;
-                        }
-
-                        // of course, if we're a continuation, that means we have to find which page the packet starts on
-                        bool goodPage;
-                        while ((goodPage = GetPage(--pageIdx, out _, out _, out isContinuation, out _, out packetCount)) && isContinuation && packetCount == 0)
-                        {
-                        }
-                        if (goodPage)
-                        {
-                            if (isContinuation)
-                            {
-                                --packetCount;
-                            }
-                            pkt = GetPacket(pageIdx, packetCount - 1, out _);
-                            pkt.GranulePosition = pageGranulePos;
-                            return pkt;
-                        }
-                    }
-                }
-            }
-        }
-
         public IPacket GetNextPacket()
         {
             var pkt = PeekNextPacket();
@@ -223,73 +136,164 @@ namespace NVorbis.Ogg
             return pkt;
         }
 
-        public void SeekToPacket(IPacket packet, int preRoll)
+        public long SeekTo(long granulePos, int preRoll, GetPacketGranuleCount getPacketGranuleCount)
         {
             if (_reader == null) throw new ObjectDisposedException(nameof(PacketProvider));
 
-            // save off the packet index in our IPacket implementation
-            if (preRoll < 0) throw new ArgumentOutOfRangeException(nameof(preRoll), "Must be positive or zero!");
-            if (!(packet is Packet pkt)) throw new ArgumentException("Must be a packet from LightContainerReader!", nameof(packet));
-
-            var pageIdx = pkt.PageIndex;
-            var pktIdx = pkt.Index - preRoll;
-
-            while (pktIdx < 0)
+            // special case: the first data packet is always the first packet completed on the first page having a non-zero granulePos
+            if (granulePos == 0)
             {
-                if (pageIdx == 0)
-                {
-                    // we can't pre-roll any further, so just assume the caller meant "beginning of the stream"
-                    pageIdx = 0;
-                    pktIdx = 0;
-                    break;
-                }
-
-                // back up to the previous page
-                if (!GetPage(--pageIdx, out _, out _, out var isContinuation, out _, out var packetCount))
-                {
-                    throw new InvalidOperationException("Couldn't seek to the selected packet; Not found!");
-                }
-
-                if (isContinuation)
-                {
-                    --packetCount;
-                }
-
-                pktIdx += packetCount;
+                SeekToFirstDataPacket();
+                return 0;
             }
 
-            _pageIndex = pageIdx;
-            _packetIndex = pktIdx;
+            // we want to find the granule _after_ the one being requested; that puts us in the correct position to load the appropriate packet
+            ++granulePos;
+
+            // search for the correct page in the stream
+            var pageIdx = BisectionFindPage(granulePos, out var pageGranulePos, out var isContinuation, out var packetCount);
+
+            // now we have to figure out the correct packet...
+            var pktIdx = packetCount - 1;
+            while (pageIdx > 0 || pktIdx > 0)
+            {
+                // if we're before the first full packet in the page, move to the previous page
+                if (pktIdx == -1 || (isContinuation && pktIdx == 0))
+                {
+                    var wasContinuation = isContinuation;
+                    if (!GetPage(--pageIdx, out pageGranulePos, out _, out isContinuation, out var isContinued, out packetCount, out _))
+                    {
+                        throw new System.IO.InvalidDataException("Could not load page!");
+                    }
+                    if (!isContinued && wasContinuation)
+                    {
+                        throw new System.IO.InvalidDataException("Expected contined page, found non-continued page.");
+                    }
+                    pktIdx = packetCount - 1;
+                }
+
+                // if we haven't gotten to the packet containing the position, move back by the size of the current packet
+                if (pageGranulePos >= granulePos)
+                {
+                    // subtract out the packet's granuleCount
+                    var packet = GetPacket(pageIdx, pktIdx, out _);
+                    if (packet == null)
+                    {
+                        throw new System.IO.InvalidDataException("Could not load packet!");
+                    }
+                    pageGranulePos -= getPacketGranuleCount(packet, false);
+                    packet.Done();
+
+                    // if our granule position is negative, our packet is the first actual data packet
+                    if (pageGranulePos < 0)
+                    {
+                        preRoll = 0;
+                    }
+                }
+
+                // if we're now before the position, apply the pre-roll OR set the seek position and return the new granule position
+                if (pageGranulePos < granulePos)
+                {
+                    if (preRoll > 0)
+                    {
+                        --preRoll;
+                    }
+                    else
+                    {
+                        // we've found our target packet
+                        _pageIndex = pageIdx;
+                        _packetIndex = pktIdx;
+                        return pageGranulePos;
+                    }
+                }
+
+                // decrement the packet index
+                --pktIdx;
+            }
+            throw new InvalidOperationException("Could not find the packet for the granule position requested.");
         }
 
-        public IPacket GetPacket(int packetIndex)
+        private int BisectionFindPage(long tgtGranulePos, out long pageGranulePos, out bool isContinuation, out int packetCount)
         {
-            if (_reader == null) throw new ObjectDisposedException(nameof(PacketProvider));
-
-            var pageIdx = -1;
-            while (true)
+            // first, find the correct page (bisection search)
+            // if we have all pages, use a proper search
+            var left = 0;
+            var right = _pageOffsets.Count - 1;
+            int pageIdx;
+            if (_hasAllPages)
             {
-                if (!GetPage(++pageIdx, out _, out _, out var isContinuation, out _, out var packetCount) && _hasAllPages)
-                {
-                    // couldn't find it...
-                    return null;
-                }
-
-                // if the page is a continuation, the first packet chunk doesn't count
-                if (isContinuation)
-                {
-                    --packetCount;
-                }
-
-                // if the index is within the packet count, we're on the correct page
-                if (packetIndex < packetCount)
-                {
-                    return GetPacket(pageIdx, packetIndex, out _);
-                }
-
-                // otherwise, deduce the page from the count and try again on the next page
-                packetIndex -= packetCount;
+                pageIdx = _pageOffsets.Count / 2;
             }
+            // otherwise, start at the last page we do have
+            else
+            {
+                pageIdx = right;
+            }
+
+            do
+            {
+                if (GetPage(pageIdx, out pageGranulePos, out _, out isContinuation, out _, out packetCount, out _))
+                {
+                    if (pageGranulePos >= tgtGranulePos)
+                    {
+                        right = pageIdx;
+                        if (left == right - 1)
+                        {
+                            // we've found the correct page
+                            return pageIdx;
+                        }
+                        else
+                        {
+                            pageIdx -= (right - left) / 2;
+                        }
+                    }
+                    else if (pageGranulePos < tgtGranulePos)
+                    {
+                        left = pageIdx;
+                        if (left >= right - 1)
+                        {
+                            // if left >= right, we need to read more pages
+                            // if left == right - 1, we're just a single page short of the correct one
+                            ++pageIdx;
+                        }
+                        else
+                        {
+                            pageIdx += (right - left) / 2;
+                        }
+                    }
+                }
+                else
+                {
+                    // we ran out of data
+                    throw new ArgumentOutOfRangeException(nameof(tgtGranulePos));
+                }
+            }
+            while (true);
+        }
+
+        private void SeekToFirstDataPacket()
+        {
+            var pageIdx = -1;
+            bool goodPage;
+            bool isContinuation;
+            while ((goodPage = GetPage(++pageIdx, out var pageGranulePos, out _, out isContinuation, out _, out _, out _)) && pageGranulePos == 0) { }
+
+            if (!goodPage)
+            {
+                throw new System.IO.InvalidDataException("Could not find a page with non-zero granule position!");
+            }
+
+            if (isContinuation)
+            {
+                var packetCount = 0;
+                while (--pageIdx >= 0 && GetPage(pageIdx, out _, out _, out isContinuation, out var isContinued, out packetCount, out _) && isContinuation && isContinued && packetCount == 0) { }
+                _packetIndex = packetCount;
+            }
+            else
+            {
+                _packetIndex = 0;
+            }
+            _pageIndex = pageIdx;
         }
 
         private IPacket GetPacket(int pageIndex, int packetIndex, out bool isPastPage)
@@ -307,7 +311,7 @@ namespace NVorbis.Ogg
                 return _lastPacket;
             }
 
-            if (!GetPage(pageIndex, out var granulePos, out var isResync, out var isContinuation, out var isContinued, out var packetCount))
+            if (!GetPage(pageIndex, out var granulePos, out var isResync, out var isContinuation, out var isContinued, out var packetCount, out var pageOverhead))
             {
                 return null;
             }
@@ -351,11 +355,12 @@ namespace NVorbis.Ogg
                     {
                         return null;
                     }
-                    if (!GetPage(++contPageIdx, out granulePos, out isResync, out isContinuation, out keepReading, out packetCount))
+                    if (!GetPage(++contPageIdx, out granulePos, out isResync, out isContinuation, out keepReading, out packetCount, out var contPageOverhead))
                     {
                         // no more pages?  In any case, we can't satify the request
                         return null;
                     }
+                    pageOverhead += contPageOverhead;
 
                     // if the next page isn't a continuation or is a resync, the stream is broken so we'll just return what we could get
                     if (!isContinuation || isResync)
@@ -390,6 +395,12 @@ namespace NVorbis.Ogg
                 PageGranulePosition = granulePos,
                 IsResync = isResync,
             };
+
+            // if it's the first packet, associate the container overhead with it
+            if (packetIndex == 0 || (isContinuation && packetIndex == 1))
+            {
+                packet.ContainerOverheadBits = pageOverhead * 8;
+            }
 
             // if we're the last packet completed in the page, set the .GranulePosition
             if (isLastPacket)
@@ -433,31 +444,32 @@ namespace NVorbis.Ogg
             }
         }
 
-        private bool GetPage(int pageIndex, out long granulePos, out bool isResync, out bool isContinuation, out bool isContinued, out int packetCount)
+        private bool GetPage(int pageIndex, out long granulePos, out bool isResync, out bool isContinuation, out bool isContinued, out int packetCount, out int pageOverhead)
         {
             granulePos = 0;
             isResync = false;
             packetCount = 0;
             isContinued = false;
             isContinuation = false;
+            pageOverhead = 0;
 
             // make sure we've read the page
             var targetPageRead = false;
-            while (pageIndex >= _pageOffsets.Count && (targetPageRead = GetNextPage(out granulePos, out isResync, out isContinuation, out isContinued, out packetCount)))
+            while (pageIndex >= _pageOffsets.Count && (targetPageRead = GetNextPage(out granulePos, out isResync, out isContinuation, out isContinued, out packetCount, out pageOverhead)))
             {
             }
             if (pageIndex >= _pageOffsets.Count)
             {
                 return false;
             }
-            if (!targetPageRead && !GetPageAt(_pageOffsets[pageIndex], out granulePos, out isResync, out isContinuation, out isContinued, out packetCount))
+            if (!targetPageRead && !GetPageAt(_pageOffsets[pageIndex], out granulePos, out isResync, out isContinuation, out isContinued, out packetCount, out pageOverhead))
             {
                 return false;
             }
             return true;
         }
 
-        private bool GetPageAt(long offset, out long granulePos, out bool isResync, out bool isContinuation, out bool isContinued, out int packetCount)
+        private bool GetPageAt(long offset, out long granulePos, out bool isResync, out bool isContinuation, out bool isContinued, out int packetCount, out int pageOverhead)
         {
             if (_cachedPageOffset == offset)
             {
@@ -466,6 +478,7 @@ namespace NVorbis.Ogg
                 isContinuation = _cachedPageIsContinuation;
                 isContinued = _cachedPageIsContinued;
                 packetCount = _cachedPagePacketCount;
+                pageOverhead = _cachedPageOverhead;
                 return true;
             }
 
@@ -493,6 +506,7 @@ namespace NVorbis.Ogg
                     _cachedPagePackets = null;
                     _cachedPageIsContinued = isContinued = _reader.IsContinued;
                     _cachedPageIsContinuation = isContinuation = (_reader.PageFlags & PageFlags.ContinuesPacket) != 0;
+                    _cachedPageOverhead = pageOverhead = _reader.PageOverhead;
                     return true;
                 }
             }
@@ -507,10 +521,11 @@ namespace NVorbis.Ogg
             packetCount = 0;
             isContinued = false;
             isContinuation = false;
+            pageOverhead = 0;
             return false;
         }
 
-        private bool GetNextPage(out long granulePos, out bool isResync, out bool isContinuation, out bool isContinued, out int packetCount)
+        private bool GetNextPage(out long granulePos, out bool isResync, out bool isContinuation, out bool isContinued, out int packetCount, out int pageOverhead)
         {
             var pageCount = _pageOffsets.Count;
 
@@ -528,6 +543,7 @@ namespace NVorbis.Ogg
                         _cachedPagePackets = null;
                         _cachedPageIsContinued = isContinued = _reader.IsContinued;
                         _cachedPageIsContinuation = isContinuation = (_reader.PageFlags & PageFlags.ContinuesPacket) != 0;
+                        _cachedPageOverhead = pageOverhead = _reader.PageOverhead;
                         return true;
                     }
                 }
@@ -544,6 +560,7 @@ namespace NVorbis.Ogg
             packetCount = 0;
             isContinued = false;
             isContinuation = false;
+            pageOverhead = 0;
             return false;
         }
 

@@ -8,7 +8,7 @@ namespace NVorbis
 {
     class Codebook : ICodebook
     {
-        // This class is "borrowed" from GitHub: TechnologicalPizza/MonoGame.NVorbis
+        // FastRange is "borrowed" from GitHub: TechnologicalPizza/MonoGame.NVorbis
         class FastRange : IReadOnlyList<int>
         {
             [ThreadStatic]
@@ -52,11 +52,11 @@ namespace NVorbis
         int[] _lengths;
         float[] _lookupTable;
         HuffmanListNode _prefixOverflowTree;
-        List<HuffmanListNode> _prefixList;
+        IReadOnlyList<HuffmanListNode> _prefixList;
         int _prefixBitLength;
         int _maxBits;
 
-        public void Init(IPacket packet)
+        public void Init(IPacket packet, IHuffman huffman)
         {
             // first, check the sync pattern
             var chkVal = packet.ReadBits(24);
@@ -69,11 +69,11 @@ namespace NVorbis
             // init the storage
             _lengths = new int[Entries];
 
-            InitTree(packet);
+            InitTree(packet, huffman);
             InitLookupTable(packet);
         }
 
-        private void InitTree(IPacket packet)
+        private void InitTree(IPacket packet, IHuffman huffman)
         {
             bool sparse;
             int total = 0;
@@ -162,7 +162,10 @@ namespace NVorbis
 
                 var valueList = (IReadOnlyList<int>)values ?? FastRange.Get(0, codewords.Length);
 
-                _prefixList = Huffman.BuildPrefixedLinkedList(valueList, codewordLengths ?? _lengths, codewords, out _prefixBitLength, out _prefixOverflowTree);
+                huffman.GenerateTable(valueList, codewordLengths ?? _lengths, codewords);
+                _prefixList = huffman.PrefixTree;
+                _prefixBitLength = huffman.TableBits;
+                _prefixOverflowTree = huffman.OverflowNode;
             }
         }
 

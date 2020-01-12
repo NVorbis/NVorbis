@@ -13,7 +13,6 @@ namespace NVorbis
         int _block0Size;
         int _block1Size;
         IMapping _mapping;
-        float[][] _windows;
 
         public void Init(IPacket packet, int channels, int block0Size, int block1Size, IMapping[] mappings)
         {
@@ -36,7 +35,7 @@ namespace NVorbis
 
             if (_blockFlag)
             {
-                _windows = new float[][]
+                Windows = new float[][]
                 {
                     new float[_block1Size],
                     new float[_block1Size],
@@ -46,7 +45,7 @@ namespace NVorbis
             }
             else
             {
-                _windows = new float[][]
+                Windows = new float[][]
                 {
                     new float[_block0Size],
                 };
@@ -61,9 +60,9 @@ namespace NVorbis
             // 2: prev = s, next = l
             // 3: prev = l, next = l
 
-            for (int idx = 0; idx < _windows.Length; idx++)
+            for (int idx = 0; idx < Windows.Length; idx++)
             {
-                var array = _windows[idx];
+                var array = Windows[idx];
 
                 var left = ((idx & 1) == 0 ? _block0Size : _block1Size) / 2;
                 var wnd = BlockSize;
@@ -120,7 +119,7 @@ namespace NVorbis
 
             _mapping.DecodePacket(packet, BlockSize, _channels, buffer);
 
-            var window = _windows[(prevFlag ? 1 : 0) + (nextFlag ? 2 : 0)];
+            var window = Windows[(prevFlag ? 1 : 0) + (nextFlag ? 2 : 0)];
             for (var i = 0; i < blockSize; i++)
             {
                 for (var ch = 0; ch < _channels; ch++)
@@ -163,6 +162,6 @@ namespace NVorbis
 
         public int BlockSize => _blockFlag ? _block1Size : _block0Size;
 
-        public float[][] Windows => _windows;
+        public float[][] Windows { get; private set; }
     }
 }

@@ -62,6 +62,7 @@ namespace NVorbis.Ogg
         public short PacketCount { get; private set; }
         public bool? IsResync { get; private set; }
         public bool IsContinued { get; private set; }
+        public int PageOverhead { get; private set; }
 
         // look for the next page header, decode it, and check CRC
         public bool ReadNextPage()
@@ -277,9 +278,10 @@ namespace NVorbis.Ogg
                 GranulePosition = BitConverter.ToInt64(_headerBuf, 6);
                 StreamSerial = BitConverter.ToInt32(_headerBuf, 14);
                 SequenceNumber = BitConverter.ToInt32(_headerBuf, 18);
+                var segCnt = _headerBuf[26];
                 var pktLen = 0;
                 short pktCnt = 0;
-                for (var j = 0; j < _headerBuf[26]; j++)
+                for (var j = 0; j < segCnt; j++)
                 {
                     var segLen = _headerBuf[27 + j];
                     pktLen += segLen;
@@ -293,11 +295,12 @@ namespace NVorbis.Ogg
                     }
                 }
                 // if the pktLen has a value left and the last segment isn't 255 (continued), count the packet
-                if (pktLen > 0 && !(IsContinued = _headerBuf[26 + _headerBuf[26]] == 255))
+                if (pktLen > 0 && !(IsContinued = _headerBuf[27 + segCnt] == 255))
                 {
                     ++pktCnt;
                 }
                 PacketCount = pktCnt;
+                PageOverhead = 27 + segCnt;
                 return true;
             }
             return false;

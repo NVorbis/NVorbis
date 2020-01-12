@@ -1,13 +1,18 @@
-﻿using System;
+﻿using NVorbis.Contracts;
+using System;
 using System.Collections.Generic;
 
 namespace NVorbis
 {
-    static class Huffman
+    class Huffman : IHuffman, IComparer<HuffmanListNode>
     {
         const int MAX_TABLE_BITS = 10;
 
-        static internal List<HuffmanListNode> BuildPrefixedLinkedList(IReadOnlyList<int> values, int[] lengthList, int[] codeList, out int tableBits, out HuffmanListNode firstOverflowNode)
+        public int TableBits { get; private set; }
+        public IReadOnlyList<HuffmanListNode> PrefixTree { get; private set; }
+        public HuffmanListNode OverflowNode { get; private set; }
+
+        public void GenerateTable(IReadOnlyList<int> values, int[] lengthList, int[] codeList)
         {
             HuffmanListNode[] list = new HuffmanListNode[lengthList.Length];
 
@@ -27,12 +32,12 @@ namespace NVorbis
                 }
             }
 
-            Array.Sort(list, 0, list.Length);
+            Array.Sort(list, 0, list.Length, this);
 
-            tableBits = maxLen > MAX_TABLE_BITS ? MAX_TABLE_BITS : maxLen;
+            var tableBits = maxLen > MAX_TABLE_BITS ? MAX_TABLE_BITS : maxLen;
 
             var prefixList = new List<HuffmanListNode>(1 << tableBits);
-            firstOverflowNode = null;
+            HuffmanListNode firstOverflowNode = null;
             for (int i = 0; i < list.Length && list[i].Length < 99999; i++)
             {
                 if (firstOverflowNode == null)
@@ -68,26 +73,17 @@ namespace NVorbis
                 prefixList.Add(null);
             }
 
-            return prefixList;
+            TableBits = tableBits;
+            PrefixTree = prefixList;
+            OverflowNode = firstOverflowNode;
         }
-    }
 
-    class HuffmanListNode : IComparable<HuffmanListNode>
-    {
-        internal int Value;
-
-        internal int Length;
-        internal int Bits;
-        internal int Mask;
-
-        internal HuffmanListNode Next;
-
-        int IComparable<HuffmanListNode>.CompareTo(HuffmanListNode other)
+        int IComparer<HuffmanListNode>.Compare(HuffmanListNode x, HuffmanListNode y)
         {
-            var len = Length - other.Length;
+            var len = x.Length - y.Length;
             if (len == 0)
             {
-                return Bits - other.Bits;
+                return x.Bits - y.Bits;
             }
             return len;
         }

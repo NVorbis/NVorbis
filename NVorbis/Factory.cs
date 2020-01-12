@@ -4,6 +4,11 @@ namespace NVorbis
 {
     class Factory : IFactory
     {
+        public IHuffman CreateHuffman()
+        {
+            return new Huffman();
+        }
+
         public IMdct CreateMdct()
         {
             return new Mdct();
