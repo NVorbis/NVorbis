@@ -81,6 +81,11 @@ namespace NVorbis
                 {
                     _packetProvider.GetNextPacket().Done();
                 }
+                else
+                {
+                    packet.Done();
+                    advanceToNextPacket = true;
+                }
                 packet = _packetProvider.PeekNextPacket();
                 if (packet == null) throw new InvalidDataException("Couldn't get next packet!");
             }
@@ -91,7 +96,15 @@ namespace NVorbis
 
             if (LoadComments(packet))
             {
-                _packetProvider.GetNextPacket().Done();
+                if (advanceToNextPacket)
+                {
+                    _packetProvider.GetNextPacket().Done();
+                }
+                else
+                {
+                    packet.Done();
+                    advanceToNextPacket = true;
+                }
                 packet = _packetProvider.PeekNextPacket();
                 if (packet == null) throw new InvalidDataException("Couldn't get next packet!");
             }
@@ -103,7 +116,14 @@ namespace NVorbis
             if (LoadBooks(packet))
             {
                 fullReset = true;
-                _packetProvider.GetNextPacket().Done();
+                if (advanceToNextPacket)
+                {
+                    _packetProvider.GetNextPacket().Done();
+                }
+                else
+                {
+                    packet.Done();
+                }
                 packet = _packetProvider.PeekNextPacket();
                 if (packet == null) throw new InvalidDataException("Couldn't get next packet!");
             }
@@ -339,13 +359,21 @@ namespace NVorbis
                 if (_prevPacketStart == _prevPacketEnd)
                 {
                     // if we're in a parameter change or we're at the end of the file, we've read everything and need to reset
-                    if (_isParameterChange || _eosFound)
+                    if (_isParameterChange)
                     {
                         // notify our caller of the parameter change state
                         isParameterChange = _isParameterChange;
 
                         // fully reset ourself
                         ResetDecoder();
+                        break;
+                    }
+                    if (_eosFound)
+                    {
+                        _nextPacketBuf = null;
+                        _prevPacketBuf = null;
+
+                        // no more samples, so just return
                         break;
                     }
 
@@ -637,7 +665,6 @@ namespace NVorbis
         /// </summary>
         public void Dispose()
         {
-            _packetProvider?.Dispose();
             _packetProvider = null;
         }
 

@@ -10,9 +10,10 @@ namespace NVorbis.Ogg
     internal class PageReader : IPageReader
     {
         internal static Func<ICrc> CreateCrc { get; set; } = () => new Crc();
-        internal static Func<IPageReader, IPacketReader> CreatePacketProvider { get; set; } = pr => new PacketProvider(pr);
+        internal static Func<IStreamPageReader, int, IPacketProvider> CreatePacketProvider { get; set; } = (pr, ss) => new PacketProvider(pr, ss);
+        internal static Func<IPageReader, IStreamPageReader> CreateStreamPageReader { get; set; } = pr => new StreamPageReader(pr);
 
-        private readonly Dictionary<int, IPacketReader> _packetProviders = new Dictionary<int, IPacketReader>();
+        private readonly Dictionary<int, IStreamPageReader> _streamReaders = new Dictionary<int, IStreamPageReader>();
         private readonly HashSet<int> _ignoredSerials = new HashSet<int>();
         private readonly ICrc _crc = CreateCrc();
         private readonly object _readLock = new object();
@@ -149,9 +150,9 @@ namespace NVorbis.Ogg
             if (cnt == 0)
             {
                 // we're EOF
-                foreach (var pp in _packetProviders)
+                foreach (var sr in _streamReaders)
                 {
-                    pp.Value.SetEndOfStream();
+                    sr.Value.SetEndOfStream();
                 }
             }
 
@@ -215,7 +216,7 @@ namespace NVorbis.Ogg
 
         private bool AddPage()
         {
-            if (!_packetProviders.ContainsKey(StreamSerial))
+            if (!_streamReaders.ContainsKey(StreamSerial))
             {
                 if (_ignoredSerials.Contains(StreamSerial))
                 {
@@ -223,20 +224,20 @@ namespace NVorbis.Ogg
                     return false;
                 }
 
-                var packetProvider = CreatePacketProvider(this);
-                packetProvider.AddPage(PageFlags, IsResync.Value, SequenceNumber, PageOffset);
-                _packetProviders.Add(StreamSerial, packetProvider);
+                var streamReader = CreateStreamPageReader(this);
+                var packetProvider = CreatePacketProvider(streamReader, StreamSerial);
+                streamReader.AddPage();
+                _streamReaders.Add(StreamSerial, streamReader);
                 if (!_newStreamCallback(packetProvider))
                 {
-                    _packetProviders.Remove(StreamSerial);
+                    _streamReaders.Remove(StreamSerial);
                     _ignoredSerials.Add(StreamSerial);
-                    packetProvider.Dispose();
                     return false;
                 }
             }
             else
             {
-                _packetProviders[StreamSerial].AddPage(PageFlags, IsResync.Value, SequenceNumber, PageOffset);
+                _streamReaders[StreamSerial].AddPage();
             }
 
             return true;
@@ -295,9 +296,14 @@ namespace NVorbis.Ogg
                     }
                 }
                 // if the pktLen has a value left and the last segment isn't 255 (continued), count the packet
-                if (pktLen > 0 && !(IsContinued = _headerBuf[27 + segCnt] == 255))
+                if (pktLen > 0)
                 {
                     ++pktCnt;
+                    IsContinued = _headerBuf[26 + segCnt] == 255;
+                }
+                else
+                {
+                    IsContinued = false;
                 }
                 PacketCount = pktCnt;
                 PageOverhead = 27 + segCnt;
@@ -347,15 +353,6 @@ namespace NVorbis.Ogg
             }
         }
 
-        internal int GetStreamPagesRead(int streamSerial)
-        {
-            if (_packetProviders.TryGetValue(streamSerial, out var pp))
-            {
-                return pp.PagesRead;
-            }
-            return 0;
-        }
-
         public void ReadAllPages()
         {
             if (!CheckLock()) throw new InvalidOperationException("Must be locked!");
@@ -363,22 +360,13 @@ namespace NVorbis.Ogg
             while (ReadNextPage()) { };
         }
 
-        internal int GetStreamTotalPageCount(int streamSerial)
-        {
-            if (_packetProviders.TryGetValue(streamSerial, out var pp))
-            {
-                return pp.GetTotalPageCount();
-            }
-            return 0;
-        }
-
         public void Dispose()
         {
-            foreach (var pp in _packetProviders)
+            foreach (var sr in _streamReaders)
             {
-                pp.Value.Dispose();
+                sr.Value.SetEndOfStream();
             }
-            _packetProviders.Clear();
+            _streamReaders.Clear();
 
             if (_closeOnDispose)
             {

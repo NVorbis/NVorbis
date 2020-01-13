@@ -13,7 +13,7 @@ namespace NVorbis.Contracts
     /// <summary>
     /// Describes an interface for a packet stream reader.
     /// </summary>
-    public interface IPacketProvider : IDisposable
+    public interface IPacketProvider
     {
         /// <summary>
         /// Gets whether the provider supports seeking.

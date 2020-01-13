@@ -5,7 +5,7 @@ using System.Collections.Generic;
 
 namespace NVorbis.Ogg
 {
-    internal class Packet : IPacket, IEquatable<Packet>
+    internal class Packet : IPacket
     {
         /// <summary>
         /// Defines flags to apply to the current packet
@@ -49,12 +49,11 @@ namespace NVorbis.Ogg
             User3 = 0x80,
         }
 
-        IPageReader _reader;                // IntPtr
-        IPacketReader _packetProvider;      // IntPtr
-        IList<Tuple<long, int>> _dataSrc;   // IntPtr + segment_count * 12
-        int _dataIndex;                     // 4
-        int _dataOfs;                       // 4
-        byte[] _dataBuf;                    // IntPtr + cur_segment_size
+        private IReadOnlyList<Tuple<long, int>> _dataSrc;               // IntPtr + segment_count * 12
+        private IPacketReader _packetReader;
+        int _dataIndex;                                         // 4
+        int _dataOfs;                                           // 4
+        byte[] _dataBuf;                                        // IntPtr + cur_segment_size
 
         ulong _bitBucket;           // 8
         int _bitCount;              // 4
@@ -63,13 +62,10 @@ namespace NVorbis.Ogg
         int _readBits;              // 4
         int _containerOverheadBits; // 4
 
-        internal Packet(IPageReader reader, IPacketReader packetProvider, int pageIndex, int index, IList<Tuple<long, int>> data)
+        internal Packet(IReadOnlyList<Tuple<long, int>> data, IPacketReader packetReader)
         {
-            _reader = reader;
-            _packetProvider = packetProvider;
-            PageIndex = pageIndex;
-            Index = index;
             _dataSrc = data;
+            _packetReader = packetReader;
         }
 
         public void Reset()
@@ -81,12 +77,9 @@ namespace NVorbis.Ogg
 
         public void Done()
         {
-            _packetProvider.InvalidatePacketCache(this);
+            _packetReader.InvalidatePacketCache(this);
             _dataBuf = null;
         }
-
-        internal int Index { get; }
-        internal int PageIndex { get; }
 
         public bool IsResync
         {
@@ -306,7 +299,7 @@ namespace NVorbis.Ogg
 
                 var idx = 0;
                 int cnt;
-                while (idx < _dataBuf.Length && (cnt = _reader.Read(ofs + idx, _dataBuf, idx, _dataBuf.Length - idx)) > 0)
+                while (idx < _dataBuf.Length && (cnt = _packetReader.FillBuffer(ofs + idx, _dataBuf, idx, _dataBuf.Length - idx)) > 0)
                 {
                     idx += cnt;
                 }
@@ -331,11 +324,6 @@ namespace NVorbis.Ogg
             }
 
             return b;
-        }
-
-        bool IEquatable<Packet>.Equals(Packet other)
-        {
-            return PageIndex == other.PageIndex && Index == other.Index;
         }
     }
 }
