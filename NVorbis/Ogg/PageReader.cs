@@ -312,13 +312,14 @@ namespace NVorbis.Ogg
             return false;
         }
 
-        public List<Tuple<long, int>> GetPackets()
+        public ValueTuple<long, int>[] GetPackets()
         {
             if (!CheckLock()) throw new InvalidOperationException("Must be locked!");
 
             var segCnt = _headerBuf[26];
             var dataOffset = PageOffset + 27 + segCnt;
-            var packets = new List<Tuple<long, int>>(segCnt);
+            var packets = new ValueTuple<long, int>[PacketCount];
+            var pktIdx = 0;
 
             if (segCnt > 0)
             {
@@ -330,7 +331,8 @@ namespace NVorbis.Ogg
                     {
                         if (size > 0)
                         {
-                            packets.Add(new Tuple<long, int>(dataOffset, size));
+                            packets[pktIdx].Item1 = dataOffset;
+                            packets[pktIdx++].Item2 = size;
                             dataOffset += size;
                         }
                         size = 0;
@@ -338,7 +340,8 @@ namespace NVorbis.Ogg
                 }
                 if (size > 0)
                 {
-                    packets.Add(new Tuple<long, int>(dataOffset, size));
+                    packets[pktIdx].Item1 = dataOffset;
+                    packets[pktIdx++].Item2 = size;
                 }
             }
             return packets;

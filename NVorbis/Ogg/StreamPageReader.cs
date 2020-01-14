@@ -20,7 +20,7 @@ namespace NVorbis.Ogg
         private int _lastPagePacketCount;
         private int _lastPageOverhead;
 
-        private List<Tuple<long, int>> _cachedPagePackets;
+        private ValueTuple<long, int>[] _cachedPagePackets;
 
         public StreamPageReader(IPageReader pageReader)
         {
@@ -59,7 +59,7 @@ namespace NVorbis.Ogg
             }
         }
 
-        public IReadOnlyList<Tuple<long, int>> GetPagePackets(int pageIndex)
+        public ValueTuple<long, int>[] GetPagePackets(int pageIndex)
         {
             if (_cachedPagePackets != null && _lastPageIndex == pageIndex)
             {

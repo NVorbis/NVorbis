@@ -114,8 +114,9 @@ namespace NVorbis.Ogg
         {
             // we will only look through the current page...
             // if the granule isn't on the page, behavior is:
-            //   - if before: return 0 (this shouldn't happen because we already know we'er on the correct page...)
+            //   - if before: return 0
             //   - if after: return packetCount - (isContinued ? 2 : 1)
+            // neither should happen because we're already looking at the correct page
 
             if (_reader.GetPage(pageIndex, out var pageGranulePos, out var isResync, out _, out var isContinued, out var packetCount, out var pageOverhead))
             {
@@ -125,19 +126,12 @@ namespace NVorbis.Ogg
                 {
                     if (gp >= granulePos)
                     {
-                        Packet packet = CreatePacket(pageIndex, packetIndex, pageGranulePos, isResync, isContinued, packetCount, pageOverhead);
+                        var packet = CreatePacket(pageIndex, packetIndex, pageGranulePos, isResync, isContinued, packetCount, pageOverhead);
                         if (packet == null)
                         {
                             break;
                         }
-                        try
-                        {
-                            gp -= getPacketGranuleCount(packet, false);
-                        }
-                        finally
-                        {
-                            packet.Done();
-                        }
+                        gp -= getPacketGranuleCount(packet, false);
                     }
 
                     if (gp < granulePos)
@@ -200,7 +194,7 @@ namespace NVorbis.Ogg
         private Packet CreatePacket(int pageIndex, int packetIndex, long granulePos, bool isResync, bool isContinued, int packetCount, int pageOverhead)
         {
             // create the packet list and add the item to it
-            var pktList = new List<Tuple<long, int>> { _reader.GetPagePackets(pageIndex)[packetIndex] };
+            var pktList = new List<ValueTuple<long, int>> { _reader.GetPagePackets(pageIndex)[packetIndex] };
 
             // make sure we handle continuations
             bool isLastPacket;

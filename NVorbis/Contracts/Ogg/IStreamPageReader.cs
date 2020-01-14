@@ -8,7 +8,7 @@ namespace NVorbis.Contracts.Ogg
     {
         void AddPage();
 
-        IReadOnlyList<Tuple<long, int>> GetPagePackets(int pageIndex);
+        ValueTuple<long, int>[] GetPagePackets(int pageIndex);
 
         int FindPage(long granulePos);
 

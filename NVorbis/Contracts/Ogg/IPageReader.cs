@@ -28,7 +28,7 @@ namespace NVorbis.Contracts.Ogg
         bool IsContinued { get; }
         int PageOverhead { get; }
 
-        List<Tuple<long, int>> GetPackets();
+        ValueTuple<long, int>[] GetPackets();
 
         int Read(long offset, byte[] buffer, int index, int count);
     }

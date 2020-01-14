@@ -49,8 +49,8 @@ namespace NVorbis.Ogg
             User3 = 0x80,
         }
 
-        private IReadOnlyList<Tuple<long, int>> _dataSrc;               // IntPtr + segment_count * 12
-        private IPacketReader _packetReader;
+        private IReadOnlyList<ValueTuple<long, int>> _dataSrc;  // IntPtr + 12 * segment_count
+        private IPacketReader _packetReader;                    // IntPtr
         int _dataIndex;                                         // 4
         int _dataOfs;                                           // 4
         byte[] _dataBuf;                                        // IntPtr + cur_segment_size
@@ -62,7 +62,7 @@ namespace NVorbis.Ogg
         int _readBits;              // 4
         int _containerOverheadBits; // 4
 
-        internal Packet(IReadOnlyList<Tuple<long, int>> data, IPacketReader packetReader)
+        internal Packet(IReadOnlyList<ValueTuple<long, int>> data, IPacketReader packetReader)
         {
             _dataSrc = data;
             _packetReader = packetReader;
