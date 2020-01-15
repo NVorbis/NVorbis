@@ -7,11 +7,11 @@ using System.Threading;
 
 namespace NVorbis.Ogg
 {
-    internal class PageReader : IPageReader
+    internal class PageReader : IPageData
     {
         internal static Func<ICrc> CreateCrc { get; set; } = () => new Crc();
         internal static Func<IStreamPageReader, int, IPacketProvider> CreatePacketProvider { get; set; } = (pr, ss) => new PacketProvider(pr, ss);
-        internal static Func<IPageReader, IStreamPageReader> CreateStreamPageReader { get; set; } = pr => new StreamPageReader(pr);
+        internal static Func<IPageData, IStreamPageReader> CreateStreamPageReader { get; set; } = pr => new StreamPageReader(pr);
 
         private readonly Dictionary<int, IStreamPageReader> _streamReaders = new Dictionary<int, IStreamPageReader>();
         private readonly HashSet<int> _ignoredSerials = new HashSet<int>();
@@ -88,12 +88,15 @@ namespace NVorbis.Ogg
                         // move to the front of the buffer if not there already
                         if (i > 0)
                         {
+                            // subtract out the offset
+                            cnt -= i;
+
+                            // do the copy
                             Buffer.BlockCopy(_headerBuf, i, _headerBuf, 0, cnt);
+
+                            // update the rest
                             WasteBits += i * 8;
                             IsResync = true;
-
-                            // adjust our count and index to match what we just did
-                            cnt -= i;
                             i = 0;
                         }
 
@@ -225,10 +228,9 @@ namespace NVorbis.Ogg
                 }
 
                 var streamReader = CreateStreamPageReader(this);
-                var packetProvider = CreatePacketProvider(streamReader, StreamSerial);
                 streamReader.AddPage();
                 _streamReaders.Add(StreamSerial, streamReader);
-                if (!_newStreamCallback(packetProvider))
+                if (!_newStreamCallback(CreatePacketProvider(streamReader, StreamSerial)))
                 {
                     _streamReaders.Remove(StreamSerial);
                     _ignoredSerials.Add(StreamSerial);

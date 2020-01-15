@@ -6,7 +6,7 @@ namespace NVorbis.Ogg
 {
     class StreamPageReader : IStreamPageReader
     {
-        private readonly IPageReader _reader;
+        private readonly IPageData _reader;
         private readonly List<long> _pageOffsets = new List<long>();
 
         private int _lastSeqNbr;
@@ -22,7 +22,7 @@ namespace NVorbis.Ogg
 
         private ValueTuple<long, int>[] _cachedPagePackets;
 
-        public StreamPageReader(IPageReader pageReader)
+        public StreamPageReader(IPageData pageReader)
         {
             _reader = pageReader;
         }
