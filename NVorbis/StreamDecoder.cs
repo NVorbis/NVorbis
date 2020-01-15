@@ -30,6 +30,7 @@ namespace NVorbis
 
         private long _currentPosition;
         private bool _hasClipped;
+        private bool _hasPosition;
         private bool _eosFound;
 
         private float[][] _nextPacketBuf;
@@ -139,6 +140,7 @@ namespace NVorbis
 
             if (fullReset)
             {
+                _currentPosition = 0;
                 ResetDecoder();
                 return true;
             }
@@ -291,9 +293,6 @@ namespace NVorbis
 
         private void ResetDecoder()
         {
-            // TODO: What happens if we lose sync and can't trust our position any more?
-            //       Somehow we need to regain sync...
-
             _prevPacketBuf = null;
             _prevPacketStart = 0;
             _prevPacketEnd = 0;
@@ -304,6 +303,7 @@ namespace NVorbis
             _hasReadSampleRate = false;
             _eosFound = false;
             _hasClipped = false;
+            _hasPosition = false;
         }
 
         private void AckParameterChange(bool sampleRate = false, bool channels = false)
@@ -366,6 +366,7 @@ namespace NVorbis
 
                         // fully reset ourself
                         ResetDecoder();
+                        _hasPosition = true;
                         break;
                     }
                     if (_eosFound)
@@ -377,7 +378,7 @@ namespace NVorbis
                         break;
                     }
 
-                    if (!ReadNextPacket((idx - offset) / _channels, out isParameterChange))
+                    if (!ReadNextPacket((idx - offset) / _channels, out isParameterChange, out var samplePosition))
                     {
                         // save off the parameter change state...
                         _isParameterChange |= isParameterChange;
@@ -387,6 +388,13 @@ namespace NVorbis
 
                         // drain the current packet (the windowing will fade it out)
                         _prevPacketEnd = _prevPacketStop;
+                    }
+
+                    // if we need to pick up a position, and the packet had one, apply the position now
+                    if (samplePosition.HasValue && !_hasPosition)
+                    {
+                        _hasPosition = true;
+                        _currentPosition = samplePosition.Value - (_prevPacketEnd - _prevPacketStart) - (idx - offset) / _channels;
                     }
                 }
 
@@ -441,10 +449,11 @@ namespace NVorbis
             return idx - targetIndex;
         }
 
-        private bool ReadNextPacket(int bufferedSamples, out bool isParameterChange)
+        private bool ReadNextPacket(int bufferedSamples, out bool isParameterChange, out long? samplePosition)
         {
             // decode the next packet now so we can start overlapping with it
-            var curPacket = DecodeNextPacket(out var startIndex, out var validLen, out var totalLen, out isParameterChange, out var maxSamplePosition, out var bitsRead, out var bitsRemaining, out var containerOverheadBits);
+            var curPacket = DecodeNextPacket(out var startIndex, out var validLen, out var totalLen, out isParameterChange, out var isEndOfStream, out samplePosition, out var bitsRead, out var bitsRemaining, out var containerOverheadBits);
+            _eosFound |= isEndOfStream;
             if (curPacket == null)
             {
                 _stats.AddPacket(0, bitsRead, bitsRemaining, containerOverheadBits);
@@ -452,10 +461,10 @@ namespace NVorbis
             }
 
             // if we get a max sample position, back off our valid length to match
-            if (maxSamplePosition.HasValue)
+            if (samplePosition.HasValue && isEndOfStream)
             {
                 var actualEnd = _currentPosition + bufferedSamples + validLen - startIndex;
-                var diff = (int)(maxSamplePosition.Value - actualEnd);
+                var diff = (int)(samplePosition.Value - actualEnd);
                 if (diff < 0)
                 {
                     validLen += diff;
@@ -490,73 +499,75 @@ namespace NVorbis
             return true;
         }
 
-        private float[][] DecodeNextPacket(out int packetStartindex, out int packetValidLength, out int packetTotalLength, out bool isParameterChange, out long? maxSamplePosition, out int bitsRead, out int bitsRemaining, out int containerOverheadBits)
+        private float[][] DecodeNextPacket(out int packetStartindex, out int packetValidLength, out int packetTotalLength, out bool isParameterChange, out bool isEndOfStream, out long? samplePosition, out int bitsRead, out int bitsRemaining, out int containerOverheadBits)
         {
-            packetStartindex = 0;
-            packetValidLength = 0;
-            packetTotalLength = 0;
-            isParameterChange = false;
-            maxSamplePosition = null;
-            bitsRead = 0;
-            bitsRemaining = 0;
-            containerOverheadBits = 0;
-
             IPacket packet = null;
             try
             {
                 if ((packet = _packetProvider.GetNextPacket()) == null)
                 {
                     // no packet? we're at the end of the stream
-                    _eosFound = true;
-                    return null;
+                    isParameterChange = false;
+                    isEndOfStream = true;
                 }
-
-                if (packet.IsParameterChange)
+                else if (packet.IsParameterChange)
                 {
                     // parameter change... hmmm...  process it, flag that we're changing, then try again next pass
                     isParameterChange = true;
+                    isEndOfStream = false;
                     ProcessParameterChange(packet, false);
-                    return null;
                 }
-
-                // if the packet is flagged as the end of the stream, we can safely mark _eosFound
-                if (packet.IsEndOfStream)
+                else
                 {
-                    _eosFound = true;
-                }
+                    isParameterChange = false;
 
-                // grab the container overhead now, since the read won't affect it
-                containerOverheadBits = packet.ContainerOverheadBits;
+                    // if the packet is flagged as the end of the stream, we can safely mark _eosFound
+                    isEndOfStream = packet.IsEndOfStream;
 
-                // make sure the packet starts with a 0 bit as per the spec
-                if (packet.ReadBit())
-                {
-                    bitsRemaining = packet.BitsRemaining + 1;
-                    return null;
-                }
-
-                // if we get here, we should have a good packet; decode it and add it to the buffer
-                var mode = _modes[(int)packet.ReadBits(_modeFieldBits)];
-                if (_nextPacketBuf == null)
-                {
-                    _nextPacketBuf = new float[_channels][];
-                    for (var i = 0; i < _channels; i++)
+                    // resync... that means we've probably lost some data; pick up a new position
+                    if (packet.IsResync)
                     {
-                        _nextPacketBuf[i] = new float[_block1Size];
+                        _hasPosition = false;
+                    }
+
+                    // grab the container overhead now, since the read won't affect it
+                    containerOverheadBits = packet.ContainerOverheadBits;
+
+                    // make sure the packet starts with a 0 bit as per the spec
+                    if (packet.ReadBit())
+                    {
+                        bitsRemaining = packet.BitsRemaining + 1;
+                    }
+                    else
+                    {
+                        // if we get here, we should have a good packet; decode it and add it to the buffer
+                        var mode = _modes[(int)packet.ReadBits(_modeFieldBits)];
+                        if (_nextPacketBuf == null)
+                        {
+                            _nextPacketBuf = new float[_channels][];
+                            for (var i = 0; i < _channels; i++)
+                            {
+                                _nextPacketBuf[i] = new float[_block1Size];
+                            }
+                        }
+                        if (mode.Decode(packet, _nextPacketBuf, out packetStartindex, out packetValidLength, out packetTotalLength))
+                        {
+                            // per the spec, do not decode more samples than the last granulePosition
+                            samplePosition = packet.GranulePosition;
+                            bitsRead = packet.BitsRead;
+                            bitsRemaining = packet.BitsRemaining;
+                            return _nextPacketBuf;
+                        }
+                        bitsRemaining = packet.BitsRead + packet.BitsRemaining;
                     }
                 }
-                if (mode.Decode(packet, _nextPacketBuf, out packetStartindex, out packetValidLength, out packetTotalLength))
-                {
-                    // per the spec, do not decode more samples than the last granulePosition
-                    if (packet.IsEndOfStream && packet.PageGranulePosition > 0)
-                    {
-                        maxSamplePosition = packet.PageGranulePosition;
-                    }
-                    bitsRead = packet.BitsRead;
-                    bitsRemaining = packet.BitsRemaining;
-                    return _nextPacketBuf;
-                }
-                bitsRemaining = packet.BitsRead + packet.BitsRemaining;
+                packetStartindex = 0;
+                packetValidLength = 0;
+                packetTotalLength = 0;
+                samplePosition = null;
+                bitsRead = 0;
+                bitsRemaining = 0;
+                containerOverheadBits = 0;
                 return null;
             }
             finally
@@ -616,9 +627,10 @@ namespace NVorbis
 
             // clear out old data
             ResetDecoder();
+            _hasPosition = true;
 
             // read the pre-roll packet
-            if (!ReadNextPacket(0, out _))
+            if (!ReadNextPacket(0, out _, out _))
             {
                 // we'll use this to force ReadSamples to fail to read
                 _eosFound = true;
@@ -626,7 +638,7 @@ namespace NVorbis
             }
 
             // read the actual packet
-            if (!ReadNextPacket(0, out _))
+            if (!ReadNextPacket(0, out _, out _))
             {
                 ResetDecoder();
                 // we'll use this to force ReadSamples to fail to read

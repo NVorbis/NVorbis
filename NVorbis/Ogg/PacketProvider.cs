@@ -253,7 +253,6 @@ namespace NVorbis.Ogg
             // create the packet instance and populate it with the appropriate initial data
             var packet = new Packet(pktList, this)
             {
-                PageGranulePosition = granulePos,
                 IsResync = isResync,
             };
 
@@ -266,7 +265,7 @@ namespace NVorbis.Ogg
             // if we're the last packet completed in the page, set the .GranulePosition
             if (isLastPacket)
             {
-                packet.GranulePosition = packet.PageGranulePosition;
+                packet.GranulePosition = granulePos;
 
                 // if we're the last packet completed in the page, no more pages are available, and _hasAllPages is set, set .IsEndOfStream
                 if (_reader.HasAllPages && finalPage == _reader.PageCount - 1)
