@@ -6,6 +6,8 @@ namespace NVorbis.Contracts.Ogg
 {
     interface IStreamPageReader
     {
+        IPacketProvider PacketProvider { get; }
+
         void AddPage();
 
         ValueTuple<long, int>[] GetPagePackets(int pageIndex);

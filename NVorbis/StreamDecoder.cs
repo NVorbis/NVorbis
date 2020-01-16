@@ -73,78 +73,54 @@ namespace NVorbis
 
         private bool ProcessParameterChange(IPacket packet, bool advanceToNextPacket)
         {
-            var fullChange = false;
-            var fullReset = false;
-            if (ProcessStreamHeader(packet))
-            {
-                fullChange = true;
-                if (advanceToNextPacket)
-                {
-                    _packetProvider.GetNextPacket().Done();
-                }
-                else
-                {
-                    packet.Done();
-                    advanceToNextPacket = true;
-                }
-                packet = _packetProvider.PeekNextPacket();
-                if (packet == null) throw new InvalidDataException("Couldn't get next packet!");
-            }
-            else
+            if (!ProcessStreamHeader(packet))
             {
                 packet.Reset();
+                return false;
             }
 
-            if (LoadComments(packet))
+            if (advanceToNextPacket)
             {
-                if (advanceToNextPacket)
-                {
-                    _packetProvider.GetNextPacket().Done();
-                }
-                else
-                {
-                    packet.Done();
-                    advanceToNextPacket = true;
-                }
-                packet = _packetProvider.PeekNextPacket();
-                if (packet == null) throw new InvalidDataException("Couldn't get next packet!");
-            }
-            else
-            {
-                packet.Reset();
+                _packetProvider.GetNextPacket().Done();
             }
 
-            if (LoadBooks(packet))
+            packet = _packetProvider.GetNextPacket();
+            if (packet == null)
             {
-                fullReset = true;
-                if (advanceToNextPacket)
-                {
-                    _packetProvider.GetNextPacket().Done();
-                }
-                else
-                {
-                    packet.Done();
-                }
-                packet = _packetProvider.PeekNextPacket();
-                if (packet == null) throw new InvalidDataException("Couldn't get next packet!");
+                return false;
             }
-            else
+            try
             {
-                packet.Reset();
+                if (!LoadComments(packet))
+                {
+                    return false;
+                }
+            }
+            finally
+            {
+                packet.Done();
             }
 
-            if (fullChange && !fullReset)
+            packet = _packetProvider.GetNextPacket();
+            if (packet == null)
             {
-                throw new InvalidDataException("Got a new stream header, but no books!");
+                return false;
+            }
+            try
+            {
+                if (!LoadBooks(packet))
+                {
+                    return false;
+                }
+            }
+            finally
+            {
+                packet.Done();
             }
 
-            if (fullReset)
-            {
-                _currentPosition = 0;
-                ResetDecoder();
-                return true;
-            }
-            return false;
+            _currentPosition = 0;
+            ResetDecoder();
+            return true;
         }
 
         static private readonly byte[] PacketSignatureStream = { 0x01, 0x76, 0x6f, 0x72, 0x62, 0x69, 0x73, 0x00, 0x00, 0x00, 0x00 };
@@ -332,7 +308,7 @@ namespace NVorbis
         /// <returns>The number of samples read into the buffer.  If <paramref name="isParameterChange"/> is <see langword="true"/>, this will be <c>0</c>.</returns>
         /// <exception cref="ArgumentOutOfRangeException">Thrown when the buffer is too small or <paramref name="offset"/> is less than zero.</exception>
         /// <remarks>The data populated into <paramref name="buffer"/> is interleaved by channel in normal PCM fashion: Left, Right, Left, Right, Left, Right</remarks>
-        public int ReadSamples(float[] buffer, int offset, int count, out bool isParameterChange)
+        public int Read(float[] buffer, int offset, int count, out bool isParameterChange)
         {
             if (buffer == null) throw new ArgumentNullException(nameof(buffer));
             if (offset < 0 || offset + count > buffer.Length) throw new ArgumentOutOfRangeException(nameof(offset));
@@ -677,6 +653,7 @@ namespace NVorbis
         /// </summary>
         public void Dispose()
         {
+            (_packetProvider as IDisposable)?.Dispose();
             _packetProvider = null;
         }
 
@@ -755,14 +732,19 @@ namespace NVorbis
         }
 
         /// <summary>
-        /// Gets or sets whether to clip samples returned by <see cref="ReadSamples(float[], int, int, out bool)"/>.
+        /// Gets or sets whether to clip samples returned by <see cref="Read(float[], int, int, out bool)"/>.
         /// </summary>
         public bool ClipSamples { get; set; }
 
         /// <summary>
-        /// Gets whether <see cref="ReadSamples(float[], int, int, out bool)"/> has returned any clipped samples.
+        /// Gets whether <see cref="Read(float[], int, int, out bool)"/> has returned any clipped samples.
         /// </summary>
         public bool HasClipped => _hasClipped;
+
+        /// <summary>
+        /// Gets whether the decoder has reached the end of the stream.
+        /// </summary>
+        public bool IsEndOfStream => _eosFound && _prevPacketBuf == null;
 
         /// <summary>
         /// Gets the <see cref="IStreamStats"/> instance for this stream.

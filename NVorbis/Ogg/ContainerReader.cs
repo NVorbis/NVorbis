@@ -12,9 +12,11 @@ namespace NVorbis.Ogg
     public sealed class ContainerReader : IContainerReader
     {
         internal static Func<Stream, bool, Func<IPacketProvider, bool>, IPageReader> CreatePageReader { get; set; } = (s, cod, cb) => new PageReader(s, cod, cb);
+        internal static Func<Stream, bool, Func<IPacketProvider, bool>, IPageReader> CreateForwardOnlyPageReader { get; set; } = (s, cod, cb) => new ForwardOnlyPageReader(s, cod, cb);
 
-        IPageReader _reader;
-        List<IPacketProvider> _streams;
+        private IPageReader _reader;
+        private List<WeakReference<IPacketProvider>> _packetProviders;
+        private bool _foundStream;
 
         /// <summary>
         /// Gets or sets the callback to invoke when a new stream is encountered in the container.
@@ -24,7 +26,32 @@ namespace NVorbis.Ogg
         /// <summary>
         /// Gets a list of streams available from this container.
         /// </summary>
-        public IReadOnlyList<IPacketProvider> Streams => _streams;
+        // TODO: add logic to remove packet providers when they are no longer "valid"
+        public IReadOnlyList<IPacketProvider> Streams
+        {
+            get
+            {
+                var list = new List<IPacketProvider>(_packetProviders.Count);
+                for (var i = 0; i < _packetProviders.Count; i++)
+                {
+                    if (_packetProviders[i].TryGetTarget(out var pp))
+                    {
+                        list.Add(pp);
+                    }
+                    else
+                    {
+                        list.RemoveAt(i);
+                        --i;
+                    }
+                }
+                return list;
+            }
+        }
+
+        /// <summary>
+        /// Gets whether the underlying stream can seek.
+        /// </summary>
+        public bool CanSeek { get; }
 
         /// <summary>
         /// Gets the number of bits in the container that are not associated with a logical stream.
@@ -45,12 +72,19 @@ namespace NVorbis.Ogg
         /// <exception cref="ArgumentException"><paramref name="stream"/>'s <see cref="Stream.CanSeek"/> is <c>False</c>.</exception>
         public ContainerReader(Stream stream, bool closeOnDispose)
         {
-            if (!(stream ?? throw new ArgumentNullException(nameof(stream))).CanSeek)
+            if (stream == null) throw new ArgumentNullException(nameof(stream));
+
+            _packetProviders = new List<WeakReference<IPacketProvider>>();
+
+            if (stream.CanSeek)
             {
-                throw new ArgumentException("Stream must be seek-able!", nameof(stream));
+                _reader = CreatePageReader(stream, closeOnDispose, ProcessNewStream);
+                CanSeek = true;
             }
-            _reader = CreatePageReader(stream, closeOnDispose, ProcessNewStream);
-            _streams = new List<IPacketProvider>();
+            else
+            {
+                _reader = CreateForwardOnlyPageReader(stream, closeOnDispose, ProcessNewStream);
+            }
         }
 
         /// <summary>
@@ -71,10 +105,10 @@ namespace NVorbis.Ogg
             _reader.Lock();
             try
             {
-                var cnt = _streams.Count;
+                _foundStream = false;
                 while (_reader.ReadNextPage())
                 {
-                    if (cnt < _streams.Count)
+                    if (_foundStream)
                     {
                         return true;
                     }
@@ -94,7 +128,8 @@ namespace NVorbis.Ogg
             {
                 if (NewStreamCallback?.Invoke(packetProvider) ?? true)
                 {
-                    _streams.Add(packetProvider);
+                    _packetProviders.Add(new WeakReference<IPacketProvider>(packetProvider));
+                    _foundStream = true;
                     return true;
                 }
                 return false;

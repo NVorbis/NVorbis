@@ -59,14 +59,19 @@ namespace NVorbis.Contracts
         long SamplePosition { get; set; }
 
         /// <summary>
-        /// Gets or sets whether to clip samples returned by <see cref="ReadSamples(float[], int, int, out bool)"/>.
+        /// Gets or sets whether to clip samples returned by <see cref="Read(float[], int, int, out bool)"/>.
         /// </summary>
         bool ClipSamples { get; set; }
 
         /// <summary>
-        /// Gets whether <see cref="ReadSamples(float[], int, int, out bool)"/> has returned any clipped samples.
+        /// Gets whether <see cref="Read(float[], int, int, out bool)"/> has returned any clipped samples.
         /// </summary>
         bool HasClipped { get; }
+
+        /// <summary>
+        /// Gets whether the decoder has reached the end of the stream.
+        /// </summary>
+        bool IsEndOfStream { get; }
 
         /// <summary>
         /// Gets the <see cref="IStreamStats"/> instance for this stream.
@@ -95,6 +100,6 @@ namespace NVorbis.Contracts
         /// <returns>The number of samples read into the buffer.  If <paramref name="isParameterChange"/> is <see langword="true"/>, this will be <c>0</c>.</returns>
         /// <exception cref="ArgumentOutOfRangeException">Thrown when the buffer is too small or <paramref name="offset"/> is less than zero.</exception>
         /// <remarks>The data populated into <paramref name="buffer"/> is interleaved by channel in normal PCM fashion: Left, Right, Left, Right, Left, Right</remarks>
-        int ReadSamples(float[] buffer, int offset, int count, out bool isParameterChange);
+        int Read(float[] buffer, int offset, int count, out bool isParameterChange);
     }
 }

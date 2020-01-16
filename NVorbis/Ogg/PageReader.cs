@@ -10,8 +10,7 @@ namespace NVorbis.Ogg
     internal class PageReader : IPageData
     {
         internal static Func<ICrc> CreateCrc { get; set; } = () => new Crc();
-        internal static Func<IStreamPageReader, int, IPacketProvider> CreatePacketProvider { get; set; } = (pr, ss) => new PacketProvider(pr, ss);
-        internal static Func<IPageData, IStreamPageReader> CreateStreamPageReader { get; set; } = pr => new StreamPageReader(pr);
+        internal static Func<IPageData, int, IStreamPageReader> CreateStreamPageReader { get; set; } = (pr, ss) => new StreamPageReader(pr, ss);
 
         private readonly Dictionary<int, IStreamPageReader> _streamReaders = new Dictionary<int, IStreamPageReader>();
         private readonly HashSet<int> _ignoredSerials = new HashSet<int>();
@@ -227,10 +226,10 @@ namespace NVorbis.Ogg
                     return false;
                 }
 
-                var streamReader = CreateStreamPageReader(this);
+                var streamReader = CreateStreamPageReader(this, StreamSerial);
                 streamReader.AddPage();
                 _streamReaders.Add(StreamSerial, streamReader);
-                if (!_newStreamCallback(CreatePacketProvider(streamReader, StreamSerial)))
+                if (!_newStreamCallback(streamReader.PacketProvider))
                 {
                     _streamReaders.Remove(StreamSerial);
                     _ignoredSerials.Add(StreamSerial);
@@ -240,6 +239,13 @@ namespace NVorbis.Ogg
             else
             {
                 _streamReaders[StreamSerial].AddPage();
+
+                // if we've read the last page, remove from our list so cleanup can happen.
+                // this is safe because the instance still has access to us for reading.
+                if ((PageFlags & PageFlags.EndOfStream) == PageFlags.EndOfStream)
+                {
+                    _streamReaders.Remove(StreamSerial);
+                }
             }
 
             return true;
@@ -356,13 +362,6 @@ namespace NVorbis.Ogg
                 _stream.Position = offset;
                 return _stream.Read(buffer, index, count);
             }
-        }
-
-        public void ReadAllPages()
-        {
-            if (!CheckLock()) throw new InvalidOperationException("Must be locked!");
-
-            while (ReadNextPage()) { };
         }
 
         public void Dispose()

@@ -61,7 +61,7 @@ namespace NVorbis
             _containerReader = containerReader;
         }
 
-        [Obsolete("Use \"new StreamDecoder(IPacketProvider)\" and the container's Streams property instead.", true)]
+        [Obsolete("Use \"new StreamDecoder(IPacketProvider)\" and the container's NewStreamCallback or Streams property instead.", true)]
         public VorbisReader(IContainerReader containerReader) => throw new NotSupportedException();
 
         [Obsolete("Use \"new StreamDecoder(IPacketProvider)\" instead.", true)]
@@ -215,7 +215,7 @@ namespace NVorbis
         }
 
         /// <summary>
-        /// Gets or sets whether to clip samples returned by <see cref="ReadSamples(float[], int, int, out bool)"/>.
+        /// Gets or sets whether to clip samples returned by <see cref="Read(float[], int, int, out bool)"/>.
         /// </summary>
         public bool ClipSamples
         {
@@ -224,7 +224,7 @@ namespace NVorbis
         }
 
         /// <summary>
-        /// Gets whether <see cref="ReadSamples(float[], int, int, out bool)"/> has returned any clipped samples.
+        /// Gets whether <see cref="Read(float[], int, int, out bool)"/> has returned any clipped samples.
         /// </summary>
         public bool HasClipped => _decoders[0].HasClipped;
 
@@ -277,7 +277,7 @@ namespace NVorbis
         // Previous versions of NVorbis.VorbisReader could handle partial-sample reading (count is an odd number when reading a stereo stream).
         // The new decoder design can't do that, so we have to fake it...
         // While we're at it, we're adding logic to handle the parameter change such that we have the same semantics as before.
-        [Obsolete("Use the other ReadSamples override instead.")]
+        [Obsolete("Use Read(float[], int, int, out bool) instead.")]
         public int ReadSamples(float[] buffer, int offset, int count)
         {
             // if we have a tail buffer, we have floats
@@ -317,7 +317,7 @@ namespace NVorbis
             int readCount;
             try
             {
-                readCount = _decoders[0].ReadSamples(buffer, offset, count, out var isParamterChange);
+                readCount = _decoders[0].Read(buffer, offset, count, out var isParamterChange);
                 if (readCount == 0 && isParamterChange)
                 {
                     IsParameterChange = true;
@@ -360,7 +360,7 @@ namespace NVorbis
                     // we really don't care if this read succeeds... the primary read has already done so and all semantics belong to it.
                     // so even if the parameters have changed, we'll let the next pass trigger the exception.
                     // and if we don't read anything here, no harm done; the caller will probably try again.
-                    tailRead = _decoders[0].ReadSamples(_tailBuffer, 0, _tailBuffer.Length, out _);
+                    tailRead = _decoders[0].Read(_tailBuffer, 0, _tailBuffer.Length, out _);
                 }
                 catch
                 {
@@ -402,16 +402,16 @@ namespace NVorbis
         /// <returns>The number of samples read into the buffer.  If <paramref name="isParameterChange"/> is <see langword="true"/>, this will be <c>0</c>.</returns>
         /// <exception cref="ArgumentOutOfRangeException">Thrown when the buffer is too small or <paramref name="offset"/> is less than zero.</exception>
         /// <remarks>The data populated into <paramref name="buffer"/> is interleaved by channel in normal PCM fashion: Left, Right, Left, Right, Left, Right</remarks>
-        public int ReadSamples(float[] buffer, int offset, int count, out bool isParameterChange)
+        public int Read(float[] buffer, int offset, int count, out bool isParameterChange)
         {
             _tailBuffer = null;
-            var cnt = _decoders[0].ReadSamples(buffer, offset, count, out isParameterChange);
+            var cnt = _decoders[0].Read(buffer, offset, count, out isParameterChange);
             IsParameterChange |= isParameterChange;
             return cnt;
         }
 
         /// <summary>
-        /// Acknowledges a parameter change as signalled by <see cref="ReadSamples(float[], int, int, out bool)"/>.
+        /// Acknowledges a parameter change as signalled by <see cref="Read(float[], int, int, out bool)"/>.
         /// </summary>
         [Obsolete("IsParamterChange will be removed in a later release.  This method will be removed with it.")]
         public void ClearParameterChange()

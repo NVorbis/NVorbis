@@ -5,7 +5,7 @@ using System.Collections.Generic;
 
 namespace NVorbis.Ogg
 {
-    class FwdOnlyPacketProvider : DataPacket, IFwdOnlyPacketProvider
+    class ForwardOnlyPacketProvider : DataPacket, IForwardOnlyPacketProvider
     {
         private int _lastSeqNo;
         private readonly Queue<(byte[] buf, bool isResync)> _pageQueue = new Queue<(byte[] buf, bool isResync)>();
@@ -22,7 +22,7 @@ namespace NVorbis.Ogg
 
         private int _dataIndex;
 
-        public FwdOnlyPacketProvider(IPageReader reader, int streamSerial)
+        public ForwardOnlyPacketProvider(IPageReader reader, int streamSerial)
         {
             _reader = reader;
             StreamSerial = streamSerial;

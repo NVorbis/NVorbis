@@ -19,6 +19,11 @@ namespace NVorbis.Contracts
         IReadOnlyList<IPacketProvider> Streams { get; }
 
         /// <summary>
+        /// Gets whether the underlying stream can seek.
+        /// </summary>
+        bool CanSeek { get; }
+
+        /// <summary>
         /// Gets the number of bits dedicated to container framing and overhead.
         /// </summary>
         long ContainerBits { get; }

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 
 namespace NVorbis.Contracts.Ogg
 {
@@ -13,7 +14,5 @@ namespace NVorbis.Contracts.Ogg
         bool ReadNextPage();
 
         bool ReadPageAt(long offset);
-
-        void ReadAllPages();
     }
 }

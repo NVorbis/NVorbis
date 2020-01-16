@@ -6,7 +6,10 @@ namespace NVorbis.Ogg
 {
     class StreamPageReader : IStreamPageReader
     {
+        internal static Func<IStreamPageReader, int, Contracts.IPacketProvider> CreatePacketProvider { get; set; } = (pr, ss) => new PacketProvider(pr, ss);
+
         private readonly IPageData _reader;
+        private readonly Contracts.IPacketProvider _packetProvider;
         private readonly List<long> _pageOffsets = new List<long>();
 
         private int _lastSeqNbr;
@@ -22,9 +25,12 @@ namespace NVorbis.Ogg
 
         private ValueTuple<long, int>[] _cachedPagePackets;
 
-        public StreamPageReader(IPageData pageReader)
+        public Contracts.IPacketProvider PacketProvider => _packetProvider;
+
+        public StreamPageReader(IPageData pageReader, int streamSerial)
         {
             _reader = pageReader;
+            _packetProvider = CreatePacketProvider(this, streamSerial);
         }
 
         public void AddPage()
