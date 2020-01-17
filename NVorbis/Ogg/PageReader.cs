@@ -26,8 +26,6 @@ namespace NVorbis.Ogg
 
         private void ParsePageHeader(byte[] pageBuf, bool? isResync)
         {
-            PageOffset = StreamPosition - pageBuf.Length;
-
             var isContinued = false;
             var segCnt = pageBuf[26];
             var dataOffset = PageOffset + 27 + segCnt;
@@ -111,6 +109,7 @@ namespace NVorbis.Ogg
 
         protected override bool AddPage(int streamSerial, byte[] pageBuf, bool isResync)
         {
+            PageOffset = StreamPosition - pageBuf.Length;
             ParsePageHeader(pageBuf, isResync);
 
             if (_streamReaders.TryGetValue(streamSerial, out var spr))
@@ -155,6 +154,8 @@ namespace NVorbis.Ogg
 
             SeekStream(offset, SeekOrigin.Begin);
             var cnt = EnsureRead(hdrBuf, 0, 27);
+
+            PageOffset = offset;
             if (VerifyHeader(hdrBuf, 0, ref cnt))
             {
                 ParsePageHeader(hdrBuf, null);
