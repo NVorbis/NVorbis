@@ -7,8 +7,8 @@ namespace TestApp
 {
     static class Program
     {
-        const string OGG_FILE = @"3test.ogg";
-        //const string OGG_FILE = @"2test.ogg";
+        const string OGG_FILE = @"..\TestFiles\3test.ogg";
+        //const string OGG_FILE = @"..\TestFiles\2test.ogg";
 
         static void Main()
         {

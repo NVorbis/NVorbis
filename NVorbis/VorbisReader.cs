@@ -66,11 +66,13 @@ namespace NVorbis
             _streamDecoder = _decoders[0];
         }
 
+#pragma warning disable CS1591 // Missing XML comment for publicly visible type or member
         [Obsolete("Use \"new StreamDecoder(IPacketProvider)\" and the container's NewStreamCallback or Streams property instead.", true)]
         public VorbisReader(IContainerReader containerReader) => throw new NotSupportedException();
 
         [Obsolete("Use \"new StreamDecoder(IPacketProvider)\" instead.", true)]
         public VorbisReader(IPacketProvider packetProvider) => throw new NotSupportedException();
+#pragma warning restore CS1591 // Missing XML comment for publicly visible type or member
 
         private bool ProcessNewStream(IPacketProvider packetProvider)
         {
@@ -460,7 +462,9 @@ namespace NVorbis
         {
             _tailBuffer = null;
             var cnt = _streamDecoder.Read(buffer, offset, count, out isParameterChange);
+#pragma warning disable CS0618 // Type or member is obsolete
             IsParameterChange |= isParameterChange;
+#pragma warning restore CS0618 // Type or member is obsolete
             return cnt;
         }
 

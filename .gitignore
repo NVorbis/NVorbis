@@ -8,9 +8,8 @@
 
 # Build results
 
-bin/
-Lib/obj/
-NAudioSupport/obj/
+NVorbis/bin/
+NVorbis/obj/
 TestApp/bin/
 TestApp/obj/
 .vs/
