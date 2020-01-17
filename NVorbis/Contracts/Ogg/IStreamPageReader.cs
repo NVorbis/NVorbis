@@ -8,13 +8,11 @@ namespace NVorbis.Contracts.Ogg
 
         void AddPage();
 
-        ValueTuple<long, int>[] GetPagePackets(int pageIndex);
+        Memory<byte>[] GetPagePackets(int pageIndex);
 
         int FindPage(long granulePos);
 
         bool GetPage(int pageIndex, out long granulePos, out bool isResync, out bool isContinuation, out bool isContinued, out int packetCount, out int pageOverhead);
-
-        int FillBuffer(long offset, byte[] buffer, int index, int count);
 
         void SetEndOfStream();
 

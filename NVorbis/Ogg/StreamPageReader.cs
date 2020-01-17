@@ -9,7 +9,6 @@ namespace NVorbis.Ogg
         internal static Func<IStreamPageReader, int, Contracts.IPacketProvider> CreatePacketProvider { get; set; } = (pr, ss) => new PacketProvider(pr, ss);
 
         private readonly IPageData _reader;
-        private readonly Contracts.IPacketProvider _packetProvider;
         private readonly List<long> _pageOffsets = new List<long>();
 
         private int _lastSeqNbr;
@@ -23,9 +22,9 @@ namespace NVorbis.Ogg
         private int _lastPagePacketCount;
         private int _lastPageOverhead;
 
-        private ValueTuple<long, int>[] _cachedPagePackets;
+        private Memory<byte>[] _cachedPagePackets;
 
-        public Contracts.IPacketProvider PacketProvider => _packetProvider;
+        public Contracts.IPacketProvider PacketProvider { get; private set; }
 
         public StreamPageReader(IPageData pageReader, int streamSerial)
         {
@@ -38,7 +37,7 @@ namespace NVorbis.Ogg
             // So long as the user doesn't drop their reference and the page reader doesn't drop us,
             //  the packet provider will stay alive.
             // This is important since the container reader only holds a week reference to it.
-            _packetProvider = CreatePacketProvider(this, streamSerial);
+            PacketProvider = CreatePacketProvider(this, streamSerial);
         }
 
         public void AddPage()
@@ -73,7 +72,7 @@ namespace NVorbis.Ogg
             }
         }
 
-        public ValueTuple<long, int>[] GetPagePackets(int pageIndex)
+        public Memory<byte>[] GetPagePackets(int pageIndex)
         {
             if (_cachedPagePackets != null && _lastPageIndex == pageIndex)
             {
@@ -90,7 +89,7 @@ namespace NVorbis.Ogg
             try
             {
                 _reader.ReadPageAt(pageOffset);
-                return _reader.GetPackets();
+                return _cachedPagePackets = _reader.GetPackets();
             }
             finally
             {
@@ -284,20 +283,29 @@ namespace NVorbis.Ogg
             // on way or the other, this cached value is invalid at this point
             _cachedPagePackets = null;
 
-            while (pageIndex >= _pageOffsets.Count && !HasAllPages)
+            _reader.Lock();
+            try
             {
-                _reader.Lock();
-                try
+                while (pageIndex >= _pageOffsets.Count && !HasAllPages)
                 {
-                    if (!_reader.ReadNextPage())
+                    if (_reader.ReadNextPage())
+                    {
+                        // if we found our page, return it from here so we don't have to do further processing
+                        if (pageIndex < _pageOffsets.Count)
+                        {
+                            ReadPageData(pageIndex, out granulePos, out isResync, out isContinuation, out isContinued, out packetCount, out pageOverhead);
+                            return true;
+                        }
+                    }
+                    else
                     {
                         break;
                     }
                 }
-                finally
-                {
-                    _reader.Release();
-                }
+            }
+            finally
+            {
+                _reader.Release();
             }
 
             if (pageIndex < _pageOffsets.Count)
@@ -318,13 +326,7 @@ namespace NVorbis.Ogg
                 {
                     if (_reader.ReadPageAt(offset))
                     {
-                        _lastPageIsResync = isResync;
-                        _lastPageGranulePos = granulePos = _reader.GranulePosition;
-                        _lastPageIsContinuation = isContinuation = (_reader.PageFlags & PageFlags.ContinuesPacket) != 0;
-                        _lastPageIsContinued = isContinued = _reader.IsContinued;
-                        _lastPagePacketCount = packetCount = _reader.PacketCount;
-                        _lastPageOverhead = pageOverhead = _reader.PageOverhead;
-                        _lastPageIndex = pageIndex;
+                        ReadPageData(pageIndex, out granulePos, out isResync, out isContinuation, out isContinued, out packetCount, out pageOverhead);
                         return true;
                     }
                 }
@@ -343,9 +345,15 @@ namespace NVorbis.Ogg
             return false;
         }
 
-        public int FillBuffer(long offset, byte[] buffer, int index, int count)
+        private void ReadPageData(int pageIndex, out long granulePos, out bool isResync, out bool isContinuation, out bool isContinued, out int packetCount, out int pageOverhead)
         {
-            return _reader.Read(offset, buffer, index, count);
+            _lastPageIsResync = isResync = _reader.IsResync.Value;
+            _lastPageGranulePos = granulePos = _reader.GranulePosition;
+            _lastPageIsContinuation = isContinuation = (_reader.PageFlags & PageFlags.ContinuesPacket) != 0;
+            _lastPageIsContinued = isContinued = _reader.IsContinued;
+            _lastPagePacketCount = packetCount = _reader.PacketCount;
+            _lastPageOverhead = pageOverhead = _reader.PageOverhead;
+            _lastPageIndex = pageIndex;
         }
 
         public void SetEndOfStream()

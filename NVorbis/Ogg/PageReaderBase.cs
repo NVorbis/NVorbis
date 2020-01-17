@@ -109,7 +109,7 @@ namespace NVorbis.Ogg
             }
         }
 
-        private int FillHeader(byte[] buf, int index, int count)
+        private int FillHeader(byte[] buf, int index, int count, int maxTries = 10)
         {
             var copyCount = 0;
             if (_overflowBuf != null)
@@ -125,10 +125,45 @@ namespace NVorbis.Ogg
             }
             if (count > 0)
             {
-                PrepareStreamForNextPage();
-                copyCount += EnsureRead(buf, index, count);
+                copyCount += EnsureRead(buf, index, count, maxTries);
             }
             return copyCount;
+        }
+
+        private bool VerifyHeader(byte[] buffer, int index, ref int cnt, bool isFromReadNextPage)
+        {
+            if (buffer[index] == 0x4f && buffer[index + 1] == 0x67 && buffer[index + 2] == 0x67 && buffer[index + 3] == 0x53)
+            {
+                if (cnt < 27)
+                {
+                    if (isFromReadNextPage)
+                    {
+                        cnt += FillHeader(buffer, 27 - cnt + index, 27 - cnt);
+                    }
+                    else
+                    {
+                        cnt += EnsureRead(buffer, 27 - cnt + index, 27 - cnt);
+                    }
+                }
+
+                if (cnt >= 27)
+                {
+                    var segCnt = buffer[index + 26];
+                    if (isFromReadNextPage)
+                    {
+                        cnt += FillHeader(buffer, index + 27, segCnt);
+                    }
+                    else
+                    {
+                        cnt += EnsureRead(buffer, index + 27, segCnt);
+                    }
+                    if (cnt == index + 27 + segCnt)
+                    {
+                        return true;
+                    }
+                }
+            }
+            return false;
         }
 
         // Network streams don't always return the requested size immediately, so this
@@ -158,36 +193,21 @@ namespace NVorbis.Ogg
         /// <returns><see langword="true"/> if successful, otherwise <see langword="false"/>.</returns>
         protected bool VerifyHeader(byte[] buffer, int index, ref int cnt)
         {
-            if (buffer[index] == 0x4f && buffer[index + 1] == 0x67 && buffer[index + 2] == 0x67 && buffer[index + 3] == 0x53)
-            {
-                if (cnt < 27)
-                {
-                    cnt += EnsureRead(buffer, 27 - cnt + index, 27 - cnt);
-                }
-
-                if (cnt >= 27)
-                {
-                    var segCnt = buffer[index + 26];
-                    cnt += EnsureRead(buffer, index + 27, segCnt);
-                    if (cnt == index + 27 + segCnt)
-                    {
-                        return true;
-                    }
-                }
-            }
-            return false;
+            return VerifyHeader(buffer, index, ref cnt, false);
         }
 
         /// <summary>
         /// Seeks the underlying stream to the requested position.
         /// </summary>
         /// <param name="offset">A byte offset relative to the origin parameter.</param>
-        /// <param name="origin">A value of type <see cref="SeekOrigin"/> indicating the reference point used to obtain the new position.</param>
         /// <returns>The new position of the stream.</returns>
         /// <exception cref="InvalidOperationException">The stream is not seekable.</exception>
-        protected long SeekStream(long offset, SeekOrigin origin)
+        protected long SeekStream(long offset)
         {
-            return _stream.Seek(offset, origin);
+            // make sure we're locked; seeking won't matter if we aren't
+            if (!CheckLock()) throw new InvalidOperationException("Must be locked prior to reading!");
+
+            return _stream.Seek(offset, SeekOrigin.Begin);
         }
 
         virtual protected void PrepareStreamForNextPage() { }
@@ -213,12 +233,13 @@ namespace NVorbis.Ogg
 
             var ofs = 0;
             int cnt;
+            PrepareStreamForNextPage();
             while ((cnt = FillHeader(_headerBuf, ofs, 27 - ofs)) > 0)
             {
                 cnt += ofs;
                 for (var i = 0; i < cnt - 4; i++)
                 {
-                    if (VerifyHeader(_headerBuf, i, ref cnt))
+                    if (VerifyHeader(_headerBuf, i, ref cnt, true))
                     {
                         if (VerifyPage(_headerBuf, i, cnt, out var pageBuf, out var bytesRead))
                         {

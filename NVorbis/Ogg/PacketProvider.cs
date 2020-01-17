@@ -15,6 +15,8 @@ namespace NVorbis.Ogg
         private int _lastPacketPageIndex;
         private int _lastPacketPacketIndex;
         private Packet _lastPacket;
+        private int _nextPacketPageIndex;
+        private int _nextPacketPacketIndex;
 
         public bool CanSeek => true;
 
@@ -41,44 +43,14 @@ namespace NVorbis.Ogg
 
         public IPacket GetNextPacket()
         {
-            var pkt = PeekNextPacket();
-            if (pkt != null)
-            {
-                ++_packetIndex;
-            }
-            return pkt;
+            return GetNextPacket(ref _pageIndex, ref _packetIndex);
         }
 
         public IPacket PeekNextPacket()
         {
-            if (_reader == null) throw new ObjectDisposedException(nameof(PacketProvider));
-
-            if (_lastPacketPacketIndex != _packetIndex || _lastPacketPageIndex != _pageIndex || _lastPacket == null)
-            {
-                _lastPacket = null;
-
-                var packetIndex = _packetIndex;
-                while (_reader.GetPage(_pageIndex, out var granulePos, out var isResync, out var isContinuation, out var isContinued, out var packetCount, out var pageOverhead))
-                {
-                    if (isContinuation)
-                    {
-                        ++packetIndex;
-                    }
-
-                    if (packetIndex >= packetCount)
-                    {
-                        ++_pageIndex;
-                        packetIndex = _packetIndex = 0;
-                        continue;
-                    }
-
-                    _lastPacket = CreatePacket(_pageIndex, packetIndex, granulePos, isResync, isContinued, packetCount, pageOverhead);
-                    _lastPacketPageIndex = _pageIndex;
-                    _lastPacketPacketIndex = _packetIndex;
-                    break;
-                }
-            }
-            return _lastPacket;
+            var pageIndex = _pageIndex;
+            var packetIndex = _packetIndex;
+            return GetNextPacket(ref pageIndex, ref packetIndex);
         }
 
         public long SeekTo(long granulePos, int preRoll, GetPacketGranuleCount getPacketGranuleCount)
@@ -126,7 +98,7 @@ namespace NVorbis.Ogg
                 {
                     if (gp >= granulePos)
                     {
-                        var packet = CreatePacket(pageIndex, packetIndex, pageGranulePos, isResync, isContinued, packetCount, pageOverhead);
+                        var packet = CreatePacket(ref pageIndex, ref packetIndex, false, pageGranulePos, isResync, isContinued, packetCount, pageOverhead);
                         if (packet == null)
                         {
                             break;
@@ -191,10 +163,36 @@ namespace NVorbis.Ogg
             return true;
         }
 
-        private Packet CreatePacket(int pageIndex, int packetIndex, long granulePos, bool isResync, bool isContinued, int packetCount, int pageOverhead)
+        private Packet GetNextPacket(ref int pageIndex, ref int packetIndex)
+        {
+            if (_reader == null) throw new ObjectDisposedException(nameof(PacketProvider));
+
+            if (_lastPacketPacketIndex != packetIndex || _lastPacketPageIndex != pageIndex || _lastPacket == null)
+            {
+                _lastPacket = null;
+
+                while (_reader.GetPage(pageIndex, out var granulePos, out var isResync, out _, out var isContinued, out var packetCount, out var pageOverhead))
+                {
+                    _lastPacketPageIndex = pageIndex;
+                    _lastPacketPacketIndex = packetIndex;
+                    _lastPacket = CreatePacket(ref pageIndex, ref packetIndex, true, granulePos, isResync, isContinued, packetCount, pageOverhead);
+                    _nextPacketPageIndex = pageIndex;
+                    _nextPacketPacketIndex = packetIndex;
+                    break;
+                }
+            }
+            else
+            {
+                pageIndex = _nextPacketPageIndex;
+                packetIndex = _nextPacketPacketIndex;
+            }
+            return _lastPacket;
+        }
+
+        private Packet CreatePacket(ref int pageIndex, ref int packetIndex, bool advance, long granulePos, bool isResync, bool isContinued, int packetCount, int pageOverhead)
         {
             // create the packet list and add the item to it
-            var pktList = new List<ValueTuple<long, int>> { _reader.GetPagePackets(pageIndex)[packetIndex] };
+            var pktList = new List<Memory<byte>>(2) { _reader.GetPagePackets(pageIndex)[packetIndex] };
 
             // make sure we handle continuations
             bool isLastPacket;
@@ -228,7 +226,7 @@ namespace NVorbis.Ogg
                         break;
                     }
 
-                    // if the next page is continued, only keep reading if there are more packets in the page
+                    // if the next page is continued, only keep reading if there are no more packets in the page
                     if (isContinued && packetCount > 1)
                     {
                         isContinued = false;
@@ -274,6 +272,32 @@ namespace NVorbis.Ogg
                 }
             }
 
+            if (advance)
+            {
+                // if we've advanced a page, we continued a packet and should pick up with the next page
+                if (finalPage != pageIndex)
+                {
+                    // we're on the final page now
+                    pageIndex = finalPage;
+
+                    // the packet index will be modified below, so set it to the end of the continued packet
+                    packetIndex = 0;
+                }
+
+                // if we're on the last packet in the page, move to the next page
+                // we can't use isLast here because the logic is different; last in page granule vs. last in physical page
+                if (packetIndex == packetCount - 1)
+                {
+                    ++pageIndex;
+                    packetIndex = 0;
+                }
+                // otherwise, just move to the next packet
+                else
+                {
+                    ++packetIndex;
+                }
+            }
+
             // done!
             return packet;
         }
@@ -284,11 +308,6 @@ namespace NVorbis.Ogg
             {
                 _lastPacket = null;
             }
-        }
-
-        int IPacketReader.FillBuffer(long offset, byte[] buffer, int index, int count)
-        {
-            return _reader.FillBuffer(offset, buffer, index, count);
         }
     }
 }

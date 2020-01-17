@@ -16,7 +16,7 @@ namespace NVorbis.Ogg
         private readonly object _readLock = new object();
 
         private long _nextPageOffset;
-        private ValueTuple<long, int>[] _packetList;
+        Memory<byte>[] _packets;
 
         public PageReader(Stream stream, bool closeOnDispose, Func<IPacketProvider, bool> newStreamCallback)
             : base(stream, closeOnDispose)
@@ -24,57 +24,71 @@ namespace NVorbis.Ogg
             _newStreamCallback = newStreamCallback;
         }
 
-        private void ParsePageHeader(byte[] pageBuf, bool? isResync)
+        private int ParsePageHeader(byte[] pageBuf, int? streamSerial, bool? isResync)
         {
-            var isContinued = false;
             var segCnt = pageBuf[26];
-            var dataOffset = PageOffset + 27 + segCnt;
-            var packets = new (long, int)[segCnt];
-            var pktIdx = 0;
+            var dataLen = 0;
+            var pktCnt = 0;
+            var isContinued = false;
 
-            if (segCnt > 0)
+            var size = 0;
+            for (int i = 0, idx = 27; i < segCnt; i++, idx++)
             {
-                var size = 0;
-                for (int i = 0, idx = 27; i < segCnt; i++, idx++)
+                size += pageBuf[idx];
+                dataLen += size;
+                if (pageBuf[idx] < 255)
                 {
-                    size += pageBuf[idx];
-                    if (pageBuf[idx] < 255)
+                    if (size > 0)
                     {
-                        if (size > 0)
-                        {
-                            packets[pktIdx].Item1 = dataOffset;
-                            packets[pktIdx++].Item2 = size;
-                            dataOffset += size;
-                        }
-                        size = 0;
-                        isContinued = false;
+                        ++pktCnt;
                     }
-                    else
-                    {
-                        isContinued = true;
-                    }
-                }
-                if (size > 0)
-                {
-                    packets[pktIdx].Item1 = dataOffset;
-                    packets[pktIdx++].Item2 = size;
-                }
-                else
-                {
-                    isContinued = false;
+                    size = 0;
                 }
             }
-            _packetList = new (long, int)[pktIdx];
-            Array.Copy(packets, 0, _packetList, 0, pktIdx);
+            if (size > 0)
+            {
+                isContinued = pageBuf[segCnt + 26] == 255;
+                ++pktCnt;
+            }
 
-            StreamSerial = BitConverter.ToInt32(pageBuf, 14);
+            StreamSerial = streamSerial ?? BitConverter.ToInt32(pageBuf, 14);
             SequenceNumber = BitConverter.ToInt32(pageBuf, 18);
             PageFlags = (PageFlags)pageBuf[5];
             GranulePosition = BitConverter.ToInt64(pageBuf, 6);
-            PacketCount = (short)pktIdx;
+            PacketCount = (short)pktCnt;
             IsResync = isResync;
             IsContinued = isContinued;
             PageOverhead = 27 + segCnt;
+            return dataLen;
+        }
+
+        private static Memory<byte>[] ReadPackets(int packetCount, Span<byte> segments, Memory<byte> dataBuffer)
+        {
+            var list = new Memory<byte>[packetCount];
+            var listIdx = 0;
+            var dataIdx = 0;
+            var size = 0;
+
+            for (var i = 0; i < segments.Length; i++)
+            {
+                var seg = segments[i];
+                size += seg;
+                if (seg < 255)
+                {
+                    if (size > 0)
+                    {
+                        list[listIdx++] = dataBuffer.Slice(dataIdx, size);
+                        dataIdx += size;
+                    }
+                    size = 0;
+                }
+            }
+            if (size > 0)
+            {
+                list[listIdx] = dataBuffer.Slice(dataIdx, size);
+            }
+
+            return list;
         }
 
         public override void Lock()
@@ -104,13 +118,14 @@ namespace NVorbis.Ogg
 
         protected override void PrepareStreamForNextPage()
         {
-            SeekStream(_nextPageOffset, SeekOrigin.Begin);
+            SeekStream(_nextPageOffset);
         }
 
         protected override bool AddPage(int streamSerial, byte[] pageBuf, bool isResync)
         {
             PageOffset = StreamPosition - pageBuf.Length;
-            ParsePageHeader(pageBuf, isResync);
+            ParsePageHeader(pageBuf, streamSerial, isResync);
+            _packets = ReadPackets(PacketCount, new Span<byte>(pageBuf, 27, pageBuf[26]), new Memory<byte>(pageBuf, 27 + pageBuf[26], pageBuf.Length - 27 - pageBuf[26]));
 
             if (_streamReaders.TryGetValue(streamSerial, out var spr))
             {
@@ -152,13 +167,16 @@ namespace NVorbis.Ogg
 
             var hdrBuf = new byte[282];
 
-            SeekStream(offset, SeekOrigin.Begin);
+            SeekStream(offset);
             var cnt = EnsureRead(hdrBuf, 0, 27);
 
             PageOffset = offset;
             if (VerifyHeader(hdrBuf, 0, ref cnt))
             {
-                ParsePageHeader(hdrBuf, null);
+                var dataLen = ParsePageHeader(hdrBuf, null, null);
+                var dataBuf = new byte[dataLen];
+                EnsureRead(dataBuf, 0, dataLen);
+                _packets = ReadPackets(PacketCount, new Span<byte>(hdrBuf, 27, hdrBuf[26]), new Memory<byte>(dataBuf));
                 return true;
             }
             return false;
@@ -194,20 +212,11 @@ namespace NVorbis.Ogg
 
         public int PageOverhead { get; private set; }
 
-        public (long, int)[] GetPackets()
+        public Memory<byte>[] GetPackets()
         {
             if (!CheckLock()) throw new InvalidOperationException("Must be locked!");
 
-            return _packetList;
-        }
-
-        public int Read(long offset, byte[] buffer, int index, int count)
-        {
-            lock (_readLock)
-            {
-                SeekStream(offset, SeekOrigin.Begin);
-                return EnsureRead(buffer, index, count);
-            }
+            return _packets;
         }
 
         #endregion

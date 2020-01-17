@@ -6,13 +6,16 @@ namespace NVorbis.Ogg
 {
     internal class Packet : DataPacket
     {
-        private IReadOnlyList<ValueTuple<long, int>> _dataSrc;  // IntPtr + List<T> internals + 12 * segment_count
+        // size with 1-2 packet segments (> 2 packet segments should be very uncommon):
+        //   x86:  68 bytes
+        //   x64: 104 bytes
+
+        private IReadOnlyList<Memory<byte>> _dataSrc;           // IntPtr + (IntPtr + 4 + 4 + IntPtr + (IntPtr * 4 + 4) * 2) # the page data buffer is rooted at PageReader._packets and doesn't count here.
         private IPacketReader _packetReader;                    // IntPtr
         int _dataIndex;                                         // 4
         int _dataOfs;                                           // 4
-        byte[] _dataBuf;                                        // IntPtr + cur_segment_size
 
-        internal Packet(IReadOnlyList<ValueTuple<long, int>> data, IPacketReader packetReader)
+        internal Packet(IReadOnlyList<Memory<byte>> data, IPacketReader packetReader)
         {
             _dataSrc = data;
             _packetReader = packetReader;
@@ -22,10 +25,10 @@ namespace NVorbis.Ogg
         {
             get
             {
-                var ttl = _dataSrc[0].Item2;
-                for (var i = 1; i < _dataSrc.Count; i++)
+                var ttl = 0;
+                for (var i = 0; i < _dataSrc.Count; i++)
                 {
-                    ttl += _dataSrc[i].Item2;
+                    ttl += _dataSrc[i].Length;
                 }
                 return ttl * 8;
             }
@@ -35,35 +38,12 @@ namespace NVorbis.Ogg
         {
             if (_dataIndex == _dataSrc.Count) return -1;
 
-            if (_dataOfs == 0)
-            {
-                var ofs = _dataSrc[_dataIndex].Item1;
-                _dataBuf = new byte[_dataSrc[_dataIndex].Item2];
+            var b = _dataSrc[_dataIndex].Span[_dataOfs];
 
-                var idx = 0;
-                int cnt;
-                while (idx < _dataBuf.Length && (cnt = _packetReader.FillBuffer(ofs + idx, _dataBuf, idx, _dataBuf.Length - idx)) > 0)
-                {
-                    idx += cnt;
-                }
-                if (idx < _dataBuf.Length)
-                {
-                    // uh-oh...  bad packet
-                    _dataBuf = null;
-                    _dataIndex = _dataSrc.Count;
-                    return -1;
-                }
-            }
-
-            var b = _dataBuf[_dataOfs];
-
-            if (++_dataOfs == _dataSrc[_dataIndex].Item2)
+            if (++_dataOfs == _dataSrc[_dataIndex].Length)
             {
                 _dataOfs = 0;
-                if (++_dataIndex == _dataSrc.Count)
-                {
-                    _dataBuf = null;
-                }
+                ++_dataIndex;
             }
 
             return b;
@@ -73,15 +53,13 @@ namespace NVorbis.Ogg
         {
             _dataIndex = 0;
             _dataOfs = 0;
-            _dataBuf = null;
 
             base.Reset();
         }
 
         public override void Done()
         {
-            _packetReader.InvalidatePacketCache(this);
-            _dataBuf = null;
+            _packetReader?.InvalidatePacketCache(this);
 
             base.Done();
         }
