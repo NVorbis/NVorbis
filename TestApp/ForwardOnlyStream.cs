@@ -17,7 +17,7 @@ namespace TestApp
 
         public override long Length => throw new NotSupportedException();
 
-        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        public override long Position { get => _steam.Position; set => throw new NotSupportedException(); }
 
         public ForwardOnlyStream(Stream stream)
         {
@@ -26,7 +26,7 @@ namespace TestApp
 
         public override void Flush()
         {
-            
+
         }
 
         public override int Read(byte[] buffer, int offset, int count)

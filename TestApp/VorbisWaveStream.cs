@@ -1,95 +1,56 @@
-﻿using NVorbis.Contracts;
+﻿using NVorbis;
+using NVorbis.Contracts;
 using System;
 
 namespace TestApp
 {
     class VorbisWaveStream : NAudio.Wave.WaveStream, NAudio.Wave.ISampleProvider
     {
-        private IContainerReader _containerReader;
-        private IStreamDecoder _streamDecoder;
+        private VorbisReader _reader;
 
         NAudio.Wave.WaveFormat _waveFormat;
 
+        public event EventHandler ParameterChange;
+
+        public VorbisWaveStream(string fileName)
+        {
+            _reader = new VorbisReader(fileName);
+
+            UpdateWaveFormat();
+        }
+        
         public VorbisWaveStream(System.IO.Stream sourceStream)
         {
-            _containerReader = new NVorbis.Ogg.ContainerReader(sourceStream, false);
-            _containerReader.NewStreamCallback = ProcessNewStream;
-            if (!_containerReader.TryInit()) throw new ArgumentException("Could not initialize container!");
-        }
+            _reader = new VorbisReader(sourceStream, false);
 
-        bool ProcessNewStream(IPacketProvider packetProvider)
-        {
-            IStreamDecoder decoder;
-            try
-            {
-                decoder = new NVorbis.StreamDecoder(packetProvider);
-            }
-            catch
-            {
-                return false;
-            }
-
-            var channels = _waveFormat?.Channels ?? 0;
-            var sampleRate = _waveFormat?.SampleRate ?? 0;
-
-            // save off the old decoder for later
-            var lastStreamDecoder = _streamDecoder;
-
-            // change to the new decoder
-            _streamDecoder = decoder;
-
-            // notify that the stream has changed
-            StreamChange?.Invoke(this, EventArgs.Empty);
-
-            // flag that the format changed
-            if (channels != _streamDecoder.Channels || sampleRate != _streamDecoder.SampleRate)
-            {
-                SetWaveFormat(_streamDecoder.SampleRate, _streamDecoder.Channels);
-            }
-
-            // clean up the old decoder
-            lastStreamDecoder?.Dispose();
-
-            return true;
-        }
-
-        private void SetWaveFormat(int sampleRate, int channels)
-        {
-            _waveFormat = NAudio.Wave.WaveFormat.CreateIeeeFloatWaveFormat(sampleRate, channels);
-            WaveFormatChange?.Invoke(this, EventArgs.Empty);
+            UpdateWaveFormat();
         }
 
         protected override void Dispose(bool disposing)
         {
             if (disposing)
             {
-                _streamDecoder?.Dispose();
-                _streamDecoder = null;
-
-                _containerReader?.Dispose();
-                _containerReader = null;
+                _reader?.Dispose();
+                _reader = null;
             }
 
             base.Dispose(disposing);
         }
 
-        public event EventHandler WaveFormatChange;
-        public event EventHandler StreamChange;
-
         public override NAudio.Wave.WaveFormat WaveFormat => _waveFormat;
 
-        public override long Length => _containerReader.CanSeek ? _streamDecoder.TotalSamples * _waveFormat.BlockAlign : throw new InvalidOperationException("Cannot seek underlying stream!");
+        private void UpdateWaveFormat()
+        {
+            _waveFormat = NAudio.Wave.WaveFormat.CreateIeeeFloatWaveFormat(_reader.SampleRate, _reader.Channels);
+            ParameterChange?.Invoke(this, EventArgs.Empty);
+        }
+
+        public override long Length => _reader.TotalSamples * _waveFormat.BlockAlign;
 
         public override long Position
         {
-            get => _streamDecoder.SamplePosition * _waveFormat.BlockAlign;
-            set
-            {
-                if (!_containerReader.CanSeek) throw new InvalidOperationException("Cannot seek underlying stream!");
-                if (value < 0 || value > Length) throw new ArgumentOutOfRangeException(nameof(value));
-
-                _streamDecoder.SamplePosition = value / _waveFormat.BlockAlign;
-            }
+            get => _reader.SamplePosition * _waveFormat.BlockAlign;
+            set => _reader.SamplePosition = value / _waveFormat.BlockAlign;
         }
 
         // This buffer can be static because it can only be used by 1 instance per thread
@@ -102,7 +63,7 @@ namespace TestApp
             count /= sizeof(float);
 
             // make sure we don't have an odd count
-            count -= count % _streamDecoder.Channels;
+            count -= count % _reader.Channels;
 
             // get the buffer, creating a new one if none exists or the existing one is too small
             var cb = _conversionBuffer ?? (_conversionBuffer = new float[count]);
@@ -123,40 +84,57 @@ namespace TestApp
 
         public int Read(float[] buffer, int offset, int count)
         {
-            if (_streamDecoder.IsEndOfStream)
-            {
-                // we don't care about the return value because everything is handled elsewhere...
-                _containerReader.FindNextStream();
-            }
-
-            var cnt = _streamDecoder.Read(buffer, offset, count, out var isParmChange);
+            var cnt = _reader.Read(buffer, offset, count, out var isParmChange);
             if (isParmChange && cnt == 0)
             {
-                if (_streamDecoder.Channels != _waveFormat.Channels || _streamDecoder.SampleRate != _waveFormat.SampleRate)
+                if (_reader.Channels != _waveFormat.Channels || _reader.SampleRate != _waveFormat.SampleRate)
                 {
-                    SetWaveFormat(_streamDecoder.SampleRate, _streamDecoder.Channels);
+                    UpdateWaveFormat();
                     return 0;
                 }
             }
             return cnt;
         }
 
-        public IStreamStats Stats => _streamDecoder.Stats;
-        public ITagData Tags => _streamDecoder.Tags;
+        public bool IsParameterChange => _reader.IsParameterChange;
+
+        public void ClearParameterChange() => _reader.ClearParameterChange();
+
+        public bool IsEndOfStream => _reader.IsEndOfStream;
+
+        public int StreamCount => _reader.StreamCount;
+
+        public int StreamIndex
+        {
+            get => _reader.StreamIndex;
+            set
+            {
+                if (value < 0 || value >= _reader.StreamCount) throw new ArgumentOutOfRangeException(nameof(value));
+                if (_reader.SwitchStreams(value))
+                {
+                    UpdateWaveFormat();
+                }
+            }
+        }
+
+        public bool FindNewStream() => _reader.FindNextStream();
+
+        public IStreamStats Stats => _reader.Stats;
+        public ITagData Tags => _reader.Tags;
 
         /// <summary>
         /// Gets the encoder's upper bitrate of the current selected Vorbis stream
         /// </summary>
-        public int UpperBitrate => _streamDecoder.UpperBitrate;
+        public int UpperBitrate => _reader.UpperBitrate;
 
         /// <summary>
         /// Gets the encoder's nominal bitrate of the current selected Vorbis stream
         /// </summary>
-        public int NominalBitrate => _streamDecoder.NominalBitrate;
+        public int NominalBitrate => _reader.NominalBitrate;
 
         /// <summary>
         /// Gets the encoder's lower bitrate of the current selected Vorbis stream
         /// </summary>
-        public int LowerBitrate => _streamDecoder.LowerBitrate;
+        public int LowerBitrate => _reader.LowerBitrate;
     }
 }
