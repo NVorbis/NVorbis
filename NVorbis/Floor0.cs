@@ -5,6 +5,7 @@ using System.IO;
 
 namespace NVorbis
 {
+    // Packed LSP values on dB amplittude and Bark frequency scale.  Virtually unused (libvorbis did not use past beta 4).  Probably untested.
     class Floor0 : IFloor
     {
         class Data : IFloorData

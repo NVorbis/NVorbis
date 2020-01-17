@@ -4,6 +4,7 @@ using System.Collections.Generic;
 
 namespace NVorbis
 {
+    // Linear interpolated values on dB amplitude and linear frequency scale.  Draws a curve between each point to define the low-resolution spectral data.
     class Floor1 : IFloor
     {
         class Data : IFloorData

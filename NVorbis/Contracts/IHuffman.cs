@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 
 namespace NVorbis.Contracts
 {
@@ -7,7 +6,7 @@ namespace NVorbis.Contracts
     {
         int TableBits { get; }
         IReadOnlyList<HuffmanListNode> PrefixTree { get; }
-        HuffmanListNode OverflowNode { get; }
+        IReadOnlyList<HuffmanListNode> OverflowList { get; }
 
         void GenerateTable(IReadOnlyList<int> value, int[] lengthList, int[] codeList);
     }

@@ -6,7 +6,7 @@ namespace NVorbis.Ogg
 {
     internal class Packet : DataPacket
     {
-        private IReadOnlyList<ValueTuple<long, int>> _dataSrc;  // IntPtr + 12 * segment_count
+        private IReadOnlyList<ValueTuple<long, int>> _dataSrc;  // IntPtr + List<T> internals + 12 * segment_count
         private IPacketReader _packetReader;                    // IntPtr
         int _dataIndex;                                         // 4
         int _dataOfs;                                           // 4

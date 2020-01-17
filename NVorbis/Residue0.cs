@@ -4,6 +4,7 @@ using System.IO;
 
 namespace NVorbis
 {
+    // each channel gets its own pass, one dimension at a time
     class Residue0 : IResidue
     {
         static int icount(int v)

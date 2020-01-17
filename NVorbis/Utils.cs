@@ -57,18 +57,5 @@
             // now switch to single-precision and calc the return value
             return mantissa * (float)System.Math.Pow(2.0, exponent);
         }
-
-        // this is a no-allocation way to sum an int queue
-        static internal int Sum(System.Collections.Generic.Queue<int> queue)
-        {
-            var value = 0;
-            for (int i = 0; i < queue.Count; i++)
-            {
-                var temp = queue.Dequeue();
-                value += temp;
-                queue.Enqueue(temp);
-            }
-            return value;
-        }
     }
 }

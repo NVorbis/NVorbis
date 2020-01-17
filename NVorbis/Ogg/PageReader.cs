@@ -7,6 +7,8 @@ using System.Threading;
 
 namespace NVorbis.Ogg
 {
+    // TODO: Come up with a base class that this and ForwardOnlyPageReader can share
+
     internal class PageReader : IPageData
     {
         internal static Func<ICrc> CreateCrc { get; set; } = () => new Crc();

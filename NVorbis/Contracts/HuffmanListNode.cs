@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-
-namespace NVorbis.Contracts
+﻿namespace NVorbis.Contracts
 {
     class HuffmanListNode
     {
@@ -11,7 +7,5 @@ namespace NVorbis.Contracts
         internal int Length;
         internal int Bits;
         internal int Mask;
-
-        internal HuffmanListNode Next;
     }
 }

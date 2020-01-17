@@ -1,6 +1,5 @@
 ﻿using NVorbis.Contracts;
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Text;
 
@@ -489,9 +488,11 @@ namespace NVorbis
                 else if (packet.IsParameterChange)
                 {
                     // parameter change... hmmm...  process it, flag that we're changing, then try again next pass
-                    isParameterChange = true;
+                    var channels = _channels;
+                    var sampleRate = _sampleRate;
                     isEndOfStream = false;
                     ProcessParameterChange(packet, false);
+                    isParameterChange = channels != _channels || sampleRate != _sampleRate;
                 }
                 else
                 {

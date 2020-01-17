@@ -5,8 +5,7 @@ namespace NVorbis
 {
     class Mode : IMode
     {
-        const float M_PI = 3.1415926539f; //(float)Math.PI;
-        const float M_PI2 = M_PI / 2;
+        const float M_PI2 = 3.1415926539f / 2;
 
         int _channels;
         bool _blockFlag;
@@ -92,11 +91,9 @@ namespace NVorbis
             }
         }
 
-        public bool Decode(IPacket packet, float[][] buffer, out int packetStartindex, out int packetValidLength, out int packetTotalLength)
+        private bool GetPacketInfo(IPacket packet, out int blockSize, out int windowIndex, out int leftOverlapHalfSize, out int packetStartIndex, out int packetValidLength, out int packetTotalLength)
         {
-            int blockSize;
-            bool prevFlag;
-            bool nextFlag;
+            bool prevFlag, nextFlag;
             if (_blockFlag)
             {
                 blockSize = _block1Size;
@@ -111,53 +108,47 @@ namespace NVorbis
 
             if (packet.IsShort)
             {
-                packetStartindex = 0;
+                windowIndex = 0;
+                leftOverlapHalfSize = 0;
+                packetStartIndex = 0;
                 packetValidLength = 0;
                 packetTotalLength = 0;
                 return false;
             }
 
-            _mapping.DecodePacket(packet, BlockSize, _channels, buffer);
-
-            var window = Windows[(prevFlag ? 1 : 0) + (nextFlag ? 2 : 0)];
-            for (var i = 0; i < blockSize; i++)
-            {
-                for (var ch = 0; ch < _channels; ch++)
-                {
-                    buffer[ch][i] *= window[i];
-                }
-            }
-
-            var leftOverlapHalfSize = (prevFlag ? _block1Size : _block0Size) / 4;
             var rightOverlapHalfSize = (nextFlag ? _block1Size : _block0Size) / 4;
 
-            packetStartindex = blockSize / 4 - leftOverlapHalfSize;
+            windowIndex = (prevFlag ? 1 : 0) + (nextFlag ? 2 : 0);
+            leftOverlapHalfSize = (prevFlag ? _block1Size : _block0Size) / 4;
+            packetStartIndex = blockSize / 4 - leftOverlapHalfSize;
             packetTotalLength = blockSize / 4 * 3 + rightOverlapHalfSize;
             packetValidLength = packetTotalLength - rightOverlapHalfSize * 2;
             return true;
         }
 
+        public bool Decode(IPacket packet, float[][] buffer, out int packetStartindex, out int packetValidLength, out int packetTotalLength)
+        {
+            if (GetPacketInfo(packet, out var blockSize, out var windowIndex, out _, out packetStartindex, out packetValidLength, out packetTotalLength))
+            {
+                _mapping.DecodePacket(packet, blockSize, _channels, buffer);
+
+                var window = Windows[windowIndex];
+                for (var i = 0; i < blockSize; i++)
+                {
+                    for (var ch = 0; ch < _channels; ch++)
+                    {
+                        buffer[ch][i] *= window[i];
+                    }
+                }
+                return true;
+            }
+            return false;
+        }
+
         public int GetPacketSampleCount(IPacket packet, bool isFirst)
         {
-            int blockSize;
-            bool prevFlag;
-            bool nextFlag;
-            if (_blockFlag)
-            {
-                blockSize = _block1Size;
-                prevFlag = packet.ReadBit();
-                nextFlag = packet.ReadBit();
-            }
-            else
-            {
-                blockSize = _block0Size;
-                prevFlag = nextFlag = false;
-            }
-
-            var leftOverlapHalfSize = (prevFlag ? _block1Size : _block0Size) / 4;
-            var rightOverlapHalfSize = (nextFlag ? _block1Size : _block0Size) / 4;
-
-            return blockSize / 4 * 3 - rightOverlapHalfSize - (blockSize / 4 + (isFirst ? leftOverlapHalfSize : -leftOverlapHalfSize));
+            GetPacketInfo(packet, out _, out _, out var leftOverlapHalfSize, out var packetStartIndex, out var packetValidLength, out _);
+            return packetValidLength - packetStartIndex + (isFirst ? leftOverlapHalfSize * 2 : 0);
         }
 
         public int BlockSize => _blockFlag ? _block1Size : _block0Size;

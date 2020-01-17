@@ -30,6 +30,14 @@ namespace NVorbis.Ogg
         public StreamPageReader(IPageData pageReader, int streamSerial)
         {
             _reader = pageReader;
+
+            // The packet provider has a reference to us, and we have a reference to it.
+            // The page reader has a reference to us.
+            // The container reader has a _weak_ reference to the packet provider.
+            // The user has a reference to the packet provider.
+            // So long as the user doesn't drop their reference and the page reader doesn't drop us,
+            //  the packet provider will stay alive.
+            // This is important since the container reader only holds a week reference to it.
             _packetProvider = CreatePacketProvider(this, streamSerial);
         }
 

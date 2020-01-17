@@ -1,6 +1,4 @@
-﻿using System;
-
-namespace NVorbis.Contracts
+﻿namespace NVorbis.Contracts
 {
     /// <summary>
     /// Encapsulates a method that calculates the number of granules decodable from the specified packet.

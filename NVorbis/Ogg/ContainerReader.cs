@@ -26,7 +26,6 @@ namespace NVorbis.Ogg
         /// <summary>
         /// Gets a list of streams available from this container.
         /// </summary>
-        // TODO: add logic to remove packet providers when they are no longer "valid"
         public IReadOnlyList<IPacketProvider> Streams
         {
             get

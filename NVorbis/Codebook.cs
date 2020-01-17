@@ -51,7 +51,7 @@ namespace NVorbis
 
         int[] _lengths;
         float[] _lookupTable;
-        HuffmanListNode _prefixOverflowTree;
+        IReadOnlyList<HuffmanListNode> _overflowList;
         IReadOnlyList<HuffmanListNode> _prefixList;
         int _prefixBitLength;
         int _maxBits;
@@ -165,7 +165,7 @@ namespace NVorbis
                 huffman.GenerateTable(valueList, codewordLengths ?? _lengths, codewords);
                 _prefixList = huffman.PrefixTree;
                 _prefixBitLength = huffman.TableBits;
-                _prefixOverflowTree = huffman.OverflowNode;
+                _overflowList = huffman.OverflowList;
             }
         }
 
@@ -293,29 +293,29 @@ namespace NVorbis
 
         public int DecodeScalar(IPacket packet)
         {
-            var data = packet.TryPeekBits(_prefixBitLength, out var bitsRead);
+            var data = (int)packet.TryPeekBits(_prefixBitLength, out var bitsRead);
             if (bitsRead == 0) return -1;
 
             // try to get the value from the prefix list...
-            var node = _prefixList[(int)data];
+            var node = _prefixList[data];
             if (node != null)
             {
                 packet.SkipBits(node.Length);
                 return node.Value;
             }
 
-            // nope, not possible... run the tree
-            data = packet.TryPeekBits(_maxBits, out _);
+            // nope, not possible... run through the overflow nodes
+            data = (int)packet.TryPeekBits(_maxBits, out _);
 
-            node = _prefixOverflowTree;
-            do
+            for (var i = 0; i < _overflowList.Count; i++)
             {
-                if (node.Bits == ((int)data & node.Mask))
+                node = _overflowList[i];
+                if (node.Bits == (data & node.Mask))
                 {
                     packet.SkipBits(node.Length);
                     return node.Value;
                 }
-            } while ((node = node.Next) != null);
+            }
             return -1;
         }
 

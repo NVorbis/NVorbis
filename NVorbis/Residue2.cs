@@ -2,6 +2,7 @@
 
 namespace NVorbis
 {
+    // all channels in one pass, interleaved
     class Residue2 : Residue0
     {
         int _channels;
@@ -14,6 +15,8 @@ namespace NVorbis
 
         public override void Decode(IPacket packet, bool[] doNotDecodeChannel, int blockSize, float[][] buffer)
         {
+            // since we're doing all channels in a single pass, the block size has to be multiplied.
+            // otherwise this is just a pass-through call
             base.Decode(packet, doNotDecodeChannel, blockSize * _channels, buffer);
         }
 

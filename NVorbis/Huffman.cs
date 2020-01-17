@@ -6,15 +6,17 @@ namespace NVorbis
 {
     class Huffman : IHuffman, IComparer<HuffmanListNode>
     {
+        public static int ExtraOverflowEntries;
+
         const int MAX_TABLE_BITS = 10;
 
         public int TableBits { get; private set; }
         public IReadOnlyList<HuffmanListNode> PrefixTree { get; private set; }
-        public HuffmanListNode OverflowNode { get; private set; }
+        public IReadOnlyList<HuffmanListNode> OverflowList { get; private set; }
 
         public void GenerateTable(IReadOnlyList<int> values, int[] lengthList, int[] codeList)
         {
-            HuffmanListNode[] list = new HuffmanListNode[lengthList.Length];
+            var list = new HuffmanListNode[lengthList.Length];
 
             var maxLen = 0;
             for (int i = 0; i < list.Length; i++)
@@ -37,34 +39,31 @@ namespace NVorbis
             var tableBits = maxLen > MAX_TABLE_BITS ? MAX_TABLE_BITS : maxLen;
 
             var prefixList = new List<HuffmanListNode>(1 << tableBits);
-            HuffmanListNode firstOverflowNode = null;
+            List<HuffmanListNode> overflowList = null;
             for (int i = 0; i < list.Length && list[i].Length < 99999; i++)
             {
-                if (firstOverflowNode == null)
+                var itemBits = list[i].Length;
+                if (itemBits > tableBits)
                 {
-                    var itemBits = list[i].Length;
-                    if (itemBits > tableBits)
+                    overflowList = new List<HuffmanListNode>(list.Length - i);
+                    for (; i < list.Length && list[i].Length < 99999; i++)
                     {
-                        firstOverflowNode = list[i];
-                    }
-                    else
-                    {
-                        var maxVal = 1 << (tableBits - itemBits);
-                        var item = list[i];
-                        for (int j = 0; j < maxVal; j++)
-                        {
-                            var idx = (j << itemBits) | item.Bits;
-                            while (prefixList.Count <= idx)
-                            {
-                                prefixList.Add(null);
-                            }
-                            prefixList[idx] = item;
-                        }
+                        overflowList.Add(list[i]);
                     }
                 }
                 else
                 {
-                    list[i - 1].Next = list[i];
+                    var maxVal = 1 << (tableBits - itemBits);
+                    var item = list[i];
+                    for (int j = 0; j < maxVal; j++)
+                    {
+                        var idx = (j << itemBits) | item.Bits;
+                        while (prefixList.Count <= idx)
+                        {
+                            prefixList.Add(null);
+                        }
+                        prefixList[idx] = item;
+                    }
                 }
             }
 
@@ -75,7 +74,12 @@ namespace NVorbis
 
             TableBits = tableBits;
             PrefixTree = prefixList;
-            OverflowNode = firstOverflowNode;
+            OverflowList = overflowList;
+
+            if (overflowList != null)
+            {
+                ExtraOverflowEntries += overflowList.Capacity - overflowList.Count;
+            }
         }
 
         int IComparer<HuffmanListNode>.Compare(HuffmanListNode x, HuffmanListNode y)

@@ -1,10 +1,11 @@
 ﻿using NVorbis.Contracts;
 using System;
-using System.Collections.Generic;
-using System.Text;
 
 namespace NVorbis
 {
+    /// <summary>
+    /// Provides a concrete base implementation of <see cref="IPacket"/>.
+    /// </summary>
     abstract public class DataPacket : IPacket
     {
         /// <summary>
@@ -55,38 +56,65 @@ namespace NVorbis
         PacketFlags _packetFlags;
         int _readBits;
 
+        /// <summary>
+        /// Gets the number of container overhead bits associated with this packet.
+        /// </summary>
         public int ContainerOverheadBits { get; set; }
 
+        /// <summary>
+        /// Gets whether the packet is the start of a new header set.
+        /// </summary>
         public bool IsParameterChange
         {
             get => GetFlag(PacketFlags.IsParameterChange);
             protected set => SetFlag(PacketFlags.IsParameterChange, value);
         }
 
+        /// <summary>
+        /// Gets the granule position of the packet, if known.
+        /// </summary>
         public long? GranulePosition { get; set; }
 
+        /// <summary>
+        /// Gets whether this packet occurs immediately following a loss of sync in the stream.
+        /// </summary>
         public bool IsResync
         {
             get => GetFlag(PacketFlags.IsResync);
             set => SetFlag(PacketFlags.IsResync, value);
         }
 
+        /// <summary>
+        /// Gets whether this packet did not read its full data.
+        /// </summary>
         public bool IsShort
         {
             get => GetFlag(PacketFlags.IsShort);
             private set => SetFlag(PacketFlags.IsShort, value);
         }
 
+        /// <summary>
+        /// Gets whether the packet is the last packet of the stream.
+        /// </summary>
         public bool IsEndOfStream
         {
             get => GetFlag(PacketFlags.IsEndOfStream);
             set => SetFlag(PacketFlags.IsEndOfStream, value);
         }
 
+        /// <summary>
+        /// Gets the number of bits read from the packet.
+        /// </summary>
         public int BitsRead => _readBits;
 
+        /// <summary>
+        /// Gets the number of bits left in the packet.
+        /// </summary>
         public int BitsRemaining => TotalBits - _readBits;
 
+        /// <summary>
+        /// Gets the total number of bits in the packet.
+        /// </summary>
         abstract protected int TotalBits { get; }
 
         bool GetFlag(PacketFlags flag) => (_packetFlags & flag) == flag;
@@ -103,13 +131,23 @@ namespace NVorbis
             }
         }
 
+        /// <summary>
+        /// Reads the next byte in the packet.
+        /// </summary>
+        /// <returns>The next byte in the packet, or <c>-1</c> if no more data is available.</returns>
         abstract protected int ReadNextByte();
 
+        /// <summary>
+        /// Frees the buffers and caching for the packet instance.
+        /// </summary>
         virtual public void Done()
         {
             // no-op for base
         }
 
+        /// <summary>
+        /// Resets the read buffers to the beginning of the packet.
+        /// </summary>
         virtual public void Reset()
         {
             _bitBucket = 0;
@@ -130,6 +168,12 @@ namespace NVorbis
             return value;
         }
 
+        /// <summary>
+        /// Attempts to read the specified number of bits from the packet.  Does not advance the read position.
+        /// </summary>
+        /// <param name="count">The number of bits to read.</param>
+        /// <param name="bitsRead">Outputs the actual number of bits read.</param>
+        /// <returns>The value of the bits read.</returns>
         public ulong TryPeekBits(int count, out int bitsRead)
         {
             if (count < 0 || count > 64) throw new ArgumentOutOfRangeException(nameof(count));
@@ -169,6 +213,10 @@ namespace NVorbis
             return value;
         }
 
+        /// <summary>
+        /// Advances the read position by the the specified number of bits.
+        /// </summary>
+        /// <param name="count">The number of bits to skip reading.</param>
         public void SkipBits(int count)
         {
             if (count > 0)
