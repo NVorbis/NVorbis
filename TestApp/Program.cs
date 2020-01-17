@@ -13,11 +13,12 @@ namespace TestApp
     static class Program
     {
         //const string OGG_URI = @"http://play.global.audio:80/nrj_low.ogg";          // Radio NRJ (Bulgaria)
-        //const string OGG_URI = @"http://revolutionradio.ru/live.ogg";               // Revolution Radio (Russia) -- down?
+        const string OGG_URI = @"http://revolutionradio.ru/live.ogg";               // Revolution Radio (Russia)
         //const string OGG_URI = @"http://play.global.audio:80/veronika.ogg";         // Radio Veronika (Bulgaria)
-        const string OGG_URI = @"http://stream2.dancewave.online:8080/dance.ogg";   // Dance Wave! (online-only)
+        //const string OGG_URI = @"http://stream2.dancewave.online:8080/dance.ogg";   // Dance Wave! (online-only)
 
-        const string OGG_FILE = "3test.ogg";
+        //const string OGG_FILE = @"3test.ogg";
+        const string OGG_FILE = @"2test.ogg";
 
         const int FadeStepDuration = 14;
         const float FadeStepMultiplier = .9f;
@@ -26,54 +27,63 @@ namespace TestApp
 
         static void Main()
         {
-            //Play(OGG_URI);
-            Play(OGG_FILE);
+            var state = "Loading...";
+            Console.CursorLeft = Console.WindowWidth - 1 - state.Length;
+            Console.CursorTop = 0;
+            Console.Write(state);
+
+            Console.CursorLeft = 0;
+            Console.CursorTop = 0;
+
+            PlayUri(OGG_URI);
+            //PlayFile(OGG_FILE);
+
+            Console.Clear();
+            Console.CursorLeft = 0;
+            Console.CursorTop = 0;
         }
 
-        private static void Play(string uriString)
+        private static void PlayFile(string fileName)
         {
-            var uri = new Uri(uriString);
-            if (uri.Scheme == Uri.UriSchemeFile)
+            using (var stream = File.OpenRead(fileName))
             {
-                using (var stream = File.OpenRead(uriString))
-                {
 #if WRAPSTREAM
-                    using (var fwdOnlyStream = new ForwardOnlyStream(stream))
-                    {
-                        PlayStream(fwdOnlyStream);
-                    }
+                using (var fwdOnlyStream = new ForwardOnlyStream(stream))
+                {
+                    PlayStream(fwdOnlyStream);
+                }
 #else
                     PlayStream(stream);
 #endif
-                }
             }
-            else
+        }
+
+        private static void PlayUri(string uriString)
+        {
+            var req = System.Net.WebRequest.Create(uriString);
+            using (var resp = (System.Net.HttpWebResponse)req.GetResponse())
             {
-                var req = System.Net.WebRequest.Create(uri);
-                using (var resp = (System.Net.HttpWebResponse)req.GetResponse())
+                if (resp.StatusCode == System.Net.HttpStatusCode.OK)
                 {
-                    if (resp.StatusCode == System.Net.HttpStatusCode.OK)
+                    Console.WriteLine(resp.Headers["icy-name"]);
+                    Console.WriteLine(resp.Headers["icy-description"]);
+
+                    using (var stream = resp.GetResponseStream())
                     {
-                        Console.WriteLine(resp.Headers["icy-name"]);
-                        Console.WriteLine(resp.Headers["icy-description"]);
-
-                        using (var stream = resp.GetResponseStream())
-                        {
 #if SAVESTREAM
-                            using (var wrapStream = new Nerdbank.Streams.MonitoringStream(stream))
-                            using (var outStream = File.Create(@"E:\TEMP\raw.ogg"))
+                        using (var wrapStream = new Nerdbank.Streams.MonitoringStream(stream))
+                        using (var outStream = File.Create(@"E:\TEMP\raw.ogg"))
+                        {
+                            wrapStream.DidRead += (s, e) =>
                             {
-                                wrapStream.DidRead += (s, e) =>
-                                {
-                                    outStream.Write(e.Array, e.Offset, e.Count);
-                                };
+                                outStream.Write(e.Array, e.Offset, e.Count);
+                            };
 
-                                PlayStream(wrapStream);
-                            }
-#else
-                            PlayStream(stream);
-#endif
+                            PlayStream(wrapStream);
                         }
+#else
+                        PlayStream(stream);
+#endif
                     }
                 }
             }
@@ -81,8 +91,13 @@ namespace TestApp
 
         private static void PlayStream(Stream stream)
         {
+            var state = "Buffering...";
+            Console.CursorLeft = Console.WindowWidth - 1 - state.Length;
+            Console.CursorTop = 0;
+            Console.Write(state);
+
             using (var vorbisReader = new VorbisWaveStream(stream))
-            using (var bufProvider = new BufferingSampleProvider(vorbisReader) { MinimumDuration = TimeSpan.FromMilliseconds(100) })
+            using (var bufProvider = new BufferingSampleProvider(vorbisReader) { TargetBufferDuration = TimeSpan.FromMilliseconds(100) })
             {
                 var volProvider = new NAudio.Wave.SampleProviders.VolumeSampleProvider(bufProvider)
                 {
@@ -118,6 +133,8 @@ namespace TestApp
                 HandleFormatChange(null, EventArgs.Empty);
                 HandleStreamChange(null, EventArgs.Empty);
 
+                while (bufProvider.BufferSize < bufProvider.TargetBufferSize * 9 / 10) ;
+
                 var keepPlaying = true;
                 while (keepPlaying)
                 {
@@ -140,10 +157,13 @@ namespace TestApp
                                     case ConsoleKey.C:
                                         if (key.Modifiers == ConsoleModifiers.Control)
                                         {
-                                            while (volProvider.Volume > FadeMinimum)
+                                            if (wout.PlaybackState == PlaybackState.Playing)
                                             {
-                                                volProvider.Volume *= FadeStepMultiplier;
-                                                System.Threading.Thread.Sleep(FadeStepDuration);
+                                                while (volProvider.Volume > FadeMinimum)
+                                                {
+                                                    volProvider.Volume *= FadeStepMultiplier;
+                                                    System.Threading.Thread.Sleep(FadeStepDuration);
+                                                }
                                             }
                                             keepPlaying = false;
                                             stop = true;
@@ -175,27 +195,35 @@ namespace TestApp
                                 }
                             }
 
-                            string state;
                             switch (wout.PlaybackState)
                             {
-                                case PlaybackState.Paused: state = "[PAUSED]"; break;
-                                case PlaybackState.Stopped: state = "STOPPED!"; break;
+                                case PlaybackState.Playing: state = "      PLAYING"; break;
+                                case PlaybackState.Paused:  state = "     [PAUSED]"; break;
+                                case PlaybackState.Stopped: state = "    *STOPPED*"; break;
                                 default: state = "        "; break;
                             }
                             var curTime = vorbisReader.CurrentTime - bufProvider.BufferDuration;
 
+                            var bufPct = Math.Min(100, bufProvider.BufferSize * 100 / bufProvider.TargetBufferSize);
+
                             Console.CursorLeft = 0;
                             Console.CursorTop = 6;
-                            Console.Write($"{curTime:h\\:mm\\:ss\\.f}  ({vorbisReader.Stats.EffectiveBitRate / 1000f:N1} kbps, {bufProvider.BufferDuration.TotalMilliseconds,5:N1}ms buffered)  {state} ");
+                            Console.Write($"{curTime:h\\:mm\\:ss\\.f}  ({vorbisReader.Stats.EffectiveBitRate / 1000f,5:N1} kbps)   ");
+
+                            Console.CursorLeft = Console.WindowWidth - 1 - state.Length;
+                            Console.CursorTop = 0;
+                            Console.Write(state);
+
+                            var bufPctWith = (Console.WindowWidth - 1) * bufPct / 100;
+                            Console.CursorLeft = 0;
+                            Console.CursorTop = Console.WindowHeight - 1;
+                            Console.Write(string.Empty.PadLeft(bufPctWith, '*').PadRight(Console.WindowWidth - 1));
                         }
                         while (!fmtChgWait.Wait(100) && !stop);
 
                         wout.Stop();
                     }
                 }
-
-                Console.CursorLeft = 0;
-                Console.CursorTop = 8;
             }
         }
     }

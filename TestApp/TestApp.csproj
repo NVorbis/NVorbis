@@ -117,12 +117,9 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="BufferingSampleProvider.cs" />
-    <Compile Include="BufferingWaveProvider.cs" />
-    <Compile Include="BufferingWaveStream.cs" />
     <Compile Include="ForwardOnlyStream.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="VorbisWaveProvider.cs" />
     <Compile Include="VorbisWaveStream.cs" />
   </ItemGroup>
   <ItemGroup>

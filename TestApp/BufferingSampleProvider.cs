@@ -9,6 +9,7 @@ namespace TestApp
     class BufferingSampleProvider : ISampleProvider, IDisposable
     {
         private readonly ConcurrentQueue<float[]> _buffers = new ConcurrentQueue<float[]>();
+        private readonly ConcurrentQueue<int> _readCounts = new ConcurrentQueue<int>();
         private readonly ISampleProvider _sampleProvider;
 
         private int _targetSampleCount;
@@ -17,10 +18,6 @@ namespace TestApp
 
         private bool _keepBuffering;
         private Task _bufferingTask;
-
-        private int _averageReadReq;
-        private int _averageBuffer;
-        private int _minReadAhead;
 
         // wait handle to notify the fill thread to generate more data
         private ManualResetEventSlim _fillWait = new ManualResetEventSlim(true);
@@ -31,18 +28,20 @@ namespace TestApp
 
         public WaveFormat WaveFormat => _sampleProvider.WaveFormat;
 
-        public TimeSpan TargetBufferDuration => TimeSpan.FromSeconds((double)_targetSampleCount / _sampleProvider.WaveFormat.Channels / _sampleProvider.WaveFormat.SampleRate);
-        public int TargetBufferSize => _targetSampleCount;
+        public TimeSpan TargetBufferDuration
+        {
+            get => TimeSpan.FromSeconds((double)_targetSampleCount / _sampleProvider.WaveFormat.Channels / _sampleProvider.WaveFormat.SampleRate);
+            set => _targetSampleCount = (int)(value.TotalSeconds * _sampleProvider.WaveFormat.SampleRate) * _sampleProvider.WaveFormat.Channels;
+        }
+        public int TargetBufferSize
+        {
+            get => _targetSampleCount;
+            set => _targetSampleCount = value - value % _sampleProvider.WaveFormat.Channels;
+        }
         public TimeSpan BufferDuration => TimeSpan.FromSeconds((double)_sampleCount / _sampleProvider.WaveFormat.Channels / _sampleProvider.WaveFormat.SampleRate);
         public int BufferSize => _sampleCount;
 
         public int ReadTimeout { get; set; }
-
-        public TimeSpan MinimumDuration
-        {
-            get => TimeSpan.FromSeconds((double)_minReadAhead / _sampleProvider.WaveFormat.Channels / _sampleProvider.WaveFormat.SampleRate);
-            set => _minReadAhead = (int)(value.TotalSeconds * _sampleProvider.WaveFormat.Channels * _sampleProvider.WaveFormat.SampleRate);
-        }
 
 
         public BufferingSampleProvider(ISampleProvider sampleProvider)
@@ -75,37 +74,18 @@ namespace TestApp
 
         public int Read(float[] buffer, int offset, int count)
         {
-            _averageReadReq = _averageReadReq * 29 / 30 + count / 30;
-            _averageBuffer = _averageBuffer * 29 / 30 + _sampleCount / 30;
-            var tgt = _averageReadReq * 6 / 5;
-            if (_averageBuffer < tgt)
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+
+            // pass up the exception if one happens
+            if (_bufferingTask.IsFaulted)
             {
-                var adj = (tgt - _averageBuffer) / 10;
-                if (adj == 0)
-                {
-                    adj = _sampleProvider.WaveFormat.Channels;
-                }
-                else
-                {
-                    adj -= adj % _sampleProvider.WaveFormat.Channels;
-                }
-                _targetSampleCount += adj;
+                _bufferingTask.Wait();
             }
-            else if (_averageBuffer > _targetSampleCount * 8 / 10)
+
+            var maxWait = count / _sampleProvider.WaveFormat.Channels * 1000 / _sampleProvider.WaveFormat.SampleRate;
+            if (maxWait >= 25)
             {
-                var adj = (_averageBuffer - tgt) / 100;
-                if (adj == 0)
-                {
-                    adj = _sampleProvider.WaveFormat.Channels;
-                }
-                else
-                {
-                    adj -= adj % _sampleProvider.WaveFormat.Channels;
-                }
-                if ((_targetSampleCount -= adj) < _minReadAhead)
-                {
-                    _targetSampleCount = _minReadAhead;
-                }
+                maxWait -= 20;
             }
 
             var cnt = 0;
@@ -114,9 +94,37 @@ namespace TestApp
                 float[] buf;
                 while (!_buffers.TryPeek(out buf))
                 {
+                    // if there's a buffer in the queue, loop until we get it
+                    if (_buffers.Count > 0) continue;
+
+                    // underflow...
+
+                    // otherwise, wait for the fill thread to generate a new buffer
                     _readWait.Reset();
                     _fillWait.Set();
-                    if (!_readWait.Wait(ReadTimeout)) throw new TimeoutException();
+
+                    // wait for data or a timeout
+                    if (!_readWait.Wait(1))
+                    {
+                        var elapsed = (int)sw.ElapsedMilliseconds;
+                        if (cnt == 0)
+                        {
+                            if (elapsed >= ReadTimeout && ReadTimeout > -1)
+                            {
+                                // no data and we've hit the read timeout limit
+                                throw new TimeoutException();
+                            }
+                            // no data and no read timeout, loop to try again
+                            continue;
+                        }
+                        else if (elapsed < maxWait)
+                        {
+                            // we have data, but we still have more time to get data, loop to try again
+                            continue;
+                        }
+                        // we have data, but ran out of time... return what we have
+                    }
+                    // else: the fill thread says to go look
 
                     if (_buffers.Count == 0)
                     {
@@ -135,18 +143,17 @@ namespace TestApp
                     Buffer.BlockCopy(buf, _bufferReadIndex * sizeof(float), buffer, offset * sizeof(float), avail * sizeof(float));
                     offset += avail;
                     cnt += avail;
+                    _readCounts.Enqueue(avail);
                     if ((_bufferReadIndex += avail) == buf.Length)
                     {
                         while (!_buffers.TryDequeue(out _))
                         {
                             // we know there's a buffer there, so just circle until it clears
                         }
-                        _fillWait.Set();
                         _bufferReadIndex = 0;
                     }
                 }
             }
-            Interlocked.Add(ref _sampleCount, -cnt);
 
             return cnt;
         }
@@ -163,14 +170,21 @@ namespace TestApp
 
         private void BufferLoad()
         {
+            var channels = _sampleProvider.WaveFormat.Channels;
+
             // our fixed buffer is 20ms; this lets us respond very rapidly to read requests
-            var buf = new float[_sampleProvider.WaveFormat.SampleRate / 50 * _sampleProvider.WaveFormat.Channels];
+            var buf = new float[_sampleProvider.WaveFormat.SampleRate / 50 * channels];
             // but our min dynamic buffer size is 10ms
-            var minBufSize = _sampleProvider.WaveFormat.SampleRate / 100 * _sampleProvider.WaveFormat.Channels;
+            var minBufSize = _sampleProvider.WaveFormat.SampleRate / 100 * channels;
+
+            // indicates whether to wait to set _readWait until after fully loading the buffer
+            var doFullRefill = false;
+
+            var sw = new System.Diagnostics.Stopwatch();
             while (_keepBuffering)
             {
                 var maxBufSize = Math.Min(buf.Length, _targetSampleCount / 8);
-                maxBufSize -= maxBufSize % _sampleProvider.WaveFormat.Channels;
+                maxBufSize -= maxBufSize % channels;
                 var cnt = Math.Max(Math.Min(maxBufSize, _targetSampleCount - _sampleCount), minBufSize);
                 if (cnt > 0)
                 {
@@ -183,23 +197,40 @@ namespace TestApp
 
                     _buffers.Enqueue(queueBuf);
 
-                    _readWait.Set();
+                    if (!doFullRefill)
+                    {
+                        // since we're not in a blocking underflow, make sure the read thread doesn't have to wait
+                        _readWait.Set();
+                    }
 
-                    var sampleCount = Interlocked.Add(ref _sampleCount, cnt);
-                    if (sampleCount < _targetSampleCount)
+                    _sampleCount += cnt;
+                    if (_sampleCount < _targetSampleCount)
                     {
                         continue;
                     }
                 }
-                else
-                {
-                    // tell the readers that they can read. -ish.
-                    _readWait.Set();
-                }
+                _readWait.Set();
 
                 // wait for the buffer to clear a little
+                // note that if the reader sets the waithandle, we've underflowed and should fully rebuffer before continuing
                 _fillWait.Reset();
-                while (!_fillWait.Wait(100) && _keepBuffering) ;
+                while (_keepBuffering && _sampleCount + minBufSize >= _targetSampleCount && !(doFullRefill = _fillWait.Wait(10)))
+                {
+                    // update the buffered sample count while we're waiting
+                    if (_readCounts.TryDequeue(out var readCount))
+                    {
+                        _sampleCount -= readCount;
+                    }
+                }
+
+                // forceably update the buffered sample count
+                while (_readCounts.Count > 0)
+                {
+                    if (_readCounts.TryDequeue(out var readCount))
+                    {
+                        _sampleCount -= readCount;
+                    }
+                }
             }
         }
     }
