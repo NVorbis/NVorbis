@@ -96,9 +96,11 @@ namespace TestApp
             return cnt;
         }
 
+#pragma warning disable CS0618 // Type or member is obsolete
         public bool IsParameterChange => _reader.IsParameterChange;
 
         public void ClearParameterChange() => _reader.ClearParameterChange();
+#pragma warning restore CS0618 // Type or member is obsolete
 
         public bool IsEndOfStream => _reader.IsEndOfStream;
 
