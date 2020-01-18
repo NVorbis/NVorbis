@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    runs-on: [ubuntu-latest]
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v1
       - name: Setup .NET Core
@@ -20,7 +20,7 @@ jobs:
         run: dotnet test
   deploy:
     needs: build
-    runs-on: [ubuntu-latest]
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v1
       - name: Pack nuget Package
