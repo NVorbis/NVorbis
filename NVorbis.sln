@@ -7,15 +7,23 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NVorbis", "NVorbis\NVorbis.
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{2FC272F6-7727-4000-9110-A03F8936BA8E}"
 	ProjectSection(SolutionItems) = preProject
-		.gitattributes = .gitattributes
-		.gitignore = .gitignore
-		.github\workflows\dotnetcore.yml = .github\workflows\dotnetcore.yml
-		.github\workflows\publish-nuget.yml = .github\workflows\publish-nuget.yml
 		README.md = README.md
 		TODO = TODO
 	EndProjectSection
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TestApp", "TestApp\TestApp.csproj", "{902AD24A-6F7C-4F21-9E88-2B9151AEB563}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Github Actions", "Github Actions", "{DE0E6CFF-7F49-4D3C-BF73-197DE44D5870}"
+	ProjectSection(SolutionItems) = preProject
+		.github\workflows\dotnetcore.yml = .github\workflows\dotnetcore.yml
+		.github\workflows\publish-nuget.yml = .github\workflows\publish-nuget.yml
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Git Settings", "Git Settings", "{BBA6B01A-BE40-48D9-B194-6C0E1A3526DB}"
+	ProjectSection(SolutionItems) = preProject
+		.gitattributes = .gitattributes
+		.gitignore = .gitignore
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -34,6 +42,10 @@ Global
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{DE0E6CFF-7F49-4D3C-BF73-197DE44D5870} = {2FC272F6-7727-4000-9110-A03F8936BA8E}
+		{BBA6B01A-BE40-48D9-B194-6C0E1A3526DB} = {2FC272F6-7727-4000-9110-A03F8936BA8E}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {349C2B2D-C251-47C6-9012-B664B6CE98A1}
