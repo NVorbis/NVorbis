@@ -103,7 +103,7 @@ namespace NVorbis.Ogg
             int pageIndex = -1;
             if (granulePos == 0)
             {
-                pageIndex = FindPageForward(_firstDataPageIndex ?? 0, 0, 0);
+                pageIndex = _firstDataPageIndex ?? FindPageForward(0, 0, 1);
             }
             else
             {
@@ -114,7 +114,8 @@ namespace NVorbis.Ogg
                     // most likely, we can look at previous pages for the appropriate one...
                     if (granulePos < pageGP)
                     {
-                        pageIndex = FindPageBisection(granulePos, _firstDataPageIndex ?? 0, lastPageIndex);
+                        //pageIndex = FindPageBisection(granulePos, _firstDataPageIndex ?? 0, lastPageIndex);
+                        pageIndex = FindPageBisection(granulePos, _firstDataPageIndex ?? 0, lastPageIndex, pageGP);
                     }
                     // unless we're seeking forward, which is merely an excercise in reading forward...
                     else if (granulePos > pageGP)
@@ -186,52 +187,34 @@ namespace NVorbis.Ogg
             return false;
         }
 
-        private int FindPageBisection(long granulePos, int start, int end)
+        private int FindPageBisection(long granulePos, int low, int high, long highGranulePos)
         {
-            var index = (end - 2) / 2 + start;
-            while (GetPageRaw(index, out var pageGranulePos))
+            // we can treat low as always being before the first sample; later work will correct that if needed
+            var lowGranulePos = 0L;
+            int dist;
+            while ((dist = high - low) > 0)
             {
-                if (pageGranulePos > granulePos)
+                // try to find the right page by assumming they are all about the same size
+                var index = low + (int)(dist * ((granulePos - lowGranulePos) / (float)(highGranulePos - lowGranulePos)));
+
+                // go get the actual position of the selected page
+                if (!GetPageRaw(index, out var idxGranulePos))
                 {
-                    end = index;
-                    if (start == end - 1)
-                    {
-                        if (!GetPageRaw(index - 1, out pageGranulePos))
-                        {
-                            break;
-                        }
-                        if (pageGranulePos >= granulePos)
-                        {
-                            return start;
-                        }
-                        return end;
-                    }
-                    else if (start == end)
-                    {
-                        return index;
-                    }
-                    else
-                    {
-                        index -= (end - start) / 2;
-                    }
+                    return -1;
                 }
-                else if (pageGranulePos < granulePos)
+
+                // figure out where to go from here
+                if (idxGranulePos > granulePos)
                 {
-                    start = index;
-                    if (start >= end - 1 || pageGranulePos == 0)
-                    {
-                        // if left >= right, we need to read more pages
-                        // if left == right - 1, we're just a single page short of the correct one
-                        ++index;
-                    }
-                    else if (start == end)
-                    {
-                        return index;
-                    }
-                    else
-                    {
-                        index += (end - start) / 2;
-                    }
+                    // we read a page after our target (could be the right one, but we don't know yet)
+                    high = index;
+                    highGranulePos = idxGranulePos;
+                }
+                else if (idxGranulePos < granulePos)
+                {
+                    // we read a page before our target
+                    low = index + 1;
+                    lowGranulePos = idxGranulePos + 1;
                 }
                 else
                 {
@@ -239,7 +222,7 @@ namespace NVorbis.Ogg
                     return index;
                 }
             }
-            return -1;
+            return low;
         }
 
         private bool GetPageRaw(int pageIndex, out long pageGranulePos)
@@ -293,7 +276,8 @@ namespace NVorbis.Ogg
                         // if we found our page, return it from here so we don't have to do further processing
                         if (pageIndex < _pageOffsets.Count)
                         {
-                            ReadPageData(pageIndex, out granulePos, out isResync, out isContinuation, out isContinued, out packetCount, out pageOverhead);
+                            isResync = _reader.IsResync.Value;
+                            ReadPageData(pageIndex, out granulePos, out isContinuation, out isContinued, out packetCount, out pageOverhead);
                             return true;
                         }
                     }
@@ -326,7 +310,8 @@ namespace NVorbis.Ogg
                 {
                     if (_reader.ReadPageAt(offset))
                     {
-                        ReadPageData(pageIndex, out granulePos, out isResync, out isContinuation, out isContinued, out packetCount, out pageOverhead);
+                        _lastPageIsResync = isResync;
+                        ReadPageData(pageIndex, out granulePos, out isContinuation, out isContinued, out packetCount, out pageOverhead);
                         return true;
                     }
                 }
@@ -345,9 +330,8 @@ namespace NVorbis.Ogg
             return false;
         }
 
-        private void ReadPageData(int pageIndex, out long granulePos, out bool isResync, out bool isContinuation, out bool isContinued, out int packetCount, out int pageOverhead)
+        private void ReadPageData(int pageIndex, out long granulePos, out bool isContinuation, out bool isContinued, out int packetCount, out int pageOverhead)
         {
-            _lastPageIsResync = isResync = _reader.IsResync.Value;
             _lastPageGranulePos = granulePos = _reader.GranulePosition;
             _lastPageIsContinuation = isContinuation = (_reader.PageFlags & PageFlags.ContinuesPacket) != 0;
             _lastPageIsContinued = isContinued = _reader.IsContinued;
