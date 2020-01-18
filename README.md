@@ -1,11 +1,9 @@
 NVorbis    [![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/ioctlLR/NVorbis?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 -------
 
-NVorbis is a .Net library for decoding Xiph.org Vorbis files. It is designed to run in partial trust environments and does not require P/Invoke or unsafe code. It is built for .Net Standard 2.0 and .Net Framework 4.0.
+NVorbis is a .Net library for decoding Xiph.org Vorbis files. It is designed to run in partial trust environments and does not require P/Invoke or unsafe code. It is built for .Net Standard 2.0 and .Net Framework 4.5.
 
 This implementation is based on the Vorbis specification found on xiph.org. The MDCT and Huffman codeword generator were borrowed from public domain implementations in https://github.com/nothings/stb/blob/master/stb_vorbis.c.
-
-Currently the only container supported is Xiph.org Ogg. There are no plans for the Ogg Skeleton and Matroska / WebM containers or RTP support at this time.
 
 To use:
 
@@ -15,15 +13,12 @@ To use:
 // this is the simplest usage; see the public classes and constructors for other options
 using (var vorbis = new NVorbis.VorbisReader("path/to/file.ogg"))
 {
-    // get the first decoder in the reader
-    var decoder = vorbis.Streams[0];
-
 	// get the channels & sample rate
-    var channels = decoder.Channels;
-    var sampleRate = decoder.SampleRate;
+    var channels = vorbis.Channels;
+    var sampleRate = vorbis.SampleRate;
 
     // OPTIONALLY: get a TimeSpan indicating the total length of the Vorbis stream
-    var totalTime = decoder.TotalTime;
+    var totalTime = vorbis.TotalTime;
 
 	// create a buffer for reading samples
     var readBuffer = new float[channels * sampleRate / 5];	// 200ms
@@ -33,7 +28,7 @@ using (var vorbis = new NVorbis.VorbisReader("path/to/file.ogg"))
 
     // go grab samples
     int cnt;
-    while ((cnt = decoder.ReadSamples(readBuffer, 0, readBuffer.Length, out _)) > 0)
+    while ((cnt = vorbis.ReadSamples(readBuffer, 0, readBuffer.Length, out _)) > 0)
     {
     	// do stuff with the buffer
     	// samples are interleaved (chan0, chan1, chan0, chan1, etc.)
