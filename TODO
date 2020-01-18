@@ -1,4 +1,10 @@
-﻿* RTP support
+﻿* Change seekable packet reading to return the packet instance prior to reading continuations
+	- This will reduce memory usage and will improve latency for continued packets
+
+* Support Skeleton metadata
+	- This would be processed entirely within ContainerReader and owned references
+
+* RTP support
 	- This would be a new IPacketProvider implementation
 
 * Matroska support

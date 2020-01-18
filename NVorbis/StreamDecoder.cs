@@ -61,10 +61,43 @@ namespace NVorbis
             _currentPosition = 0L;
             ClipSamples = true;
 
-            if (!ProcessParameterChange(_packetProvider.PeekNextPacket(), true))
+            var packet = _packetProvider.PeekNextPacket();
+            if (!ProcessParameterChange(packet, true))
             {
                 _packetProvider = null;
-                throw new ArgumentException("Invalid Vorbis stream!", nameof(packetProvider));
+                packet.Reset();
+
+                try
+                {
+                    // let's give our caller some helpful hints about what they've encountered...
+                    var header = packet.ReadBits(64);
+                    if (header == 0x646165487375704ful)
+                    {
+                        throw new ArgumentException("Found OPUS bitstream.", nameof(packetProvider));
+                    }
+                    else if ((header & 0xFF) == 0x7F)
+                    {
+                        throw new ArgumentException("Found FLAC bitstream.", nameof(packetProvider));
+                    }
+                    else if (header == 0x2020207865657053ul)
+                    {
+                        throw new ArgumentException("Found Speex bitstream.", nameof(packetProvider));
+                    }
+                    else if (header == 0x0064616568736966ul)
+                    {
+                        // ugh...  we need to add support for this in the container reader
+                        throw new ArgumentException("Found Skeleton Metadata bitstream.", nameof(packetProvider));
+                    }
+                    else if ((header & 0xFFFFFFFFFFFF00ul) == 0x61726f65687400ul)
+                    {
+                        throw new ArgumentException("Found Theora bitsream.", nameof(packetProvider));
+                    }
+                    throw new ArgumentException("Could not find Vorbis data to decode.", nameof(packetProvider));
+                }
+                finally
+                {
+                    packet.Reset();
+                }
             }
         }
 
@@ -74,13 +107,16 @@ namespace NVorbis
         {
             if (!ProcessStreamHeader(packet))
             {
-                packet.Reset();
                 return false;
             }
 
             if (advanceToNextPacket)
             {
                 _packetProvider.GetNextPacket().Done();
+            }
+            else
+            {
+                packet.Done();
             }
 
             packet = _packetProvider.GetNextPacket();
