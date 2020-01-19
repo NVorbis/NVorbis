@@ -432,10 +432,18 @@ namespace NVorbis.Ogg
             _packetReaders.Remove(packetReader.StreamSerial);
         }
 
-        internal int PacketReadByte(long offset)
+        internal byte[] ReadPacketData(long offset, int size)
         {
+            var buf = new byte[size];
             _stream.Position = offset;
-            return _stream.ReadByte();
+            var cnt = _stream.Read(buf, 0, size);
+            if (cnt < size)
+            {
+                var temp = new byte[cnt];
+                Buffer.BlockCopy(buf, 0, temp, 0, cnt);
+                return temp;
+            }
+            return buf;
         }
 
         internal void GatherNextPage(int streamSerial)

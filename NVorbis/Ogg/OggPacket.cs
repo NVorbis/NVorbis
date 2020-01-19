@@ -22,6 +22,7 @@ namespace NVorbis.Ogg
         Packet _next;                       // IntPtr.Size
         Packet _prev;                       // IntPtr.Size
         ContainerReader _containerReader;   // IntPtr.Size
+        byte[] _data;                       // IntPtr.Size + data
 
         internal Packet Next
         {
@@ -96,12 +97,16 @@ namespace NVorbis.Ogg
                 return _mergedPacket.ReadNextByte();
             }
 
-            var b = _containerReader.PacketReadByte(_offset + _curOfs);
-            if (b != -1)
+            if (_data == null)
             {
-                ++_curOfs;
+                _data = _containerReader.ReadPacketData(_offset, _length);
             }
-            return b;
+
+            if (_curOfs < _data.Length)
+            {
+                return _data[_curOfs++];
+            }
+            return -1;
         }
     }
 }
