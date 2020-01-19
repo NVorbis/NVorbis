@@ -38,10 +38,6 @@ namespace NVorbis
         private int _prevPacketEnd;
         private int _prevPacketStop;
 
-        private bool _isParameterChange;
-        private bool _hasReadSampleRate;
-        private bool _hasReadChannels;
-
         /// <summary>
         /// Creates a new instance of <see cref="StreamDecoder"/>.
         /// </summary>
@@ -62,100 +58,88 @@ namespace NVorbis
             ClipSamples = true;
 
             var packet = _packetProvider.PeekNextPacket();
-            if (!ProcessParameterChange(packet, true))
+            if (!ProcessHeaderPackets(packet))
             {
                 _packetProvider = null;
                 packet.Reset();
 
-                try
+                throw GetInvalidStreamException(packet);
+            }
+        }
+
+        private static Exception GetInvalidStreamException(IPacket packet)
+        {
+            try
+            {
+                // let's give our caller some helpful hints about what they've encountered...
+                var header = packet.ReadBits(64);
+                if (header == 0x646165487375704ful)
                 {
-                    // let's give our caller some helpful hints about what they've encountered...
-                    var header = packet.ReadBits(64);
-                    if (header == 0x646165487375704ful)
-                    {
-                        throw new ArgumentException("Found OPUS bitstream.", nameof(packetProvider));
-                    }
-                    else if ((header & 0xFF) == 0x7F)
-                    {
-                        throw new ArgumentException("Found FLAC bitstream.", nameof(packetProvider));
-                    }
-                    else if (header == 0x2020207865657053ul)
-                    {
-                        throw new ArgumentException("Found Speex bitstream.", nameof(packetProvider));
-                    }
-                    else if (header == 0x0064616568736966ul)
-                    {
-                        // ugh...  we need to add support for this in the container reader
-                        throw new ArgumentException("Found Skeleton Metadata bitstream.", nameof(packetProvider));
-                    }
-                    else if ((header & 0xFFFFFFFFFFFF00ul) == 0x61726f65687400ul)
-                    {
-                        throw new ArgumentException("Found Theora bitsream.", nameof(packetProvider));
-                    }
-                    throw new ArgumentException("Could not find Vorbis data to decode.", nameof(packetProvider));
+                    return new ArgumentException("Found OPUS bitstream.");
                 }
-                finally
+                else if ((header & 0xFF) == 0x7F)
                 {
-                    packet.Reset();
+                    return new ArgumentException("Found FLAC bitstream.");
                 }
+                else if (header == 0x2020207865657053ul)
+                {
+                    return new ArgumentException("Found Speex bitstream.");
+                }
+                else if (header == 0x0064616568736966ul)
+                {
+                    // ugh...  we need to add support for this in the container reader
+                    return new ArgumentException("Found Skeleton metadata bitstream.");
+                }
+                else if ((header & 0xFFFFFFFFFFFF00ul) == 0x61726f65687400ul)
+                {
+                    return new ArgumentException("Found Theora bitsream.");
+                }
+                return new ArgumentException("Could not find Vorbis data to decode.");
+            }
+            finally
+            {
+                packet.Reset();
             }
         }
 
         #region Init
 
-        private bool ProcessParameterChange(IPacket packet, bool advanceToNextPacket)
+        private bool ProcessHeaderPackets(IPacket packet)
         {
-            if (!ProcessStreamHeader(packet))
+            if (!ProcessHeaderPacket(packet, LoadStreamHeader, _ => _packetProvider.GetNextPacket().Done()))
             {
                 return false;
             }
 
-            if (advanceToNextPacket)
-            {
-                _packetProvider.GetNextPacket().Done();
-            }
-            else
-            {
-                packet.Done();
-            }
-
-            packet = _packetProvider.GetNextPacket();
-            if (packet == null)
+            if (!ProcessHeaderPacket(_packetProvider.GetNextPacket(), LoadComments, pkt => pkt.Done()))
             {
                 return false;
             }
-            try
-            {
-                if (!LoadComments(packet))
-                {
-                    return false;
-                }
-            }
-            finally
-            {
-                packet.Done();
-            }
 
-            packet = _packetProvider.GetNextPacket();
-            if (packet == null)
+            if (!ProcessHeaderPacket(_packetProvider.GetNextPacket(), LoadBooks, pkt => pkt.Done()))
             {
                 return false;
-            }
-            try
-            {
-                if (!LoadBooks(packet))
-                {
-                    return false;
-                }
-            }
-            finally
-            {
-                packet.Done();
             }
 
             _currentPosition = 0;
             ResetDecoder();
             return true;
+        }
+
+        private static bool ProcessHeaderPacket(IPacket packet, Func<IPacket, bool> processAction, Action<IPacket> doneAction)
+        {
+            if (packet != null)
+            {
+                try
+                {
+                    return processAction(packet);
+                }
+                finally
+                {
+                    doneAction(packet);
+                }
+            }
+            return false;
         }
 
         static private readonly byte[] PacketSignatureStream = { 0x01, 0x76, 0x6f, 0x72, 0x62, 0x69, 0x73, 0x00, 0x00, 0x00, 0x00 };
@@ -186,7 +170,7 @@ namespace NVorbis
             return Encoding.UTF8.GetString(buf);
         }
 
-        private bool ProcessStreamHeader(IPacket packet)
+        private bool LoadStreamHeader(IPacket packet)
         {
             if (!ValidateHeader(packet, PacketSignatureStream))
             {
@@ -309,24 +293,9 @@ namespace NVorbis
             _prevPacketEnd = 0;
             _prevPacketStop = 0;
             _nextPacketBuf = null;
-            _isParameterChange = false;
-            _hasReadChannels = false;
-            _hasReadSampleRate = false;
             _eosFound = false;
             _hasClipped = false;
             _hasPosition = false;
-        }
-
-        private void AckParameterChange(bool sampleRate = false, bool channels = false)
-        {
-            _hasReadSampleRate |= sampleRate;
-            _hasReadChannels |= channels;
-
-            if (_hasReadSampleRate && _hasReadChannels)
-            {
-                // both have been read, so clear the parameter change flag
-                _isParameterChange = false;
-            }
         }
 
         #endregion
@@ -339,19 +308,15 @@ namespace NVorbis
         /// <param name="buffer">The buffer to read the samples into.</param>
         /// <param name="offset">The index to start reading samples into the buffer.</param>
         /// <param name="count">The number of samples that should be read into the buffer.  Must be a multiple of <see cref="Channels"/>.</param>
-        /// <param name="isParameterChange"><see langword="true"/> if subsequent data will have a different <see cref="Channels"/> or <see cref="SampleRate"/>.</param>
         /// <returns>The number of samples read into the buffer.  If <paramref name="isParameterChange"/> is <see langword="true"/>, this will be <c>0</c>.</returns>
         /// <exception cref="ArgumentOutOfRangeException">Thrown when the buffer is too small or <paramref name="offset"/> is less than zero.</exception>
         /// <remarks>The data populated into <paramref name="buffer"/> is interleaved by channel in normal PCM fashion: Left, Right, Left, Right, Left, Right</remarks>
-        public int Read(float[] buffer, int offset, int count, out bool isParameterChange)
+        public int Read(float[] buffer, int offset, int count)
         {
             if (buffer == null) throw new ArgumentNullException(nameof(buffer));
             if (offset < 0 || offset + count > buffer.Length) throw new ArgumentOutOfRangeException(nameof(offset));
             if (count % _channels != 0) throw new ArgumentOutOfRangeException(nameof(count), "Must be a multiple of Channels!");
             if (_packetProvider == null) throw new ObjectDisposedException(nameof(StreamDecoder));
-
-            // by default, we're not in a parameter change
-            isParameterChange = false;
 
             // if the caller didn't ask for any data, bail early
             if (count == 0)
@@ -369,17 +334,6 @@ namespace NVorbis
                 // if we don't have any more valid data in the current packet, read in the next packet
                 if (_prevPacketStart == _prevPacketEnd)
                 {
-                    // if we're in a parameter change or we're at the end of the file, we've read everything and need to reset
-                    if (_isParameterChange)
-                    {
-                        // notify our caller of the parameter change state
-                        isParameterChange = _isParameterChange;
-
-                        // fully reset ourself
-                        ResetDecoder();
-                        _hasPosition = true;
-                        break;
-                    }
                     if (_eosFound)
                     {
                         _nextPacketBuf = null;
@@ -389,14 +343,8 @@ namespace NVorbis
                         break;
                     }
 
-                    if (!ReadNextPacket((idx - offset) / _channels, out isParameterChange, out var samplePosition))
+                    if (!ReadNextPacket((idx - offset) / _channels, out var samplePosition))
                     {
-                        // save off the parameter change state...
-                        _isParameterChange |= isParameterChange;
-
-                        // ... but don't actually flag it to our caller just yet
-                        isParameterChange = false;
-
                         // drain the current packet (the windowing will fade it out)
                         _prevPacketEnd = _prevPacketStop;
                     }
@@ -460,10 +408,10 @@ namespace NVorbis
             return idx - targetIndex;
         }
 
-        private bool ReadNextPacket(int bufferedSamples, out bool isParameterChange, out long? samplePosition)
+        private bool ReadNextPacket(int bufferedSamples, out long? samplePosition)
         {
             // decode the next packet now so we can start overlapping with it
-            var curPacket = DecodeNextPacket(out var startIndex, out var validLen, out var totalLen, out isParameterChange, out var isEndOfStream, out samplePosition, out var bitsRead, out var bitsRemaining, out var containerOverheadBits);
+            var curPacket = DecodeNextPacket(out var startIndex, out var validLen, out var totalLen, out var isEndOfStream, out samplePosition, out var bitsRead, out var bitsRemaining, out var containerOverheadBits);
             _eosFound |= isEndOfStream;
             if (curPacket == null)
             {
@@ -505,12 +453,10 @@ namespace NVorbis
             _prevPacketEnd = validLen;
             _prevPacketStop = totalLen;
             _prevPacketBuf = curPacket;
-
-            isParameterChange = false;
             return true;
         }
 
-        private float[][] DecodeNextPacket(out int packetStartindex, out int packetValidLength, out int packetTotalLength, out bool isParameterChange, out bool isEndOfStream, out long? samplePosition, out int bitsRead, out int bitsRemaining, out int containerOverheadBits)
+        private float[][] DecodeNextPacket(out int packetStartindex, out int packetValidLength, out int packetTotalLength, out bool isEndOfStream, out long? samplePosition, out int bitsRead, out int bitsRemaining, out int containerOverheadBits)
         {
             IPacket packet = null;
             try
@@ -518,22 +464,10 @@ namespace NVorbis
                 if ((packet = _packetProvider.GetNextPacket()) == null)
                 {
                     // no packet? we're at the end of the stream
-                    isParameterChange = false;
                     isEndOfStream = true;
-                }
-                else if (packet.IsParameterChange)
-                {
-                    // parameter change... hmmm...  process it, flag that we're changing, then try again next pass
-                    var channels = _channels;
-                    var sampleRate = _sampleRate;
-                    isEndOfStream = false;
-                    ProcessParameterChange(packet, false);
-                    isParameterChange = channels != _channels || sampleRate != _sampleRate;
                 }
                 else
                 {
-                    isParameterChange = false;
-
                     // if the packet is flagged as the end of the stream, we can safely mark _eosFound
                     isEndOfStream = packet.IsEndOfStream;
 
@@ -643,7 +577,7 @@ namespace NVorbis
             _hasPosition = true;
 
             // read the pre-roll packet
-            if (!ReadNextPacket(0, out _, out _))
+            if (!ReadNextPacket(0, out _))
             {
                 // we'll use this to force ReadSamples to fail to read
                 _eosFound = true;
@@ -651,7 +585,7 @@ namespace NVorbis
             }
 
             // read the actual packet
-            if (!ReadNextPacket(0, out _, out _))
+            if (!ReadNextPacket(0, out _))
             {
                 ResetDecoder();
                 // we'll use this to force ReadSamples to fail to read
@@ -699,26 +633,12 @@ namespace NVorbis
         /// <summary>
         /// Gets the number of channels in the stream.
         /// </summary>
-        public int Channels
-        {
-            get
-            {
-                AckParameterChange(channels: true);
-                return _channels;
-            }
-        }
+        public int Channels => _channels;
 
         /// <summary>
         /// Gets the sample rate of the stream.
         /// </summary>
-        public int SampleRate
-        {
-            get
-            {
-                AckParameterChange(sampleRate: true);
-                return _sampleRate;
-            }
-        }
+        public int SampleRate => _sampleRate;
 
         /// <summary>
         /// Gets the upper bitrate limit for the stream, if specified.
@@ -769,12 +689,12 @@ namespace NVorbis
         }
 
         /// <summary>
-        /// Gets or sets whether to clip samples returned by <see cref="Read(float[], int, int, out bool)"/>.
+        /// Gets or sets whether to clip samples returned by <see cref="Read(float[], int, int)"/>.
         /// </summary>
         public bool ClipSamples { get; set; }
 
         /// <summary>
-        /// Gets whether <see cref="Read(float[], int, int, out bool)"/> has returned any clipped samples.
+        /// Gets whether <see cref="Read(float[], int, int)"/> has returned any clipped samples.
         /// </summary>
         public bool HasClipped => _hasClipped;
 

@@ -21,11 +21,6 @@
         long? GranulePosition { get; }
 
         /// <summary>
-        /// Gets whether the packet is the start of a new header set.
-        /// </summary>
-        bool IsParameterChange { get; }
-
-        /// <summary>
         /// Gets whether the packet is the last packet of the stream.
         /// </summary>
         bool IsEndOfStream { get; }

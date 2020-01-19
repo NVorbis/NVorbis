@@ -2,7 +2,7 @@
 {
     interface IForwardOnlyPacketProvider : IPacketProvider
     {
-        void AddPage(byte[] buf, bool isResync);
+        bool AddPage(byte[] buf, bool isResync);
         void SetEndOfStream();
     }
 }

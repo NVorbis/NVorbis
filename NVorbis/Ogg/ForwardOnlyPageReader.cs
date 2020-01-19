@@ -23,25 +23,30 @@ namespace NVorbis.Ogg
         {
             if (_packetProviders.TryGetValue(streamSerial, out var pp))
             {
-                pp.AddPage(pageBuf, isResync);
-                if (((PageFlags)pageBuf[5] & PageFlags.EndOfStream) != 0)
+                // try to add the page...
+                if (pp.AddPage(pageBuf, isResync))
                 {
-                    // if it's done, just remove it
-                    _packetProviders.Remove(streamSerial);
+                    // ..., then make sure we're not flagged as the end of the stream...
+                    if (((PageFlags)pageBuf[5] & PageFlags.EndOfStream) == 0)
+                    {
+                        // ... in which case we say we're good.
+                        return true;
+                    }
                 }
+                // otherwise, remove the stream from our list and fall through to:
+                _packetProviders.Remove(streamSerial);
             }
-            else
+
+            // try to add the stream to the list.
+            pp = CreatePacketProvider(this, streamSerial);
+            pp.AddPage(pageBuf, isResync);
+            _packetProviders.Add(streamSerial, pp);
+            if (_newStreamCallback(pp))
             {
-                pp = CreatePacketProvider(this, streamSerial);
-                pp.AddPage(pageBuf, isResync);
-                _packetProviders.Add(streamSerial, pp);
-                if (!_newStreamCallback(pp))
-                {
-                    _packetProviders.Remove(streamSerial);
-                    return false;
-                }
+                return true;
             }
-            return true;
+            _packetProviders.Remove(streamSerial);
+            return false;
         }
 
         protected override void SetEndOfStreams()

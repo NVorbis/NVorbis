@@ -84,23 +84,36 @@ namespace TestApp
 
         public int Read(float[] buffer, int offset, int count)
         {
-            var cnt = _reader.Read(buffer, offset, count, out var isParmChange);
-            if (isParmChange && cnt == 0)
+            if (IsParameterChange) throw new InvalidOperationException("Parameter change pending!  Call ClearParameterChange() before reading more data.");
+
+            var cnt = _reader.Read(buffer, offset, count);
+            if (cnt == 0)
             {
-                if (_reader.Channels != _waveFormat.Channels || _reader.SampleRate != _waveFormat.SampleRate)
+                if (_reader.IsEndOfStream && AutoAdvanceToNextStream)
                 {
-                    UpdateWaveFormat();
-                    return 0;
+                    if (_reader.StreamIndex < _reader.StreamCount - 1)
+                    {
+                        if (_reader.SwitchStreams(_reader.StreamIndex + 1))
+                        {
+                            IsParameterChange = true;
+                            UpdateWaveFormat();
+                            return 0;
+                        }
+                        else
+                        {
+                            return Read(buffer, offset, count);
+                        }
+                    }
                 }
             }
             return cnt;
         }
 
-#pragma warning disable CS0618 // Type or member is obsolete
-        public bool IsParameterChange => _reader.IsParameterChange;
+        public bool AutoAdvanceToNextStream { get; set; }
 
-        public void ClearParameterChange() => _reader.ClearParameterChange();
-#pragma warning restore CS0618 // Type or member is obsolete
+        public bool IsParameterChange { get; private set; }
+
+        public void ClearParameterChange() => IsParameterChange = false;
 
         public bool IsEndOfStream => _reader.IsEndOfStream;
 

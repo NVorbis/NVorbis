@@ -168,7 +168,7 @@ namespace NVorbis
         /// <summary>
         /// Gets whether the previous short sample count was due to a parameter change in the stream.
         /// </summary>
-        [Obsolete("Use ReadSamples(float[], int, int, out bool) to get immediate parameter change flag status.")]
+        [Obsolete("No longer supported.  Will receive a new stream when parameters change.", true)]
         public bool IsParameterChange { get; private set; }
 
         /// <summary>
@@ -253,7 +253,7 @@ namespace NVorbis
         public bool IsEndOfStream => _streamDecoder.IsEndOfStream;
 
         /// <summary>
-        /// Gets or sets whether to clip samples returned by <see cref="Read(float[], int, int, out bool)"/>.
+        /// Gets or sets whether to clip samples returned by <see cref="Read(float[], int, int)"/>.
         /// </summary>
         public bool ClipSamples
         {
@@ -262,7 +262,7 @@ namespace NVorbis
         }
 
         /// <summary>
-        /// Gets whether <see cref="Read(float[], int, int, out bool)"/> has returned any clipped samples.
+        /// Gets whether <see cref="Read(float[], int, int)"/> has returned any clipped samples.
         /// </summary>
         public bool HasClipped => _streamDecoder.HasClipped;
 
@@ -373,13 +373,7 @@ namespace NVorbis
             int readCount;
             try
             {
-                readCount = _streamDecoder.Read(buffer, offset, count, out var isParamterChange);
-                if (readCount == 0 && isParamterChange)
-                {
-                    IsParameterChange = true;
-                    throw new InvalidOperationException("Currently pending a paramter change.  Read new parameters before requesting further samples!");
-                }
-                IsParameterChange = false;
+                readCount = _streamDecoder.Read(buffer, offset, count);
             }
             catch
             {
@@ -416,7 +410,7 @@ namespace NVorbis
                     // we really don't care if this read succeeds... the primary read has already done so and all semantics belong to it.
                     // so even if the parameters have changed, we'll let the next pass trigger the exception.
                     // and if we don't read anything here, no harm done; the caller will probably try again.
-                    tailRead = _streamDecoder.Read(_tailBuffer, 0, _tailBuffer.Length, out _);
+                    tailRead = _streamDecoder.Read(_tailBuffer, 0, _tailBuffer.Length);
                 }
                 catch
                 {
@@ -454,28 +448,20 @@ namespace NVorbis
         /// <param name="buffer">The buffer to read the samples into.</param>
         /// <param name="offset">The index to start reading samples into the buffer.</param>
         /// <param name="count">The number of samples that should be read into the buffer.  Must be a multiple of <see cref="Channels"/>.</param>
-        /// <param name="isParameterChange"><see langword="true"/> if subsequent data will have a different <see cref="Channels"/> or <see cref="SampleRate"/>.</param>
         /// <returns>The number of samples read into the buffer.  If <paramref name="isParameterChange"/> is <see langword="true"/>, this will be <c>0</c>.</returns>
         /// <exception cref="ArgumentOutOfRangeException">Thrown when the buffer is too small or <paramref name="offset"/> is less than zero.</exception>
         /// <remarks>The data populated into <paramref name="buffer"/> is interleaved by channel in normal PCM fashion: Left, Right, Left, Right, Left, Right</remarks>
-        public int Read(float[] buffer, int offset, int count, out bool isParameterChange)
+        public int Read(float[] buffer, int offset, int count)
         {
             _tailBuffer = null;
-            var cnt = _streamDecoder.Read(buffer, offset, count, out isParameterChange);
-#pragma warning disable CS0618 // Type or member is obsolete
-            IsParameterChange |= isParameterChange;
-#pragma warning restore CS0618 // Type or member is obsolete
-            return cnt;
+            return _streamDecoder.Read(buffer, offset, count);
         }
 
         /// <summary>
-        /// Acknowledges a parameter change as signalled by <see cref="Read(float[], int, int, out bool)"/>.
+        /// Acknowledges a parameter change as signalled by <see cref="Read(float[], int, int)"/>.
         /// </summary>
-        [Obsolete("IsParamterChange will be removed in a later release.  This method will be removed with it.")]
-        public void ClearParameterChange()
-        {
-            IsParameterChange = false;
-        }
+        [Obsolete("No longer needed.", true)]
+        public void ClearParameterChange() => throw new NotSupportedException();
 
         #endregion
     }

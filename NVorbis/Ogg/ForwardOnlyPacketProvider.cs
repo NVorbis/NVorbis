@@ -11,7 +11,6 @@ namespace NVorbis.Ogg
         private readonly Queue<(byte[] buf, bool isResync)> _pageQueue = new Queue<(byte[] buf, bool isResync)>();
 
         private readonly IPageReader _reader;
-        private int _newBosFlagCountdown;
         private byte[] _pageBuf;
         private int _packetIndex;
         private bool _isEndOfStream;
@@ -35,14 +34,13 @@ namespace NVorbis.Ogg
 
         public int StreamSerial { get; }
 
-        public void AddPage(byte[] buf, bool isResync)
+        public bool AddPage(byte[] buf, bool isResync)
         {
             if (((PageFlags)buf[5] & PageFlags.BeginningOfStream) != 0)
             {
                 if (_isEndOfStream)
                 {
-                    _isEndOfStream = false;
-                    _newBosFlagCountdown = _pageQueue.Count;
+                    return false;
                 }
                 isResync = true;
                 _lastSeqNo = BitConverter.ToInt32(buf, 18);
@@ -56,6 +54,7 @@ namespace NVorbis.Ogg
             }
 
             _pageQueue.Enqueue((buf, isResync));
+            return true;
         }
 
         public void SetEndOfStream()
@@ -114,7 +113,6 @@ namespace NVorbis.Ogg
             int dataStart;
             int packetIndex;
             bool isCont, isCntd;
-            var isParameterChange = false;
             if (_pageBuf != null && _packetIndex < 27 + _pageBuf[26])
             {
                 pageBuf = _pageBuf;
@@ -130,15 +128,6 @@ namespace NVorbis.Ogg
                 {
                     // couldn't read the next page...
                     return false;
-                }
-                if (--_newBosFlagCountdown == -1)
-                {
-                    isResync = false;
-                    isParameterChange = true;
-                }
-                else
-                {
-                    _newBosFlagCountdown = -1;
                 }
             }
 
@@ -240,7 +229,6 @@ namespace NVorbis.Ogg
             // last, save off our state and return true
             IsResync = isResync;
             GranulePosition = granulePos;
-            IsParameterChange = isParameterChange;
             IsEndOfStream = isEos;
             ContainerOverheadBits = contOverhead * 8;
             _pageBuf = pageBuf;
