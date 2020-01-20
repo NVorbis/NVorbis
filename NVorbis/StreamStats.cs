@@ -13,7 +13,8 @@ namespace NVorbis
 
         private long _totalSamples;
         private long _audioBits;
-        private long _overheadBits;
+        private long _headerBits;
+        private long _containerBits;
         private long _wasteBits;
 
         private object _lock = new object();
@@ -27,7 +28,7 @@ namespace NVorbis
                 lock (_lock)
                 {
                     samples = _totalSamples;
-                    bits = _audioBits + _overheadBits + _wasteBits;
+                    bits = _audioBits + _headerBits + _containerBits + _wasteBits;
                 }
                 if (samples > 0)
                 {
@@ -55,7 +56,9 @@ namespace NVorbis
             }
         }
 
-        public long OverheadBits => _overheadBits;
+        public long ContainerBits => _containerBits;
+
+        public long OverheadBits => _headerBits;
 
         public long AudioBits => _audioBits;
 
@@ -94,7 +97,8 @@ namespace NVorbis
                 _packetCount = 0;
                 _audioBits = 0;
                 _totalSamples = 0;
-                _overheadBits = 0;
+                _headerBits = 0;
+                _containerBits = 0;
                 _wasteBits = 0;
             }
         }
@@ -105,29 +109,22 @@ namespace NVorbis
             {
                 _sampleRate = sampleRate;
 
-                _packetBits[0] = _packetBits[1] = 0;
-                _packetSamples[0] = _packetSamples[1] = 0;
-                _packetIndex = 0;
-
-                _audioBits = 0;
-                _totalSamples = 0;
-                _wasteBits = 0;
+                ResetStats();
             }
         }
 
-        internal void AddPacket(int samples, int bits, int overhead, int containerOverhead)
+        internal void AddPacket(int samples, int bits, int waste, int container)
         {
             lock (_lock)
             {
-                ++_packetCount;
-                _audioBits += bits;
-
                 if (samples >= 0)
                 {
-                    _wasteBits += overhead;
-                    _overheadBits += containerOverhead;
+                    // audio packet
+                    _audioBits += bits;
+                    _wasteBits += waste;
+                    _containerBits += container;
                     _totalSamples += samples;
-                    _packetBits[_packetIndex] = bits + overhead;
+                    _packetBits[_packetIndex] = bits + waste;
                     _packetSamples[_packetIndex] = samples;
 
                     if (++_packetIndex == 2)
@@ -137,7 +134,10 @@ namespace NVorbis
                 }
                 else
                 {
-                    _overheadBits += overhead + containerOverhead;
+                    // header packet
+                    _headerBits += bits;
+                    _wasteBits += waste;
+                    _containerBits += container;
                 }
             }
         }

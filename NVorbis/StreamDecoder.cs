@@ -192,7 +192,7 @@ namespace NVorbis
             }
 
             _stats.SetSampleRate(_sampleRate);
-            _stats.AddPacket(-1, 0, packet.BitsRead + packet.BitsRemaining, packet.ContainerOverheadBits);
+            _stats.AddPacket(-1, packet.BitsRead, packet.BitsRemaining, packet.ContainerOverheadBits);
 
             return true;
         }
@@ -212,7 +212,7 @@ namespace NVorbis
                 _comments[i] = ReadString(packet);
             }
 
-            _stats.AddPacket(-1, 0, packet.BitsRead + packet.BitsRemaining, packet.ContainerOverheadBits);
+            _stats.AddPacket(-1, packet.BitsRead, packet.BitsRemaining, packet.ContainerOverheadBits);
 
             return true;
         }
@@ -277,7 +277,7 @@ namespace NVorbis
             // save off the number of bits to read to determine packet mode
             _modeFieldBits = Utils.ilog(_modes.Length - 1);
 
-            _stats.AddPacket(-1, 0, packet.BitsRead + packet.BitsRemaining, packet.ContainerOverheadBits);
+            _stats.AddPacket(-1, packet.BitsRead, packet.BitsRemaining, packet.ContainerOverheadBits);
 
             return true;
         }
