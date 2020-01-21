@@ -6,7 +6,10 @@ namespace TestApp
 {
     class VorbisWaveStream : NAudio.Wave.WaveStream, NAudio.Wave.ISampleProvider
     {
-        private VorbisReader _reader;
+        internal static Func<string, IVorbisReader> CreateFileReader { get; set; } = fn => new VorbisReader(fn);
+        internal static Func<System.IO.Stream, IVorbisReader> CreateStreamReader { get; set; } = ss => new VorbisReader(ss, false);
+
+        private IVorbisReader _reader;
 
         NAudio.Wave.WaveFormat _waveFormat;
 
@@ -14,14 +17,14 @@ namespace TestApp
 
         public VorbisWaveStream(string fileName)
         {
-            _reader = new VorbisReader(fileName);
+            _reader = CreateFileReader(fileName);
 
             UpdateWaveFormat();
         }
         
         public VorbisWaveStream(System.IO.Stream sourceStream)
         {
-            _reader = new VorbisReader(sourceStream, false);
+            _reader = CreateStreamReader(sourceStream);
 
             UpdateWaveFormat();
         }
@@ -53,30 +56,36 @@ namespace TestApp
             set => _reader.SamplePosition = value / _waveFormat.BlockAlign;
         }
 
-        // This buffer can be static because it can only be used by 1 instance per thread
-        [ThreadStatic]
-        static float[] _conversionBuffer = null;
-
         public override int Read(byte[] buffer, int offset, int count)
         {
-            // adjust count so it is in floats instead of bytes
-            count /= sizeof(float);
+            // adjust count so it is in samples instead of bytes
+            count /= sizeof(float) * _reader.Channels;
 
-            // make sure we don't have an odd count
-            count -= count % _reader.Channels;
-
-            // get the buffer, creating a new one if none exists or the existing one is too small
-            var cb = _conversionBuffer ?? (_conversionBuffer = new float[count]);
-            if (cb.Length < count)
+            // get an aligned offset into the buffer
+            var sampleOffset = offset / (sizeof(float) * _reader.Channels);
+            if (sampleOffset < offset * (sizeof(float) * _reader.Channels))
             {
-                cb = (_conversionBuffer = new float[count]);
+                // move to the next viable position and remove a sample from our count
+                ++sampleOffset;
+                if (--count <= 0)
+                {
+                    // of course, if we then have no samples, we can't read anything... just return
+                    return 0;
+                }
             }
 
-            // let Read(float[], int, int) do the actual reading; adjust count back to bytes
-            int cnt = Read(cb, 0, count) * sizeof(float);
+            // actually do the read
+            var cnt = sizeof(float) * Read(new NAudio.Wave.WaveBuffer(buffer), sampleOffset, count);
 
-            // move the data back to the request buffer
-            Buffer.BlockCopy(cb, 0, buffer, offset, cnt);
+            // move the data to the requested offset
+            if (cnt > 0)
+            {
+                sampleOffset *= (sizeof(float) * _reader.Channels);
+                if (sampleOffset > offset)
+                {
+                    Buffer.BlockCopy(buffer, sampleOffset, buffer, offset, cnt);
+                }
+            }
 
             // done!
             return cnt;
@@ -86,12 +95,12 @@ namespace TestApp
         {
             if (IsParameterChange) throw new InvalidOperationException("Parameter change pending!  Call ClearParameterChange() before reading more data.");
 
-            var cnt = _reader.Read(buffer, offset, count);
+            var cnt = _reader.ReadSamples(buffer, offset, count);
             if (cnt == 0)
             {
                 if (_reader.IsEndOfStream && AutoAdvanceToNextStream)
                 {
-                    if (_reader.StreamIndex < _reader.StreamCount - 1)
+                    if (_reader.StreamIndex < _reader.Streams.Count - 1)
                     {
                         if (_reader.SwitchStreams(_reader.StreamIndex + 1))
                         {
@@ -117,14 +126,14 @@ namespace TestApp
 
         public bool IsEndOfStream => _reader.IsEndOfStream;
 
-        public int StreamCount => _reader.StreamCount;
+        public int StreamCount => _reader.Streams.Count;
 
         public int StreamIndex
         {
             get => _reader.StreamIndex;
             set
             {
-                if (value < 0 || value >= _reader.StreamCount) throw new ArgumentOutOfRangeException(nameof(value));
+                if (value < 0 || value >= _reader.Streams.Count) throw new ArgumentOutOfRangeException(nameof(value));
                 if (_reader.SwitchStreams(value))
                 {
                     UpdateWaveFormat();

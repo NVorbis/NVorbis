@@ -9,7 +9,7 @@ namespace NVorbis
     /// <summary>
     /// Implements an easy to use wrapper around <see cref="IContainerReader"/> and <see cref="IStreamDecoder"/>.
     /// </summary>
-    public sealed class VorbisReader : IDisposable
+    public sealed class VorbisReader : IVorbisReader
     {
         internal static Func<Stream, bool, IContainerReader> CreateContainerReader { get; set; } = (s, cod) => new Ogg.ContainerReader(s, cod);
         internal static Func<IPacketProvider, IStreamDecoder> CreateStreamDecoder { get; set; } = pp => new StreamDecoder(pp, new Factory());
@@ -19,9 +19,6 @@ namespace NVorbis
         private readonly bool _closeOnDispose;
 
         private IStreamDecoder _streamDecoder;
-
-        private int _tailIdx;
-        private float[] _tailBuffer;
 
         /// <summary>
         /// Raised when a new stream has been encountered in the file or container.
@@ -120,7 +117,7 @@ namespace NVorbis
 
         #region Convenience Helpers
 
-        // Since most uses of Ogg Vorbis are single-stream audio files, we can make life simpler for users
+        // Since most uses of VorbisReader are for single-stream audio files, we can make life simpler for users
         //  by exposing the first stream's properties and methods here.
 
         /// <summary>
@@ -169,7 +166,7 @@ namespace NVorbis
         /// Gets whether the previous short sample count was due to a parameter change in the stream.
         /// </summary>
         [Obsolete("No longer supported.  Will receive a new stream when parameters change.", true)]
-        public bool IsParameterChange { get; private set; }
+        public bool IsParameterChange => throw new NotSupportedException();
 
         /// <summary>
         /// Gets the number of bits read that are related to framing and transport alone.
@@ -189,6 +186,7 @@ namespace NVorbis
         /// <summary>
         /// Returns the number of logical streams found so far in the physical container.
         /// </summary>
+        [Obsolete("Use .Streams.Count instead.")]
         public int StreamCount => _decoders.Count;
 
         /// <summary>
@@ -230,7 +228,6 @@ namespace NVorbis
             set
             {
                 _streamDecoder.TimePosition = value;
-                _tailBuffer = null;
             }
         }
 
@@ -243,7 +240,6 @@ namespace NVorbis
             set
             {
                 _streamDecoder.SamplePosition = value;
-                _tailBuffer = null;
             }
         }
 
@@ -253,7 +249,7 @@ namespace NVorbis
         public bool IsEndOfStream => _streamDecoder.IsEndOfStream;
 
         /// <summary>
-        /// Gets or sets whether to clip samples returned by <see cref="Read(float[], int, int)"/>.
+        /// Gets or sets whether to clip samples returned by <see cref="ReadSamples(float[], int, int)"/>.
         /// </summary>
         public bool ClipSamples
         {
@@ -262,7 +258,7 @@ namespace NVorbis
         }
 
         /// <summary>
-        /// Gets whether <see cref="Read(float[], int, int)"/> has returned any clipped samples.
+        /// Gets whether <see cref="ReadSamples(float[], int, int)"/> has returned any clipped samples.
         /// </summary>
         public bool HasClipped => _streamDecoder.HasClipped;
 
@@ -309,7 +305,6 @@ namespace NVorbis
         public void SeekTo(TimeSpan timePosition)
         {
             _streamDecoder.SeekTo(timePosition);
-            _tailBuffer = null;
         }
 
         /// <summary>
@@ -319,7 +314,6 @@ namespace NVorbis
         public void SeekTo(long samplePosition)
         {
             _streamDecoder.SeekTo(samplePosition);
-            _tailBuffer = null;
         }
 
         /// <summary>
@@ -329,136 +323,21 @@ namespace NVorbis
         /// <param name="offset">The index to start reading samples into the buffer.</param>
         /// <param name="count">The number of samples that should be read into the buffer.</param>
         /// <returns>The number of floats read into the buffer.</returns>
-        //
-        // Previous versions of NVorbis.VorbisReader could handle partial-sample reading (count is an odd number when reading a stereo stream).
-        // The new decoder design can't do that, so we have to fake it...
-        // While we're at it, we're adding logic to handle the parameter change such that we have the same semantics as before.
-        [Obsolete("Use Read(float[], int, int, out bool) instead.")]
-        public int ReadSamples(float[] buffer, int offset, int count)
-        {
-            // if we have a tail buffer, we have floats
-            if (_tailBuffer != null)
-            {
-                var delta = _tailBuffer.Length - _tailIdx;
-                if (delta >= count)
-                {
-                    // just satisfy the request out of our buffer...
-                    delta = count;
-                    while (_tailIdx < _tailBuffer.Length && --delta >= 0)
-                    {
-                        buffer[offset++] = _tailBuffer[_tailIdx++];
-                    }
-                    // if we've used up the buffer, remove it
-                    if (_tailIdx == _tailBuffer.Length)
-                    {
-                        _tailBuffer = null;
-                    }
-                    return count;
-                }
-
-                // update to reflect that we have data already buffered
-                offset += delta;
-                count -= delta;
-            }
-
-            // figure out the overage left in the count
-            var tailLen = count % Channels;
-            if (tailLen > 0)
-            {
-                // don't ask for the last sample; we'll do that separately
-                count -= tailLen;
-            }
-
-            // read the bulk of the data
-            int readCount;
-            try
-            {
-                readCount = _streamDecoder.Read(buffer, offset, count);
-            }
-            catch
-            {
-                _tailBuffer = null;
-                throw;
-            }
-
-            // if we've read anything and have a tail buffer, pop in the leading float values.
-            if (_tailBuffer != null)
-            {
-                offset -= _tailBuffer.Length - _tailIdx;
-                while (_tailIdx < _tailBuffer.Length)
-                {
-                    buffer[offset++] = _tailBuffer[_tailIdx++];
-                    ++readCount;
-                }
-            }
-
-            // if we don't have anything else to read, clear the buffer
-            if (tailLen == 0)
-            {
-                _tailBuffer = null;
-            }
-            // if we can satify the read request with another sample, grab it.
-            // note that if we can read one more sample to get the exact request, we don't; chances are it wouldn't succeed anyway.
-            else if (readCount + tailLen >= count)
-            {
-                _tailBuffer = _tailBuffer ?? new float[Channels];
-                _tailIdx = 0;
-
-                int tailRead;
-                try
-                {
-                    // we really don't care if this read succeeds... the primary read has already done so and all semantics belong to it.
-                    // so even if the parameters have changed, we'll let the next pass trigger the exception.
-                    // and if we don't read anything here, no harm done; the caller will probably try again.
-                    tailRead = _streamDecoder.Read(_tailBuffer, 0, _tailBuffer.Length);
-                }
-                catch
-                {
-                    tailRead = 0;
-
-                    // we should probably think about how to handle this exception intelligently...
-                    // we can't reasonbly throw or bubble it here, because the primary read succeeded.
-                    // but we probably shouldn't just swallow it, either...
-                    // save it off for next pass, but only throw it if the primary read also throws?
-                    // not sure...
-                }
-
-                if (tailRead > 0)
-                {
-                    // if we get here, we have a full sample (all channels)
-
-                    offset += readCount;
-                    while (++readCount <= count)
-                    {
-                        buffer[offset++] = _tailBuffer[_tailIdx++];
-                    }
-                }
-                else
-                {
-                    _tailBuffer = null;
-                }
-            }
-
-            return readCount;
-        }
-
-        /// <summary>
-        /// Reads samples into the specified buffer.
-        /// </summary>
-        /// <param name="buffer">The buffer to read the samples into.</param>
-        /// <param name="offset">The index to start reading samples into the buffer.</param>
-        /// <param name="count">The number of samples that should be read into the buffer.  Must be a multiple of <see cref="Channels"/>.</param>
-        /// <returns>The number of samples read into the buffer.  If <paramref name="isParameterChange"/> is <see langword="true"/>, this will be <c>0</c>.</returns>
         /// <exception cref="ArgumentOutOfRangeException">Thrown when the buffer is too small or <paramref name="offset"/> is less than zero.</exception>
         /// <remarks>The data populated into <paramref name="buffer"/> is interleaved by channel in normal PCM fashion: Left, Right, Left, Right, Left, Right</remarks>
-        public int Read(float[] buffer, int offset, int count)
+        public int ReadSamples(float[] buffer, int offset, int count)
         {
-            _tailBuffer = null;
-            return _streamDecoder.Read(buffer, offset, count);
+            // don't allow non-aligned reads (always on a full sample boundary!)
+            count -= count % _streamDecoder.Channels;
+            if (count > 0)
+            {
+                return _streamDecoder.Read(buffer, offset, count);
+            }
+            return 0;
         }
 
         /// <summary>
-        /// Acknowledges a parameter change as signalled by <see cref="Read(float[], int, int)"/>.
+        /// Acknowledges a parameter change as signalled by <see cref="ReadSamples(float[], int, int)"/>.
         /// </summary>
         [Obsolete("No longer needed.", true)]
         public void ClearParameterChange() => throw new NotSupportedException();
