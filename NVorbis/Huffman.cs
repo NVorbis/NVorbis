@@ -6,8 +6,6 @@ namespace NVorbis
 {
     class Huffman : IHuffman, IComparer<HuffmanListNode>
     {
-        public static int ExtraOverflowEntries;
-
         const int MAX_TABLE_BITS = 10;
 
         public int TableBits { get; private set; }
@@ -75,11 +73,6 @@ namespace NVorbis
             TableBits = tableBits;
             PrefixTree = prefixList;
             OverflowList = overflowList;
-
-            if (overflowList != null)
-            {
-                ExtraOverflowEntries += overflowList.Capacity - overflowList.Count;
-            }
         }
 
         int IComparer<HuffmanListNode>.Compare(HuffmanListNode x, HuffmanListNode y)
