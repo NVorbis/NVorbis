@@ -12,7 +12,16 @@
     <Version>0.10.0-alpha</Version>
     <PackageLicenseUrl></PackageLicenseUrl>
     <PackageProjectUrl>https://github.com/ioctlLR/NVorbis</PackageProjectUrl>
-    <PackageReleaseNotes>- Rearchitected, nearly a re-write.  Vastly better memory usage, similar performance.</PackageReleaseNotes>
+    <PackageReleaseNotes>Major refactoring and partial re-write.  Memory usage is greatly reduced.
+
+- Polished LightContainerReader from v0.9.0 and made it default for seekable Stream instances.
+- Implemented streaming Ogg reader for non-seekable Stream instances (the container reader will use it automatically).
+- Rewrote stream decoder to remove all extraneous buffering and to simplify it greatly.
+- Moved decoding steps into the appropriate sub-components (primarily the mapping logic).
+- Abstracted all components for future unit testing (still some work remaining).
+- Reorganized files to remove redundant prefixes, split out types
+- Removed silly bit tricks for clipping.  Benchmarking showed possibly performance penalties from it.
+</PackageReleaseNotes>
     <PackageTags>ogg vorbis xiph audio c# sound .NET</PackageTags>
     <NeutralLanguage>en</NeutralLanguage>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
