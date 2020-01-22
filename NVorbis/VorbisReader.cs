@@ -7,15 +7,15 @@ using System.Linq;
 namespace NVorbis
 {
     /// <summary>
-    /// Implements an easy to use wrapper around <see cref="IContainerReader"/> and <see cref="IStreamDecoder"/>.
+    /// Implements an easy to use wrapper around <see cref="Contracts.IContainerReader"/> and <see cref="IStreamDecoder"/>.
     /// </summary>
     public sealed class VorbisReader : IVorbisReader
     {
-        internal static Func<Stream, bool, IContainerReader> CreateContainerReader { get; set; } = (s, cod) => new Ogg.ContainerReader(s, cod);
-        internal static Func<IPacketProvider, IStreamDecoder> CreateStreamDecoder { get; set; } = pp => new StreamDecoder(pp, new Factory());
+        internal static Func<Stream, bool, Contracts.IContainerReader> CreateContainerReader { get; set; } = (s, cod) => new Ogg.ContainerReader(s, cod);
+        internal static Func<Contracts.IPacketProvider, IStreamDecoder> CreateStreamDecoder { get; set; } = pp => new StreamDecoder(pp, new Factory());
 
         private readonly List<IStreamDecoder> _decoders;
-        private readonly IContainerReader _containerReader;
+        private readonly Contracts.IContainerReader _containerReader;
         private readonly bool _closeOnDispose;
 
         private IStreamDecoder _streamDecoder;
@@ -64,14 +64,14 @@ namespace NVorbis
         }
 
 #pragma warning disable CS1591 // Missing XML comment for publicly visible type or member
-        [Obsolete("Use \"new StreamDecoder(IPacketProvider)\" and the container's NewStreamCallback or Streams property instead.", true)]
-        public VorbisReader(IContainerReader containerReader) => throw new NotSupportedException();
+        [Obsolete("Use \"new StreamDecoder(Contracts.IPacketProvider)\" and the container's NewStreamCallback or Streams property instead.", true)]
+        public VorbisReader(Contracts.IContainerReader containerReader) => throw new NotSupportedException();
 
-        [Obsolete("Use \"new StreamDecoder(IPacketProvider)\" instead.", true)]
-        public VorbisReader(IPacketProvider packetProvider) => throw new NotSupportedException();
+        [Obsolete("Use \"new StreamDecoder(Contracts.IPacketProvider)\" instead.", true)]
+        public VorbisReader(Contracts.IPacketProvider packetProvider) => throw new NotSupportedException();
 #pragma warning restore CS1591 // Missing XML comment for publicly visible type or member
 
-        private bool ProcessNewStream(IPacketProvider packetProvider)
+        private bool ProcessNewStream(Contracts.IPacketProvider packetProvider)
         {
             var decoder = CreateStreamDecoder(packetProvider);
             decoder.ClipSamples = true;

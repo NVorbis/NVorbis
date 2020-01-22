@@ -1,5 +1,4 @@
-﻿using NVorbis.Contracts;
-using NVorbis.Contracts.Ogg;
+﻿using NVorbis.Contracts.Ogg;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -11,9 +10,9 @@ namespace NVorbis.Ogg
         internal static Func<IPageReader, int, IForwardOnlyPacketProvider> CreatePacketProvider { get; set; } = (pr, ss) => new ForwardOnlyPacketProvider(pr, ss);
 
         private readonly Dictionary<int, IForwardOnlyPacketProvider> _packetProviders = new Dictionary<int, IForwardOnlyPacketProvider>();
-        private readonly Func<IPacketProvider, bool> _newStreamCallback;
+        private readonly Func<Contracts.IPacketProvider, bool> _newStreamCallback;
 
-        public ForwardOnlyPageReader(Stream stream, bool closeOnDispose, Func<IPacketProvider, bool> newStreamCallback)
+        public ForwardOnlyPageReader(Stream stream, bool closeOnDispose, Func<Contracts.IPacketProvider, bool> newStreamCallback)
             : base(stream, closeOnDispose)
         {
             _newStreamCallback = newStreamCallback;

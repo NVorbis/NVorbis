@@ -1,5 +1,4 @@
-﻿using NVorbis.Contracts;
-using NVorbis.Contracts.Ogg;
+﻿using NVorbis.Contracts.Ogg;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -12,14 +11,14 @@ namespace NVorbis.Ogg
         internal static Func<IPageData, int, IStreamPageReader> CreateStreamPageReader { get; set; } = (pr, ss) => new StreamPageReader(pr, ss);
 
         private readonly Dictionary<int, IStreamPageReader> _streamReaders = new Dictionary<int, IStreamPageReader>();
-        private readonly Func<IPacketProvider, bool> _newStreamCallback;
+        private readonly Func<Contracts.IPacketProvider, bool> _newStreamCallback;
         private readonly object _readLock = new object();
 
         private long _nextPageOffset;
         private ushort _pageSize;
         Memory<byte>[] _packets;
 
-        public PageReader(Stream stream, bool closeOnDispose, Func<IPacketProvider, bool> newStreamCallback)
+        public PageReader(Stream stream, bool closeOnDispose, Func<Contracts.IPacketProvider, bool> newStreamCallback)
             : base(stream, closeOnDispose)
         {
             _newStreamCallback = newStreamCallback;

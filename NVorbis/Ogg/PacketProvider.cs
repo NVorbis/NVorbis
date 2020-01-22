@@ -5,7 +5,7 @@ using System.Collections.Generic;
 
 namespace NVorbis.Ogg
 {
-    class PacketProvider : IPacketProvider, IPacketReader
+    class PacketProvider : Contracts.IPacketProvider, IPacketReader
     {
         private IStreamPageReader _reader;
 

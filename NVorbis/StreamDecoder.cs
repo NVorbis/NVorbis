@@ -12,7 +12,7 @@ namespace NVorbis
     {
         static internal Func<IFactory> CreateFactory { get; set; } = () => new Factory();
 
-        private IPacketProvider _packetProvider;
+        private Contracts.IPacketProvider _packetProvider;
         private IFactory _factory;
         private StreamStats _stats;
 
@@ -41,13 +41,13 @@ namespace NVorbis
         /// <summary>
         /// Creates a new instance of <see cref="StreamDecoder"/>.
         /// </summary>
-        /// <param name="packetProvider">A <see cref="IPacketProvider"/> instance for the decoder to read from.</param>
-        public StreamDecoder(IPacketProvider packetProvider)
+        /// <param name="packetProvider">A <see cref="Contracts.IPacketProvider"/> instance for the decoder to read from.</param>
+        public StreamDecoder(Contracts.IPacketProvider packetProvider)
             : this(packetProvider, new Factory())
         {
         }
 
-        internal StreamDecoder(IPacketProvider packetProvider, IFactory factory)
+        internal StreamDecoder(Contracts.IPacketProvider packetProvider, IFactory factory)
         {
             _packetProvider = packetProvider ?? throw new ArgumentNullException(nameof(packetProvider));
             _factory = factory ?? throw new ArgumentNullException(nameof(factory));
@@ -554,7 +554,7 @@ namespace NVorbis
         public void SeekTo(long samplePosition)
         {
             if (_packetProvider == null) throw new ObjectDisposedException(nameof(StreamDecoder));
-            if (!_packetProvider.CanSeek) throw new InvalidOperationException("Seek is not supported by the IPacketProvider instance.");
+            if (!_packetProvider.CanSeek) throw new InvalidOperationException("Seek is not supported by the Contracts.IPacketProvider instance.");
 
             if (samplePosition < 0) throw new ArgumentOutOfRangeException(nameof(samplePosition));
 
