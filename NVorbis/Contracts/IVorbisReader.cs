@@ -4,6 +4,9 @@ using System.Text;
 
 namespace NVorbis.Contracts
 {
+    /// <summary>
+    /// Describes the interface for <see cref="VorbisReader"/>.
+    /// </summary>
     public interface IVorbisReader : IDisposable
     {
         /// <summary>
@@ -112,7 +115,7 @@ namespace NVorbis.Contracts
         /// </summary>
         /// <param name="index">The logical stream index to switch to</param>
         /// <returns><see langword="true"/> if the properties of the logical stream differ from those of the one previously being decoded. Otherwise, <see langword="false"/>.</returns>
-        bool SwitchStreams(int value);
+        bool SwitchStreams(int index);
 
         /// <summary>
         /// Reads samples into the specified buffer.
