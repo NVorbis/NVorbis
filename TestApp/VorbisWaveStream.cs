@@ -21,7 +21,7 @@ namespace TestApp
 
             UpdateWaveFormat();
         }
-        
+
         public VorbisWaveStream(System.IO.Stream sourceStream)
         {
             _reader = CreateStreamReader(sourceStream);
@@ -56,36 +56,30 @@ namespace TestApp
             set => _reader.SamplePosition = value / _waveFormat.BlockAlign;
         }
 
+        // This buffer can be static because it can only be used by 1 instance per thread
+        [ThreadStatic]
+        static float[] _conversionBuffer = null;
+
         public override int Read(byte[] buffer, int offset, int count)
         {
-            // adjust count so it is in samples instead of bytes
-            count /= sizeof(float) * _reader.Channels;
+            // adjust count so it is in floats instead of bytes
+            count /= sizeof(float);
 
-            // get an aligned offset into the buffer
-            var sampleOffset = offset / (sizeof(float) * _reader.Channels);
-            if (sampleOffset < offset * (sizeof(float) * _reader.Channels))
+            // make sure we don't have an odd count
+            count -= count % _reader.Channels;
+
+            // get the buffer, creating a new one if none exists or the existing one is too small
+            var cb = _conversionBuffer ?? (_conversionBuffer = new float[count]);
+            if (cb.Length < count)
             {
-                // move to the next viable position and remove a sample from our count
-                ++sampleOffset;
-                if (--count <= 0)
-                {
-                    // of course, if we then have no samples, we can't read anything... just return
-                    return 0;
-                }
+                cb = (_conversionBuffer = new float[count]);
             }
 
-            // actually do the read
-            var cnt = sizeof(float) * Read(new NAudio.Wave.WaveBuffer(buffer), sampleOffset, count);
+            // let Read(float[], int, int) do the actual reading; adjust count back to bytes
+            int cnt = Read(cb, 0, count) * sizeof(float);
 
-            // move the data to the requested offset
-            if (cnt > 0)
-            {
-                sampleOffset *= (sizeof(float) * _reader.Channels);
-                if (sampleOffset > offset)
-                {
-                    Buffer.BlockCopy(buffer, sampleOffset, buffer, offset, cnt);
-                }
-            }
+            // move the data back to the request buffer
+            Buffer.BlockCopy(cb, 0, buffer, offset, cnt);
 
             // done!
             return cnt;
