@@ -13,6 +13,7 @@ namespace NVorbis.Ogg
 
         private int _lastSeqNbr;
         private int? _firstDataPageIndex;
+        private long _maxGranulePos;
 
         private int _lastPageIndex = -1;
         private long _lastPageGranulePos;
@@ -46,10 +47,16 @@ namespace NVorbis.Ogg
             if (!HasAllPages)
             {
                 // verify the new page's flags
+                if (_maxGranulePos > _reader.GranulePosition)
+                {
+                    // uuuuh, what?!
+                    throw new System.IO.InvalidDataException("Granule Position regressed?!");
+                }
+                _maxGranulePos = _reader.GranulePosition;
+
                 if ((_reader.PageFlags & PageFlags.EndOfStream) != 0)
                 {
                     HasAllPages = true;
-                    MaxGranulePosition = _reader.GranulePosition;
                 }
 
                 if (_firstDataPageIndex == null && _reader.GranulePosition > 0)
@@ -349,6 +356,6 @@ namespace NVorbis.Ogg
 
         public bool HasAllPages { get; private set; }
 
-        public long? MaxGranulePosition { get; private set; }
+        public long? MaxGranulePosition => HasAllPages ? (long?)_maxGranulePos : null;
     }
 }

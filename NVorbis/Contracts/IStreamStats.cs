@@ -23,6 +23,11 @@ namespace NVorbis.Contracts
         int InstantBitRate { get; }
 
         /// <summary>
+        /// Gets the number of framing bits used by the container.
+        /// </summary>
+        long ContainerBits { get; }
+
+        /// <summary>
         /// Gets the number of bits read that do not contribute to the output audio.  Does not include framing bits from the container.
         /// </summary>
         long OverheadBits { get; }
