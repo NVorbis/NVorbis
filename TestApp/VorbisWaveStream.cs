@@ -137,7 +137,7 @@ namespace TestApp
 
         public bool FindNewStream() => _reader.FindNextStream();
 
-        public IStreamStats Stats => _reader.Stats;
+        public IStreamStats Stats => _reader.StreamStats;
         public ITagData Tags => _reader.Tags;
 
         /// <summary>

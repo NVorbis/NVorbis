@@ -5,7 +5,7 @@ namespace NVorbis
     /// <summary>
     /// Old interface, current version moved to Contracts.IPacketProvider
     /// </summary>
-    [Obsolete("Moved to NVorbis.Contracts.IPacketProvider")]
+    [Obsolete("Moved to NVorbis.Contracts.IPacketProvider", true)]
     public interface IPacketProvider : Contracts.IPacketProvider
     {
         /// <summary>

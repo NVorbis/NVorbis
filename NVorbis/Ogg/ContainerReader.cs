@@ -6,7 +6,7 @@ using System.IO;
 namespace NVorbis.Ogg
 {
     /// <summary>
-    /// Implements <see cref="IContainerReader"/> for Ogg format files for low memory cost.
+    /// Implements <see cref="Contracts.IContainerReader"/> for Ogg format files for low memory cost.
     /// </summary>
     public sealed class ContainerReader : Contracts.IContainerReader
     {

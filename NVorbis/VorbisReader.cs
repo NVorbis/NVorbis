@@ -265,7 +265,13 @@ namespace NVorbis
         /// <summary>
         /// Gets the <see cref="IStreamStats"/> instance for this stream.
         /// </summary>
-        public IStreamStats Stats => _streamDecoder.Stats;
+        public IStreamStats StreamStats => _streamDecoder.Stats;
+
+        /// <summary>
+        /// Gtes stats from each decoder stream available.
+        /// </summary>
+        [Obsolete("Use Streams[*].Stats instead.", true)]
+        public IVorbisStreamStatus[] Stats => throw new NotSupportedException();
 
         /// <summary>
         /// Searches for the next stream in a concatenated file.  Will raise <see cref="NewStream"/> for the found stream, and will add it to <see cref="Streams"/> if not marked as ignored.

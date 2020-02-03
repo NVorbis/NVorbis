@@ -1,9 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Text;
 
 namespace NVorbis.Contracts
 {
+    /// <summary>
+    /// Describes the <see cref="VorbisReader"/> contract.
+    /// </summary>
     public interface IVorbisReader : IDisposable
     {
         /// <summary>
@@ -94,7 +96,7 @@ namespace NVorbis.Contracts
         /// <summary>
         /// Gets the <see cref="IStreamStats"/> instance for this stream.
         /// </summary>
-        IStreamStats Stats { get; }
+        IStreamStats StreamStats { get; }
 
         /// <summary>
         /// Gets the tag data from the stream's header.
@@ -112,7 +114,7 @@ namespace NVorbis.Contracts
         /// </summary>
         /// <param name="index">The logical stream index to switch to</param>
         /// <returns><see langword="true"/> if the properties of the logical stream differ from those of the one previously being decoded. Otherwise, <see langword="false"/>.</returns>
-        bool SwitchStreams(int value);
+        bool SwitchStreams(int index);
 
         /// <summary>
         /// Reads samples into the specified buffer.

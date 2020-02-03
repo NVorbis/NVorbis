@@ -5,7 +5,7 @@ namespace NVorbis
     /// <summary>
     ///  Old interface, current version moved to Contracts.IContainerReader
     /// </summary>
-    [Obsolete("Moved to NVorbis.Contracts.IContainerReader")]
+    [Obsolete("Moved to NVorbis.Contracts.IContainerReader", true)]
     public interface IContainerReader : Contracts.IContainerReader
     {
         /// <summary>

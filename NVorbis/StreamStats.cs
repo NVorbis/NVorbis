@@ -1,5 +1,4 @@
 ﻿using NVorbis.Contracts;
-using System;
 
 namespace NVorbis
 {
@@ -65,27 +64,6 @@ namespace NVorbis
         public long WasteBits => _wasteBits;
 
         public int PacketCount => _packetCount;
-
-        #region Deprecated
-
-        [Obsolete("No longer supported.", true)]
-        public TimeSpan PageLatency => throw new NotSupportedException();
-
-        [Obsolete("No longer suported.", true)]
-        public TimeSpan PacketLatency => throw new NotSupportedException();
-
-        [Obsolete("No longer suported.", true)]
-        public TimeSpan SecondLatency => throw new NotSupportedException();
-
-        [Obsolete("No longer suported.", true)]
-        public int PagesRead => throw new NotSupportedException();
-
-        [Obsolete("No longer suported.", true)]
-        public int TotalPages => throw new NotSupportedException();
-
-        [Obsolete("Moved to IStreamDecoder and VorbisReader.", true)]
-        public bool Clipped => throw new NotSupportedException();
-        #endregion
 
         public void ResetStats()
         {
