@@ -15,7 +15,7 @@
     <PackageReleaseNotes>Major refactoring and partial re-write.  Memory usage is greatly reduced.
 
 - Beta: Added IVorbisStreamStats backwards compatibility type.
-- Beta: Renamed IVorbisReader.Stats to .StreamStats</PackageReleaseNotes>
+- Beta: Renamed IVorbisReader.Stats to .StreamStats
 - Polished LightContainerReader from v0.9.0 and made it default for seekable Stream instances.
 - Implemented streaming Ogg reader for non-seekable Stream instances (the container reader will use it automatically).
 - Rewrote stream decoder to remove all extraneous buffering and to simplify it greatly.
