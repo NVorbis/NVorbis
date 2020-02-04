@@ -191,8 +191,11 @@ namespace NVorbis.Ogg
 
         private Packet CreatePacket(ref int pageIndex, ref int packetIndex, bool advance, long granulePos, bool isResync, bool isContinued, int packetCount, int pageOverhead)
         {
+            // save off the packet data for the initial packet
+            var firstPacketData = _reader.GetPagePackets(pageIndex)[packetIndex];
+
             // create the packet list and add the item to it
-            var pktList = new List<Memory<byte>>(2) { _reader.GetPagePackets(pageIndex)[packetIndex] };
+            var pktList = new List<int>(2) { (pageIndex << 8) | packetIndex };
 
             // make sure we handle continuations
             bool isLastPacket;
@@ -233,7 +236,7 @@ namespace NVorbis.Ogg
                     }
 
                     // add the packet to the list
-                    pktList.Add(_reader.GetPagePackets(contPageIdx)[0]);
+                    pktList.Add(contPageIdx << 8);
                 }
 
                 // we're now the first packet in the final page, so we'll act like it...
@@ -249,7 +252,7 @@ namespace NVorbis.Ogg
             }
 
             // create the packet instance and populate it with the appropriate initial data
-            var packet = new Packet(pktList, this)
+            var packet = new Packet(pktList, this, firstPacketData)
             {
                 IsResync = isResync,
             };
@@ -300,6 +303,19 @@ namespace NVorbis.Ogg
 
             // done!
             return packet;
+        }
+
+        Memory<byte> IPacketReader.GetPacketData(int pagePacketIndex)
+        {
+            var pageIndex = (pagePacketIndex >> 8) & 0xFFFFFF;
+            var packetIndex = pagePacketIndex & 0xFF;
+
+            var packets = _reader.GetPagePackets(pageIndex);
+            if (packetIndex < packets.Length)
+            {
+                return packets[packetIndex];
+            }
+            return Memory<byte>.Empty;
         }
 
         void IPacketReader.InvalidatePacketCache(IPacket packet)
