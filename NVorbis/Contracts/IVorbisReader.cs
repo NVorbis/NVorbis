@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace NVorbis.Contracts
 {
     /// <summary>
-    /// Describes the <see cref="VorbisReader"/> contract.
+    /// Describes the interface for <see cref="VorbisReader"/>.
     /// </summary>
     public interface IVorbisReader : IDisposable
     {
