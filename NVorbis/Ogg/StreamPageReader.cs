@@ -47,12 +47,21 @@ namespace NVorbis.Ogg
             if (!HasAllPages)
             {
                 // verify the new page's flags
-                if (_maxGranulePos > _reader.GranulePosition)
+
+                // if the page's granule position is -1 that mean's it doesn't have any samples
+                if (_reader.GranulePosition != -1)
                 {
-                    // uuuuh, what?!
-                    throw new System.IO.InvalidDataException("Granule Position regressed?!");
+                    if (_maxGranulePos > _reader.GranulePosition)
+                    {
+                        // uuuuh, what?!
+                        throw new System.IO.InvalidDataException("Granule Position regressed?!");
+                    }
+                    _maxGranulePos = _reader.GranulePosition;
                 }
-                _maxGranulePos = _reader.GranulePosition;
+                else if ((_reader.PageFlags & PageFlags.ContinuesPacket) != PageFlags.ContinuesPacket || !_reader.IsContinued || _reader.PacketCount > 1)
+                {
+                    throw new System.IO.InvalidDataException("Granule Position was -1 but page has completed packets.");
+                }
 
                 if ((_reader.PageFlags & PageFlags.EndOfStream) != 0)
                 {
