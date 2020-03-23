@@ -4,6 +4,13 @@ using System.Collections.Generic;
 namespace NVorbis.Contracts
 {
     /// <summary>
+    /// Encapsulates a method that initializes a stream reader, optionally ignoring the stream if desired.
+    /// </summary>
+    /// <param name="packetProvider">The <see cref="IPacketProvider"/> instance for the new stream.</param>
+    /// <returns><see langword="true"/> to process the stream, otherwise <see langword="false"/>.</returns>
+    public delegate bool NewStreamHandler(IPacketProvider packetProvider);
+
+    /// <summary>
     /// Provides an interface for a Vorbis logical stream container.
     /// </summary>
     public interface IContainerReader : IDisposable
@@ -11,7 +18,7 @@ namespace NVorbis.Contracts
         /// <summary>
         /// Gets or sets the callback to invoke when a new stream is encountered in the container.
         /// </summary>
-        Func<IPacketProvider, bool> NewStreamCallback { get; set; }
+        NewStreamHandler NewStreamCallback { get; set; }
 
         /// <summary>
         /// Gets a read-only list of the logical streams discovered in this container.

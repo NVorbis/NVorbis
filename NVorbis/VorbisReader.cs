@@ -305,21 +305,23 @@ namespace NVorbis
         }
 
         /// <summary>
-        /// Seeks the stream to the specified time.
+        /// Seeks the stream by the specified duration.
         /// </summary>
-        /// <param name="timePosition">The time to seek to.</param>
-        public void SeekTo(TimeSpan timePosition)
+        /// <param name="timePosition">The relative time to seek to.</param>
+        /// <param name="seekOrigin">The reference point used to obtain the new position.</param>
+        public void SeekTo(TimeSpan timePosition, SeekOrigin seekOrigin = SeekOrigin.Begin)
         {
-            _streamDecoder.SeekTo(timePosition);
+            _streamDecoder.SeekTo(timePosition, seekOrigin);
         }
 
         /// <summary>
-        /// Seeks the stream to the specified sample.
+        /// Seeks the stream by the specified sample count.
         /// </summary>
-        /// <param name="samplePosition">The sample position to seek to.</param>
-        public void SeekTo(long samplePosition)
+        /// <param name="samplePosition">The relative sample position to seek to.</param>
+        /// <param name="seekOrigin">The reference point used to obtain the new position.</param>
+        public void SeekTo(long samplePosition, SeekOrigin seekOrigin = SeekOrigin.Begin)
         {
-            _streamDecoder.SeekTo(samplePosition);
+            _streamDecoder.SeekTo(samplePosition, seekOrigin);
         }
 
         /// <summary>

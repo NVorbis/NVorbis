@@ -1,4 +1,5 @@
-﻿using NVorbis.Contracts.Ogg;
+﻿using NVorbis.Contracts;
+using NVorbis.Contracts.Ogg;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -20,7 +21,7 @@ namespace NVorbis.Ogg
         /// <summary>
         /// Gets or sets the callback to invoke when a new stream is encountered in the container.
         /// </summary>
-        public Func<Contracts.IPacketProvider, bool> NewStreamCallback { get; set; }
+        public NewStreamHandler NewStreamCallback { get; set; }
 
         /// <summary>
         /// Gets a list of streams available from this container.

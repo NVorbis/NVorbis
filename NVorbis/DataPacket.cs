@@ -108,7 +108,7 @@ namespace NVorbis
         /// </summary>
         abstract protected int TotalBits { get; }
 
-        bool GetFlag(PacketFlags flag) => (_packetFlags & flag) == flag;
+        bool GetFlag(PacketFlags flag) => _packetFlags.HasFlag(flag);
 
         void SetFlag(PacketFlags flag, bool value)
         {

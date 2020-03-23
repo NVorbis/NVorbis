@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 
 namespace NVorbis.Contracts
 {
@@ -128,15 +129,17 @@ namespace NVorbis.Contracts
         int ReadSamples(float[] buffer, int offset, int count);
 
         /// <summary>
-        /// Seeks the stream to the specified time.
+        /// Seeks the stream by the specified duration.
         /// </summary>
-        /// <param name="timePosition">The time to seek to.</param>
-        void SeekTo(TimeSpan timePosition);
+        /// <param name="timePosition">The relative time to seek to.</param>
+        /// <param name="seekOrigin">The reference point used to obtain the new position.</param>
+        void SeekTo(TimeSpan timePosition, SeekOrigin seekOrigin = SeekOrigin.Begin);
 
         /// <summary>
-        /// Seeks the stream to the specified sample.
+        /// Seeks the stream by the specified sample count.
         /// </summary>
-        /// <param name="samplePosition">The sample position to seek to.</param>
-        void SeekTo(long samplePosition);
+        /// <param name="samplePosition">The relative sample position to seek to.</param>
+        /// <param name="seekOrigin">The reference point used to obtain the new position.</param>
+        void SeekTo(long samplePosition, SeekOrigin seekOrigin = SeekOrigin.Begin);
     }
 }

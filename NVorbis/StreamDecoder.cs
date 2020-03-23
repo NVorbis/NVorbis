@@ -539,22 +539,39 @@ namespace NVorbis
         #region Seeking
 
         /// <summary>
-        /// Seeks the stream to the specified time.
+        /// Seeks the stream by the specified duration.
         /// </summary>
-        /// <param name="timePosition">The time to seek to.</param>
-        public void SeekTo(TimeSpan timePosition)
+        /// <param name="timePosition">The relative time to seek to.</param>
+        /// <param name="seekOrigin">The reference point used to obtain the new position.</param>
+        public void SeekTo(TimeSpan timePosition, SeekOrigin seekOrigin = SeekOrigin.Begin)
         {
-            SeekTo((long)(SampleRate * timePosition.TotalSeconds));
+            SeekTo((long)(SampleRate * timePosition.TotalSeconds), seekOrigin);
         }
 
         /// <summary>
-        /// Seeks the stream to the specified sample.
+        /// Seeks the stream by the specified sample count.
         /// </summary>
-        /// <param name="samplePosition">The sample position to seek to.</param>
-        public void SeekTo(long samplePosition)
+        /// <param name="samplePosition">The relative sample position to seek to.</param>
+        /// <param name="seekOrigin">The reference point used to obtain the new position.</param>
+        public void SeekTo(long samplePosition, SeekOrigin seekOrigin = SeekOrigin.Begin)
         {
             if (_packetProvider == null) throw new ObjectDisposedException(nameof(StreamDecoder));
             if (!_packetProvider.CanSeek) throw new InvalidOperationException("Seek is not supported by the Contracts.IPacketProvider instance.");
+
+            switch (seekOrigin)
+            {
+                case SeekOrigin.Begin:
+                    // no-op
+                    break;
+                case SeekOrigin.Current:
+                    samplePosition = SamplePosition - samplePosition;
+                    break;
+                case SeekOrigin.End:
+                    samplePosition = TotalSamples - samplePosition;
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(seekOrigin));
+            }
 
             if (samplePosition < 0) throw new ArgumentOutOfRangeException(nameof(samplePosition));
 
