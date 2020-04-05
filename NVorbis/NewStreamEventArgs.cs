@@ -15,15 +15,13 @@ namespace NVorbis
         /// <param name="streamDecoder">An <see cref="IStreamDecoder"/> instance.</param>
         public NewStreamEventArgs(IStreamDecoder streamDecoder)
         {
-            if (streamDecoder == null) throw new ArgumentNullException("packetProvider");
-
-            StreamDecoder = streamDecoder;
+            StreamDecoder = streamDecoder ?? throw new ArgumentNullException(nameof(streamDecoder));
         }
 
         /// <summary>
         /// Gets new the <see cref="IStreamDecoder"/> instance.
         /// </summary>
-        public IStreamDecoder StreamDecoder { get; private set; }
+        public IStreamDecoder StreamDecoder { get; }
 
         /// <summary>
         /// Gets or sets whether to ignore the logical stream associated with the packet provider.

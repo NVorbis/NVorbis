@@ -95,7 +95,7 @@ namespace NVorbis
             {
                 foreach (var decoder in _decoders)
                 {
-                    (decoder as IDisposable)?.Dispose();
+                    decoder.Dispose();
                 }
                 _decoders.Clear();
             }

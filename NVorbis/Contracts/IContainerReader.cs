@@ -21,9 +21,9 @@ namespace NVorbis.Contracts
         NewStreamHandler NewStreamCallback { get; set; }
 
         /// <summary>
-        /// Gets a read-only list of the logical streams discovered in this container.
+        /// Returns a read-only list of the logical streams discovered in this container.
         /// </summary>
-        IReadOnlyList<IPacketProvider> Streams { get; }
+        IReadOnlyList<IPacketProvider> GetStreams();
 
         /// <summary>
         /// Gets whether the underlying stream can seek.

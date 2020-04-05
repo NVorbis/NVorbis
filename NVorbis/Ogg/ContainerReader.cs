@@ -24,27 +24,24 @@ namespace NVorbis.Ogg
         public NewStreamHandler NewStreamCallback { get; set; }
 
         /// <summary>
-        /// Gets a list of streams available from this container.
+        /// Returns a list of streams available from this container.
         /// </summary>
-        public IReadOnlyList<Contracts.IPacketProvider> Streams
+        public IReadOnlyList<Contracts.IPacketProvider> GetStreams()
         {
-            get
+            var list = new List<Contracts.IPacketProvider>(_packetProviders.Count);
+            for (var i = 0; i < _packetProviders.Count; i++)
             {
-                var list = new List<Contracts.IPacketProvider>(_packetProviders.Count);
-                for (var i = 0; i < _packetProviders.Count; i++)
+                if (_packetProviders[i].TryGetTarget(out var pp))
                 {
-                    if (_packetProviders[i].TryGetTarget(out var pp))
-                    {
-                        list.Add(pp);
-                    }
-                    else
-                    {
-                        list.RemoveAt(i);
-                        --i;
-                    }
+                    list.Add(pp);
                 }
-                return list;
+                else
+                {
+                    list.RemoveAt(i);
+                    --i;
+                }
             }
+            return list;
         }
 
         /// <summary>
