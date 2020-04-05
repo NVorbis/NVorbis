@@ -1,12 +1,13 @@
-﻿* RTP support
-	- Implement the same interface for RTP (non-seekable)
-	- Add a constructor for VorbisReader that accepts a NetworkStream
-		- Possibly another System.Net member?  Needs thought.
+﻿* Change seekable packet reading to return the packet instance prior to reading continuations
+	- This will reduce memory usage and will improve latency for continued packets
+
+* Support Skeleton metadata
+	- This would be processed entirely within ContainerReader and owned references
+
+* RTP support
+	- This would be a new IPacketProvider implementation
 
 * Matroska support
 	- Needs a base EBML reader
-
-* More optimization?  Currently running at > 105x realtime on a Core i7 M 620
-	- more profiling
 
 * Test with a lot more Vorbis streams

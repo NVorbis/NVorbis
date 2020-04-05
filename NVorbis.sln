@@ -7,23 +7,23 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NVorbis", "NVorbis\NVorbis.
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{2FC272F6-7727-4000-9110-A03F8936BA8E}"
 	ProjectSection(SolutionItems) = preProject
-		COPYING = COPYING
-		README = README
+		README.md = README.md
 		TODO = TODO
 	EndProjectSection
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestApp", "TestApp\TestApp.csproj", "{902AD24A-6F7C-4F21-9E88-2B9151AEB563}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TestApp", "TestApp\TestApp.csproj", "{902AD24A-6F7C-4F21-9E88-2B9151AEB563}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "OpenTKSupport", "OpenTKSupport\OpenTKSupport.csproj", "{7BABE72F-07E3-40E9-A65B-4EF98029AE6B}"
-EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".nuget", ".nuget", "{8C243E82-C78E-48F7-9CBA-DE9EA6E48192}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Github Actions", "Github Actions", "{DE0E6CFF-7F49-4D3C-BF73-197DE44D5870}"
 	ProjectSection(SolutionItems) = preProject
-		.nuget\NuGet.Config = .nuget\NuGet.Config
-		.nuget\NuGet.exe = .nuget\NuGet.exe
-		.nuget\NuGet.targets = .nuget\NuGet.targets
+		.github\workflows\dotnetcore.yml = .github\workflows\dotnetcore.yml
+		.github\workflows\publish-nuget.yml = .github\workflows\publish-nuget.yml
 	EndProjectSection
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UnitTests", "UnitTests\UnitTests.csproj", "{FA206688-26A4-46E0-B043-0496B2D886B4}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Git Settings", "Git Settings", "{BBA6B01A-BE40-48D9-B194-6C0E1A3526DB}"
+	ProjectSection(SolutionItems) = preProject
+		.gitattributes = .gitattributes
+		.gitignore = .gitignore
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -39,17 +39,13 @@ Global
 		{902AD24A-6F7C-4F21-9E88-2B9151AEB563}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{902AD24A-6F7C-4F21-9E88-2B9151AEB563}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{902AD24A-6F7C-4F21-9E88-2B9151AEB563}.Release|Any CPU.Build.0 = Release|Any CPU
-		{7BABE72F-07E3-40E9-A65B-4EF98029AE6B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{7BABE72F-07E3-40E9-A65B-4EF98029AE6B}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{7BABE72F-07E3-40E9-A65B-4EF98029AE6B}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{7BABE72F-07E3-40E9-A65B-4EF98029AE6B}.Release|Any CPU.Build.0 = Release|Any CPU
-		{FA206688-26A4-46E0-B043-0496B2D886B4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{FA206688-26A4-46E0-B043-0496B2D886B4}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{FA206688-26A4-46E0-B043-0496B2D886B4}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{FA206688-26A4-46E0-B043-0496B2D886B4}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{DE0E6CFF-7F49-4D3C-BF73-197DE44D5870} = {2FC272F6-7727-4000-9110-A03F8936BA8E}
+		{BBA6B01A-BE40-48D9-B194-6C0E1A3526DB} = {2FC272F6-7727-4000-9110-A03F8936BA8E}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {349C2B2D-C251-47C6-9012-B664B6CE98A1}

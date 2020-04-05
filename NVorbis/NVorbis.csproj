@@ -6,16 +6,22 @@
     <Description>A fully managed implementation of a Xiph.org Foundation Ogg Vorbis decoder.</Description>
     <Company>Andrew Ward</Company>
     <Copyright>Copyright © Andrew Ward 2020</Copyright>
-    <AssemblyVersion>0.9.1.0</AssemblyVersion>
-    <FileVersion>0.9.1.0</FileVersion>
+    <AssemblyVersion>0.10.0.2</AssemblyVersion>
+    <FileVersion>0.10.0.2</FileVersion>
     <Authors>Andrew Ward</Authors>
-    <Version>0.9.1.0</Version>
+    <Version>0.10.0</Version>
     <PackageLicenseUrl></PackageLicenseUrl>
     <PackageProjectUrl>https://github.com/NVorbis/NVorbis</PackageProjectUrl>
-    <PackageReleaseNotes>- Fix slow performance in default Ogg reader
-- Fix multichannel (&gt; stereo) support
-- Fix issue where packet would potentially truncate the last 1 - 7 bits
-- Added low memory usage Ogg reader (LightContainerReader)</PackageReleaseNotes>
+    <PackageReleaseNotes>Major refactoring and partial re-write.  Memory usage is greatly reduced.
+
+- Polished LightContainerReader from v0.9.1 and made it default for seekable Stream instances.
+- Implemented streaming Ogg reader for non-seekable Stream instances (the container reader will use it automatically).
+- Rewrote stream decoder to remove all extraneous buffering and to simplify it greatly.
+- Moved decoding steps into the appropriate sub-components (primarily the mapping logic).
+- Abstracted all components for future unit testing (still some work remaining).
+- Reorganized files to remove redundant prefixes, split out types
+- Removed silly bit tricks for clipping.  Benchmarking showed possibly performance penalties from it.
+</PackageReleaseNotes>
     <PackageTags>ogg vorbis xiph audio c# sound .NET</PackageTags>
     <NeutralLanguage>en</NeutralLanguage>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
@@ -24,6 +30,9 @@
     <RepositoryType>git</RepositoryType>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
   </PropertyGroup>
 
   <ItemGroup>
@@ -34,6 +43,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="System.Memory" Version="4.5.3" />
     <PackageReference Include="System.ValueTuple" Version="4.5.0" />
   </ItemGroup>
 
