@@ -20,7 +20,7 @@
 - Moved decoding steps into the appropriate sub-components (primarily the mapping logic).
 - Abstracted all components for future unit testing (still some work remaining).
 - Reorganized files to remove redundant prefixes, split out types
-- Removed silly bit tricks for clipping.  Benchmarking showed possibly performance penalties from it.
+- Removed silly bit tricks for clipping.  Benchmarking showed possible performance penalties from it.
 </PackageReleaseNotes>
     <PackageTags>ogg vorbis xiph audio c# sound .NET</PackageTags>
     <NeutralLanguage>en</NeutralLanguage>
