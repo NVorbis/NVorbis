@@ -211,7 +211,7 @@ namespace NVorbis.Ogg
             while ((dist = high - low) > 0)
             {
                 // try to find the right page by assumming they are all about the same size
-                var index = low + (int)(dist * ((granulePos - lowGranulePos) / (float)(highGranulePos - lowGranulePos)));
+                var index = low + (int)(dist * ((granulePos - lowGranulePos) / (double)(highGranulePos - lowGranulePos)));
 
                 // go get the actual position of the selected page
                 if (!GetPageRaw(index, out var idxGranulePos))
