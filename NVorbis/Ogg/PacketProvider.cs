@@ -191,6 +191,12 @@ namespace NVorbis.Ogg
 
         private Packet CreatePacket(ref int pageIndex, ref int packetIndex, bool advance, long granulePos, bool isResync, bool isContinued, int packetCount, int pageOverhead)
         {
+            // we encountered an empty page
+            if (packetCount == 0)
+            {
+                return null;
+            }
+
             // save off the packet data for the initial packet
             var firstPacketData = _reader.GetPagePackets(pageIndex)[packetIndex];
 
