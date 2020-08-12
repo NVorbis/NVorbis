@@ -38,13 +38,15 @@ namespace NVorbis.Ogg
 
             // try to add the stream to the list.
             pp = CreatePacketProvider(this, streamSerial);
-            pp.AddPage(pageBuf, isResync);
-            _packetProviders.Add(streamSerial, pp);
-            if (_newStreamCallback(pp))
+            if (pp.AddPage(pageBuf, isResync))
             {
-                return true;
+                _packetProviders.Add(streamSerial, pp);
+                if (_newStreamCallback(pp))
+                {
+                    return true;
+                }
+                _packetProviders.Remove(streamSerial);
             }
-            _packetProviders.Remove(streamSerial);
             return false;
         }
 
