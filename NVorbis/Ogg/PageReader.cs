@@ -125,6 +125,10 @@ namespace NVorbis.Ogg
         {
             PageOffset = StreamPosition - pageBuf.Length;
             ParsePageHeader(pageBuf, streamSerial, isResync);
+
+            // if the page doesn't have any packets, we can't use it
+            if (PacketCount == 0) return false;
+
             _packets = ReadPackets(PacketCount, new Span<byte>(pageBuf, 27, pageBuf[26]), new Memory<byte>(pageBuf, 27 + pageBuf[26], pageBuf.Length - 27 - pageBuf[26]));
 
             if (_streamReaders.TryGetValue(streamSerial, out var spr))

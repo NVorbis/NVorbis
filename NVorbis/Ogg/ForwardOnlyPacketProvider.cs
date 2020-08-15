@@ -53,6 +53,17 @@ namespace NVorbis.Ogg
                 _lastSeqNo = seqNo;
             }
 
+            // there must be at least one packet with data
+            var ttl = 0;
+            for (var i = 0; i < buf[26]; i++)
+            {
+                ttl += buf[27 + i];
+            }
+            if (ttl == 0)
+            {
+                return false;
+            }
+
             _pageQueue.Enqueue((buf, isResync));
             return true;
         }
