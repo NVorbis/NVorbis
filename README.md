@@ -28,7 +28,7 @@ using (var vorbis = new NVorbis.VorbisReader("path/to/file.ogg"))
 
     // go grab samples
     int cnt;
-    while ((cnt = vorbis.ReadSamples(readBuffer, 0, readBuffer.Length, out _)) > 0)
+    while ((cnt = vorbis.ReadSamples(readBuffer, 0, readBuffer.Length)) > 0)
     {
     	// do stuff with the buffer
     	// samples are interleaved (chan0, chan1, chan0, chan1, etc.)
