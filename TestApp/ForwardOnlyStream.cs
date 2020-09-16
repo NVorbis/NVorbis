@@ -5,9 +5,7 @@ namespace TestApp
 {
     class ForwardOnlyStream : Stream
     {
-#pragma warning disable CA2213 // Disposable fields should be disposed
-        private readonly Stream _steam;
-#pragma warning restore CA2213 // Disposable fields should be disposed
+        private Stream _steam;
 
         public override bool CanRead => _steam.CanRead;
 
@@ -47,6 +45,17 @@ namespace TestApp
         public override void Write(byte[] buffer, int offset, int count)
         {
             throw new NotSupportedException();
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _steam?.Dispose();
+                _steam = null;
+            }
+
+            base.Dispose(disposing);
         }
     }
 }

@@ -13,10 +13,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="NAudio" Version="1.9.0" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="..\NVorbis\NVorbis.csproj" />
   </ItemGroup>
 

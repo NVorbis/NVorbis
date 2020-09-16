@@ -1,6 +1,5 @@
-﻿using NAudio.Wave;
-using System;
-using System.Collections.Generic;
+﻿using NVorbis;
+using System.Diagnostics;
 using System.IO;
 
 namespace TestApp
@@ -12,19 +11,21 @@ namespace TestApp
 
         static void Main()
         {
+            var wavFileName = Path.Combine(Path.GetTempPath(), Path.ChangeExtension(Path.GetFileName(OGG_FILE), "wav"));
+
             using (var fs = File.OpenRead(OGG_FILE))
             //using (var fwdStream = new ForwardOnlyStream(fs))
-            using (var waveStream = new VorbisWaveStream(fs))
-            using (var waveOut = new WaveOutEvent())
+            using (var vorbRead = new VorbisReader(fs, false))
+            using (var waveWriter = new WaveWriter(wavFileName, vorbRead.SampleRate, vorbRead.Channels))
             {
-                var wait = new System.Threading.ManualResetEventSlim(false);
-                waveOut.PlaybackStopped += (s, e) => wait.Set();
-                
-                waveOut.Init(waveStream);
-                waveOut.Play();
-
-                wait.Wait();
+                var sampleBuf = new float[vorbRead.SampleRate * vorbRead.Channels * 4];
+                int cnt;
+                while ((cnt = vorbRead.ReadSamples(sampleBuf, 0, sampleBuf.Length)) > 0)
+                {
+                    waveWriter.WriteSamples(sampleBuf, 0, cnt);
+                }
             }
+            Process.Start(wavFileName);
         }
     }
 }
