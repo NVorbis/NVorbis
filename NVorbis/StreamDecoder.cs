@@ -249,7 +249,7 @@ namespace NVorbis
 
             // read the residues
             var residues = new IResidue[packet.ReadBits(6) + 1];
-            for (var i = 0; i < floors.Length; i++)
+            for (var i = 0; i < residues.Length; i++)
             {
                 residues[i] = _factory.CreateResidue(packet);
                 residues[i].Init(packet, _channels, books);
