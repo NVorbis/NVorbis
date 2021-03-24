@@ -345,6 +345,24 @@ namespace NVorbis
         }
 
         /// <summary>
+        /// Reads samples into the specified buffer.
+        /// </summary>
+        /// <param name="buffer">The buffer to read the samples into.</param>
+        /// <returns>The number of floats read into the buffer.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when the buffer is too small.</exception>
+        /// <remarks>The data populated into <paramref name="buffer"/> is interleaved by channel in normal PCM fashion: Left, Right, Left, Right, Left, Right</remarks>
+        public int ReadSamples(Span<float> buffer)
+        {
+            // don't allow non-aligned reads (always on a full sample boundary!)
+            int count = buffer.Length - buffer.Length % _streamDecoder.Channels;
+            if (!buffer.IsEmpty)
+            {
+                return _streamDecoder.Read(buffer, 0, count);
+            }
+            return 0;
+        }
+
+        /// <summary>
         /// Acknowledges a parameter change as signalled by <see cref="ReadSamples(float[], int, int)"/>.
         /// </summary>
         [Obsolete("No longer needed.", true)]
