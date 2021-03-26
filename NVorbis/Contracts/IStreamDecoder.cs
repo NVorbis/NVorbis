@@ -59,12 +59,12 @@ namespace NVorbis.Contracts
         long SamplePosition { get; set; }
 
         /// <summary>
-        /// Gets or sets whether to clip samples returned by <see cref="Read(float[], int, int)"/>.
+        /// Gets or sets whether to clip samples returned by <see cref="Read(Span&lt;float&gt;, int, int)"/>.
         /// </summary>
         bool ClipSamples { get; set; }
 
         /// <summary>
-        /// Gets whether <see cref="Read(float[], int, int)"/> has returned any clipped samples.
+        /// Gets whether <see cref="Read(Span&lt;float&gt;, int, int)"/> has returned any clipped samples.
         /// </summary>
         bool HasClipped { get; }
 
@@ -101,6 +101,6 @@ namespace NVorbis.Contracts
         /// <returns>The number of samples read into the buffer.</returns>
         /// <exception cref="ArgumentOutOfRangeException">Thrown when the buffer is too small or <paramref name="offset"/> is less than zero.</exception>
         /// <remarks>The data populated into <paramref name="buffer"/> is interleaved by channel in normal PCM fashion: Left, Right, Left, Right, Left, Right</remarks>
-        int Read(float[] buffer, int offset, int count);
+        int Read(Span<float> buffer, int offset, int count);
     }
 }

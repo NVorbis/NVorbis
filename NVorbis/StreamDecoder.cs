@@ -311,7 +311,7 @@ namespace NVorbis
         /// <returns>The number of samples read into the buffer.</returns>
         /// <exception cref="ArgumentOutOfRangeException">Thrown when the buffer is too small or <paramref name="offset"/> is less than zero.</exception>
         /// <remarks>The data populated into <paramref name="buffer"/> is interleaved by channel in normal PCM fashion: Left, Right, Left, Right, Left, Right</remarks>
-        public int Read(float[] buffer, int offset, int count)
+        public int Read(Span<float> buffer, int offset, int count)
         {
             if (buffer == null) throw new ArgumentNullException(nameof(buffer));
             if (offset < 0 || offset + count > buffer.Length) throw new ArgumentOutOfRangeException(nameof(offset));
@@ -382,7 +382,7 @@ namespace NVorbis
             return count;
         }
 
-        private int ClippingCopyBuffer(float[] target, int targetIndex, int count)
+        private int ClippingCopyBuffer(Span<float> target, int targetIndex, int count)
         {
             var idx = targetIndex;
             for (; count > 0; _prevPacketStart++, count--)
@@ -395,7 +395,7 @@ namespace NVorbis
             return idx - targetIndex;
         }
 
-        private int CopyBuffer(float[] target, int targetIndex, int count)
+        private int CopyBuffer(Span<float> target, int targetIndex, int count)
         {
             var idx = targetIndex;
             for (; count > 0; _prevPacketStart++, count--)
@@ -706,12 +706,12 @@ namespace NVorbis
         }
 
         /// <summary>
-        /// Gets or sets whether to clip samples returned by <see cref="Read(float[], int, int)"/>.
+        /// Gets or sets whether to clip samples returned by <see cref="Read(Span&lt;float&gt;, int, int)"/>.
         /// </summary>
         public bool ClipSamples { get; set; }
 
         /// <summary>
-        /// Gets whether <see cref="Read(float[], int, int)"/> has returned any clipped samples.
+        /// Gets whether <see cref="Read(Span&lt;float&gt;, int, int)"/> has returned any clipped samples.
         /// </summary>
         public bool HasClipped => _hasClipped;
 
