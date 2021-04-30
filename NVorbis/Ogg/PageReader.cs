@@ -34,9 +34,10 @@ namespace NVorbis.Ogg
             var size = 0;
             for (int i = 0, idx = 27; i < segCnt; i++, idx++)
             {
-                size += pageBuf[idx];
-                dataLen += size;
-                if (pageBuf[idx] < 255)
+                var seg = pageBuf[idx];
+                size += seg;
+                dataLen += seg;
+                if (seg < 255)
                 {
                     if (size > 0)
                     {
