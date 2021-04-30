@@ -51,16 +51,18 @@ namespace NVorbis.Ogg
                 // if the page's granule position is -1 that mean's it doesn't have any samples
                 if (_reader.GranulePosition != -1)
                 {
-                    if (_maxGranulePos > _reader.GranulePosition)
+                    if (_maxGranulePos > _reader.GranulePosition && _maxGranulePos > 0)
                     {
                         // uuuuh, what?!
                         throw new System.IO.InvalidDataException("Granule Position regressed?!");
                     }
                     _maxGranulePos = _reader.GranulePosition;
                 }
-                else if ((_reader.PageFlags & PageFlags.ContinuesPacket) != PageFlags.ContinuesPacket || !_reader.IsContinued || _reader.PacketCount > 1)
+                // granule position == -1, so this page doesn't complete any packets
+                // we don't really care if it's a continuation itself, only that it is continued and has a single packet
+                else if (!_reader.IsContinued || _reader.PacketCount != 1)
                 {
-                    throw new System.IO.InvalidDataException("Granule Position was -1 but page has completed packets.");
+                    throw new System.IO.InvalidDataException("Granule Position was -1 but page does not have exactly 1 continued packet.");
                 }
 
                 if ((_reader.PageFlags & PageFlags.EndOfStream) != 0)
@@ -105,7 +107,12 @@ namespace NVorbis.Ogg
             try
             {
                 _reader.ReadPageAt(pageOffset);
-                return _cachedPagePackets = _reader.GetPackets();
+                var packets = _reader.GetPackets();
+                if (pageIndex == _lastPageIndex)
+                {
+                    _cachedPagePackets = packets;
+                }
+                return packets;
             }
             finally
             {
@@ -279,9 +286,6 @@ namespace NVorbis.Ogg
                 return true;
             }
 
-            // on way or the other, this cached value is invalid at this point
-            _cachedPagePackets = null;
-
             _reader.Lock();
             try
             {
@@ -348,6 +352,7 @@ namespace NVorbis.Ogg
 
         private void ReadPageData(int pageIndex, out long granulePos, out bool isContinuation, out bool isContinued, out int packetCount, out int pageOverhead)
         {
+            _cachedPagePackets = null;
             _lastPageGranulePos = granulePos = _reader.GranulePosition;
             _lastPageIsContinuation = isContinuation = (_reader.PageFlags & PageFlags.ContinuesPacket) != 0;
             _lastPageIsContinued = isContinued = _reader.IsContinued;
