@@ -6,13 +6,19 @@
     <Description>A fully managed implementation of a Xiph.org Foundation Ogg Vorbis decoder.</Description>
     <Company>Andrew Ward</Company>
     <Copyright>Copyright © Andrew Ward 2020</Copyright>
-    <AssemblyVersion>0.10.0.3</AssemblyVersion>
-    <FileVersion>0.10.0.3</FileVersion>
+    <AssemblyVersion>0.10.3.0</AssemblyVersion>
+    <FileVersion>0.10.3.0</FileVersion>
     <Authors>Andrew Ward</Authors>
-    <Version>0.10.1</Version>
+    <Version>0.10.3</Version>
     <PackageLicenseUrl></PackageLicenseUrl>
     <PackageProjectUrl>https://github.com/NVorbis/NVorbis</PackageProjectUrl>
-    <PackageReleaseNotes>- Fix loss of precision issue in seek calculation.</PackageReleaseNotes>
+    <PackageReleaseNotes>- Add support for Span&lt;float&gt; in StreamDecoder.Read(...) and VorbisReader.ReadSamples(...)
+- Fix residue processing to use correct length
+- Fix page data size calculation
+- Fix packet data cache not having correct packet's data
+- Fix overly strict handling of pages with no completed packets
+- Fix first packet granule count calculation for seeking
+- Fix packet finding logic for seeking</PackageReleaseNotes>
     <PackageTags>ogg vorbis xiph audio c# sound .NET</PackageTags>
     <NeutralLanguage>en</NeutralLanguage>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
