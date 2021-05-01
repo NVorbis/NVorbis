@@ -371,5 +371,7 @@ namespace NVorbis.Ogg
         public bool HasAllPages { get; private set; }
 
         public long? MaxGranulePosition => HasAllPages ? (long?)_maxGranulePos : null;
+
+        public int FirstDataPageIndex => _firstDataPageIndex ?? (_firstDataPageIndex = FindPageForward(0, 0, 1)).Value;
     }
 }
