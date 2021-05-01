@@ -163,7 +163,9 @@ namespace NVorbis
             var len = (int)packet.ReadBits(32);
 
             if(len == 0)
+            {
                 return string.Empty;
+            }
             
             var buf = new byte[len];
             var cnt = packet.Read(buf, 0, len);
