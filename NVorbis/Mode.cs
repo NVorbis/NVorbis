@@ -148,7 +148,7 @@ namespace NVorbis
         public int GetPacketSampleCount(IPacket packet, bool isFirst)
         {
             GetPacketInfo(packet, out _, out _, out var leftOverlapHalfSize, out var packetStartIndex, out var packetValidLength, out _);
-            return packetValidLength - packetStartIndex + (isFirst ? leftOverlapHalfSize * 2 : 0);
+            return packetValidLength - packetStartIndex - (isFirst ? leftOverlapHalfSize * 2 : 0);
         }
 
         public int BlockSize => _blockFlag ? _block1Size : _block0Size;

@@ -21,5 +21,7 @@ namespace NVorbis.Contracts.Ogg
         bool HasAllPages { get; }
 
         long? MaxGranulePosition { get; }
+
+        int FirstDataPageIndex { get; }
     }
 }
