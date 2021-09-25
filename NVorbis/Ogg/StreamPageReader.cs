@@ -148,7 +148,7 @@ namespace NVorbis.Ogg
                     // but of course, it's possible (though highly unlikely) that the last read page ended on the granule we're looking for.
                     else
                     {
-                        pageIndex = lastPageIndex;
+                        pageIndex = lastPageIndex + 1;
                     }
                 }
             }
@@ -161,7 +161,7 @@ namespace NVorbis.Ogg
 
         private int FindPageForward(int pageIndex, long pageGranulePos, long granulePos)
         {
-            while (pageGranulePos < granulePos)
+            while (pageGranulePos <= granulePos)
             {
                 if (++pageIndex == _pageOffsets.Count)
                 {
@@ -242,7 +242,7 @@ namespace NVorbis.Ogg
                 else
                 {
                     // direct hit
-                    return index;
+                    return index + 1;
                 }
             }
             return low;
