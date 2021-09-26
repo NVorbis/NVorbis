@@ -48,10 +48,14 @@ namespace NVorbis.Ogg
             {
                 // verify the new page's flags
 
-                // if the page's granule position is -1 that mean's it doesn't have any samples
+                // if the page's granule position is 0 or less it doesn't have any sample
                 if (_reader.GranulePosition != -1)
                 {
-                    if (_maxGranulePos > _reader.GranulePosition && _maxGranulePos > 0)
+                    if (_firstDataPageIndex == null && _reader.GranulePosition > 0)
+                    {
+                        _firstDataPageIndex = _pageOffsets.Count;
+                    }
+                    else if (_maxGranulePos > _reader.GranulePosition)
                     {
                         // uuuuh, what?!
                         throw new System.IO.InvalidDataException("Granule Position regressed?!");
@@ -60,7 +64,7 @@ namespace NVorbis.Ogg
                 }
                 // granule position == -1, so this page doesn't complete any packets
                 // we don't really care if it's a continuation itself, only that it is continued and has a single packet
-                else if (!_reader.IsContinued || _reader.PacketCount != 1)
+                else if (_firstDataPageIndex.HasValue && (!_reader.IsContinued || _reader.PacketCount != 1))
                 {
                     throw new System.IO.InvalidDataException("Granule Position was -1 but page does not have exactly 1 continued packet.");
                 }
@@ -68,11 +72,6 @@ namespace NVorbis.Ogg
                 if ((_reader.PageFlags & PageFlags.EndOfStream) != 0)
                 {
                     HasAllPages = true;
-                }
-
-                if (_firstDataPageIndex == null && _reader.GranulePosition > 0)
-                {
-                    _firstDataPageIndex = _pageOffsets.Count;
                 }
 
                 if (_reader.IsResync.Value || (_lastSeqNbr != 0 && _lastSeqNbr + 1 != _reader.SequenceNumber))
@@ -126,7 +125,7 @@ namespace NVorbis.Ogg
             int pageIndex = -1;
             if (granulePos == 0)
             {
-                pageIndex = _firstDataPageIndex ?? FindPageForward(0, 0, 1);
+                pageIndex = FindFirstDataPage();
             }
             else
             {
@@ -137,8 +136,7 @@ namespace NVorbis.Ogg
                     // most likely, we can look at previous pages for the appropriate one...
                     if (granulePos < pageGP)
                     {
-                        //pageIndex = FindPageBisection(granulePos, _firstDataPageIndex ?? 0, lastPageIndex);
-                        pageIndex = FindPageBisection(granulePos, _firstDataPageIndex ?? 0, lastPageIndex, pageGP);
+                        pageIndex = FindPageBisection(granulePos, FindFirstDataPage(), lastPageIndex, pageGP);
                     }
                     // unless we're seeking forward, which is merely an excercise in reading forward...
                     else if (granulePos > pageGP)
@@ -157,6 +155,18 @@ namespace NVorbis.Ogg
                 throw new ArgumentOutOfRangeException(nameof(granulePos));
             }
             return pageIndex;
+        }
+
+        private int FindFirstDataPage()
+        {
+            while (!_firstDataPageIndex.HasValue)
+            {
+                if (!GetPageRaw(_pageOffsets.Count, out _))
+                {
+                    return -1;
+                }
+            }
+            return _firstDataPageIndex.Value;
         }
 
         private int FindPageForward(int pageIndex, long pageGranulePos, long granulePos)
@@ -372,6 +382,6 @@ namespace NVorbis.Ogg
 
         public long? MaxGranulePosition => HasAllPages ? (long?)_maxGranulePos : null;
 
-        public int FirstDataPageIndex => _firstDataPageIndex ?? (_firstDataPageIndex = FindPageForward(0, 0, 1)).Value;
+        public int FirstDataPageIndex => FindFirstDataPage();
     }
 }
