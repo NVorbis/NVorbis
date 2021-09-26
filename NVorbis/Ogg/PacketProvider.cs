@@ -77,6 +77,12 @@ namespace NVorbis.Ogg
                 throw new ArgumentOutOfRangeException(nameof(granulePos));
             }
 
+            if (pageIndex < _reader.FirstDataPageIndex)
+            {
+                pageIndex = _reader.FirstDataPageIndex;
+                packetIndex = 0;
+            }
+
             _lastPacket = null;
             _pageIndex = pageIndex;
             _packetIndex = packetIndex;
@@ -123,7 +129,7 @@ namespace NVorbis.Ogg
                     throw new System.IO.InvalidDataException("Could not find end of continuation!");
                 }
                 var granules = getPacketGranuleCount(packet, isFirst);
-                if (startGP + granules > granulePos)
+                if (startGP + granules >= granulePos)
                 {
                     granulePos = startGP;
                     return packetIndex;
