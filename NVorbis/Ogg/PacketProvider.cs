@@ -106,12 +106,6 @@ namespace NVorbis.Ogg
                 {
                     firstRealPacket = 1;
                 }
-
-                // regardless of anything else, if startGP is what we're looking for, return the first packet
-                if (startGP == granulePos)
-                {
-                    return firstRealPacket;
-                }
             }
             else
             {
@@ -130,62 +124,44 @@ namespace NVorbis.Ogg
                 packetCount--;
             }
 
-            // grab all the packet lengths
             var packetIndex = packetCount;
-            var packetLengths = new int[packetIndex];
-            var isFirst = pageIndex == _reader.FirstDataPageIndex;
-            var isLastInPage = true;
-            var pageGranules = 0;
-            while (--packetIndex >= firstRealPacket)
+            var isLastInPage = !isContinued;
+            var endGP = pageGranulePos;
+            while (endGP > granulePos && --packetIndex >= firstRealPacket)
             {
+                // it would be nice to pass false instead of isContinued, but (hypothetically) we don't know if getPacketGranuleCount(...) needs the whole thing...
+                // Vorbis doesn't, but someone might decide to try to use us for another purpose so we'll be good here.
                 var packet = CreatePacket(ref pageIndex, ref packetIndex, false, pageGranulePos, packetIndex == 0 && isResync, isContinued, packetCount, 0);
                 if (packet == null)
                 {
                     throw new System.IO.InvalidDataException("Could not find end of continuation!");
                 }
-                pageGranules += packetLengths[packetIndex] = getPacketGranuleCount(packet, isFirst && packetIndex == 0, isLastInPage);
+                endGP -= getPacketGranuleCount(packet, false, isLastInPage);
                 isLastInPage = false;
             }
-            if (pageGranulePos - startGP > pageGranules && granulePos <= pageGranulePos - pageGranules)
+
+            if (packetIndex < firstRealPacket)
             {
-                // we're in the bug zone (long->short over a page boundary)
-                // since we know this is the case, it's pretty straightforward to set everything up correctly
+                // either it's a continued packet OR we've hit the "long->short over page boundary" bug.
+                // in both cases we'll just return the last packet of the previous page.
                 var prevPageIndex = pageIndex;
                 var prevPacketIndex = -1;
                 if (!NormalizePacketIndex(ref prevPageIndex, ref prevPacketIndex))
                 {
                     throw new System.IO.InvalidDataException("Failed to normalize packet index?");
                 }
-                var packet = CreatePacket(ref prevPageIndex, ref prevPacketIndex, false, pageGranulePos - pageGranules, false, isContinuation, prevPacketIndex + 1, 0);
+                var packet = CreatePacket(ref prevPageIndex, ref prevPacketIndex, false, endGP, false, isContinuation, prevPacketIndex + 1, 0);
                 if (packet == null)
                 {
                     throw new System.IO.InvalidDataException("Could not load previous packet!");
                 }
-                granulePos = pageGranulePos - pageGranules - getPacketGranuleCount(packet, false, false);
+                granulePos = endGP - getPacketGranuleCount(packet, false, false);
                 return -1;
             }
 
-            var endGP = pageGranulePos;
-            packetIndex = packetCount;
-            while (--packetIndex >= firstRealPacket && (endGP -= packetLengths[packetIndex]) > granulePos)
-            {
-                // just loop
-            }
-
-            if (packetIndex >= firstRealPacket)
-            {
-                granulePos = endGP;
-                return packetIndex;
-            }
-
-            if (packetIndex == 0)
-            {
-                // we're in a continued packet; search in the previous page
-                // NOTE: this really shouldn't happen if our page-finding logic is working properly...
-                return FindPacket(pageIndex - 1, ref granulePos, getPacketGranuleCount);
-            }
-
-            throw new System.IO.InvalidDataException("Ran out of packets?!");
+            // normal seek; that wasn't so hard, right?
+            granulePos = endGP;
+            return packetIndex;
         }
 
         // this method calc's the appropriate page and packet prior to the one specified, honoring continuations and handling negative packetIndex values
