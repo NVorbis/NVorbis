@@ -505,11 +505,6 @@ namespace NVorbis
                         }
                         if (mode.Decode(packet, _nextPacketBuf, out packetStartindex, out packetValidLength, out packetTotalLength))
                         {
-                            System.Diagnostics.Debug.WriteLine($"\tDecoded {packetValidLength - packetStartindex} out of {packetTotalLength}");
-                            if (packet.GranulePosition.HasValue)
-                            {
-                                System.Diagnostics.Debug.WriteLine($"\tGranulePos: {packet.GranulePosition.Value}");
-                            }
                             // per the spec, do not decode more samples than the last granulePosition
                             samplePosition = packet.GranulePosition;
                             bitsRead = packet.BitsRead;
