@@ -505,6 +505,11 @@ namespace NVorbis
                         }
                         if (mode.Decode(packet, _nextPacketBuf, out packetStartindex, out packetValidLength, out packetTotalLength))
                         {
+                            System.Diagnostics.Debug.WriteLine($"\tDecoded {packetValidLength - packetStartindex} out of {packetTotalLength}");
+                            if (packet.GranulePosition.HasValue)
+                            {
+                                System.Diagnostics.Debug.WriteLine($"\tGranulePos: {packet.GranulePosition.Value}");
+                            }
                             // per the spec, do not decode more samples than the last granulePosition
                             samplePosition = packet.GranulePosition;
                             bitsRead = packet.BitsRead;
@@ -621,7 +626,7 @@ namespace NVorbis
             _currentPosition = samplePosition;
         }
 
-        private int GetPacketGranules(IPacket curPacket, bool isFirst)
+        private int GetPacketGranules(IPacket curPacket, bool isFirst, bool isLastInPage)
         {
             // if it's a resync, there's not any audio data to return
             if (curPacket.IsResync) return 0;
@@ -637,7 +642,7 @@ namespace NVorbis
             // if we got an invalid mode value, we can't decode any audio data anyway...
             if (modeIdx < 0 || modeIdx >= _modes.Length) return 0;
 
-            return _modes[modeIdx].GetPacketSampleCount(curPacket, isFirst);
+            return _modes[modeIdx].GetPacketSampleCount(curPacket, isFirst, isLastInPage);
         }
 
         #endregion

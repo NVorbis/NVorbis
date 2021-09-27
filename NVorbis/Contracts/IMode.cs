@@ -9,6 +9,6 @@
 
         bool Decode(IPacket packet, float[][] buffer, out int packetStartindex, out int packetValidLength, out int packetTotalLength);
 
-        int GetPacketSampleCount(IPacket packet, bool isFirst);
+        int GetPacketSampleCount(IPacket packet, bool isFirst, bool isLastInPage);
     }
 }
