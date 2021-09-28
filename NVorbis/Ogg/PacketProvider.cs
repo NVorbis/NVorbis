@@ -68,7 +68,18 @@ namespace NVorbis.Ogg
             else
             {
                 pageIndex = _reader.FindPage(granulePos);
-                packetIndex = FindPacket(pageIndex, ref granulePos, getPacketGranuleCount);
+                if (_reader.HasAllPages && _reader.MaxGranulePosition == granulePos)
+                {
+                    // allow seek to the offset immediatly after the last available (for what good it'll do)
+                    _lastPacket = null;
+                    _pageIndex = pageIndex;
+                    _packetIndex = 0;
+                    return granulePos;
+                }
+                else
+                {
+                    packetIndex = FindPacket(pageIndex, ref granulePos, getPacketGranuleCount);
+                }
                 packetIndex -= preRoll;
             }
 
@@ -92,15 +103,9 @@ namespace NVorbis.Ogg
         private int FindPacket(int pageIndex, ref long granulePos, GetPacketGranuleCount getPacketGranuleCount)
         {
             // pageIndex is the correct page; we just need to figure out which packet
-            // first let's get the starting granule of the page
-            long startGP;
             bool isContinued;
             int firstRealPacket = 0;
-            if (pageIndex <= _reader.FirstDataPageIndex)
-            {
-                startGP = 0;
-            }
-            else if (_reader.GetPage(pageIndex - 1, out startGP, out _, out _, out isContinued, out _, out _))
+            if (_reader.GetPage(pageIndex - 1, out _, out _, out _, out isContinued, out _, out _))
             {
                 if (isContinued)
                 {
@@ -136,7 +141,7 @@ namespace NVorbis.Ogg
                 {
                     throw new System.IO.InvalidDataException("Could not find end of continuation!");
                 }
-                endGP -= getPacketGranuleCount(packet, false, isLastInPage);
+                endGP -= getPacketGranuleCount(packet, isLastInPage);
                 isLastInPage = false;
             }
 
@@ -155,7 +160,7 @@ namespace NVorbis.Ogg
                 {
                     throw new System.IO.InvalidDataException("Could not load previous packet!");
                 }
-                granulePos = endGP - getPacketGranuleCount(packet, false, false);
+                granulePos = endGP - getPacketGranuleCount(packet, false);
                 return -1;
             }
 

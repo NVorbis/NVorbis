@@ -604,7 +604,13 @@ namespace NVorbis
             {
                 // we'll use this to force ReadSamples to fail to read
                 _eosFound = true;
-                throw new InvalidOperationException("Could not read pre-roll packet!  Try seeking again prior to reading more samples.");
+                if (_packetProvider.GetGranuleCount() != samplePosition)
+                {
+                    throw new InvalidOperationException("Could not read pre-roll packet!  Try seeking again prior to reading more samples.");
+                }
+                _prevPacketStart = _prevPacketStop;
+                _currentPosition = samplePosition;
+                return;
             }
 
             // read the actual packet
@@ -621,7 +627,7 @@ namespace NVorbis
             _currentPosition = samplePosition;
         }
 
-        private int GetPacketGranules(IPacket curPacket, bool isFirst, bool isLastInPage)
+        private int GetPacketGranules(IPacket curPacket, bool isLastInPage)
         {
             // if it's a resync, there's not any audio data to return
             if (curPacket.IsResync) return 0;
@@ -637,7 +643,7 @@ namespace NVorbis
             // if we got an invalid mode value, we can't decode any audio data anyway...
             if (modeIdx < 0 || modeIdx >= _modes.Length) return 0;
 
-            return _modes[modeIdx].GetPacketSampleCount(curPacket, isFirst, isLastInPage);
+            return _modes[modeIdx].GetPacketSampleCount(curPacket, isLastInPage);
         }
 
         #endregion

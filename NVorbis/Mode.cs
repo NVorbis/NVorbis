@@ -151,10 +151,10 @@ namespace NVorbis
             return false;
         }
 
-        public int GetPacketSampleCount(IPacket packet, bool isFirst, bool isLastInPage)
+        public int GetPacketSampleCount(IPacket packet, bool isLastInPage)
         {
-            GetPacketInfo(packet, isLastInPage, out _, out _, out var leftOverlapHalfSize, out var packetStartIndex, out var packetValidLength, out _);
-            return packetValidLength - packetStartIndex - (isFirst ? leftOverlapHalfSize * 2 : 0);
+            GetPacketInfo(packet, isLastInPage, out _, out _, out _, out var packetStartIndex, out var packetValidLength, out _);
+            return packetValidLength - packetStartIndex;
         }
 
         public int BlockSize => _blockFlag ? _block1Size : _block0Size;
