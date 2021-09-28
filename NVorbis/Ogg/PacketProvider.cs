@@ -68,7 +68,18 @@ namespace NVorbis.Ogg
             else
             {
                 pageIndex = _reader.FindPage(granulePos);
-                packetIndex = FindPacket(pageIndex, ref granulePos, getPacketGranuleCount);
+                if (_reader.HasAllPages && _reader.MaxGranulePosition == granulePos)
+                {
+                    // allow seek to the offset immediatly after the last available (for what good it'll do)
+                    _lastPacket = null;
+                    _pageIndex = pageIndex;
+                    _packetIndex = 0;
+                    return granulePos;
+                }
+                else
+                {
+                    packetIndex = FindPacket(pageIndex, ref granulePos, getPacketGranuleCount);
+                }
                 packetIndex -= preRoll;
             }
 
@@ -77,28 +88,28 @@ namespace NVorbis.Ogg
                 throw new ArgumentOutOfRangeException(nameof(granulePos));
             }
 
+            if (pageIndex < _reader.FirstDataPageIndex)
+            {
+                pageIndex = _reader.FirstDataPageIndex;
+                packetIndex = 0;
+            }
+
             _lastPacket = null;
             _pageIndex = pageIndex;
             _packetIndex = packetIndex;
             return granulePos;
         }
 
-        private int FindPacket(int pageIndex, ref long granulePos, GetPacketGranuleCount getPacketGranuleCount, bool isRecursed = false)
+        private int FindPacket(int pageIndex, ref long granulePos, GetPacketGranuleCount getPacketGranuleCount)
         {
             // pageIndex is the correct page; we just need to figure out which packet
-            // first let's get the starting granule of the page
-            long startGP;
             bool isContinued;
-            if (pageIndex == 0)
-            {
-                startGP = 0;
-            }
-            else if (_reader.GetPage(pageIndex - 1, out startGP, out _, out _, out isContinued, out _, out _))
+            int firstRealPacket = 0;
+            if (_reader.GetPage(pageIndex - 1, out _, out _, out _, out isContinued, out _, out _))
             {
                 if (isContinued)
                 {
-                    // we have a continued packet, so we need to look at the previous page
-                    return FindPacket(pageIndex - 1, ref granulePos, getPacketGranuleCount, true);
+                    firstRealPacket = 1;
                 }
             }
             else
@@ -107,39 +118,55 @@ namespace NVorbis.Ogg
             }
 
             // now get the ending granule of the page
-            if (!_reader.GetPage(pageIndex, out var endGP, out var isResync, out _, out isContinued, out var packetCount, out _))
+            if (!_reader.GetPage(pageIndex, out var pageGranulePos, out var isResync, out var isContinuation, out isContinued, out var packetCount, out _))
             {
                 throw new System.IO.InvalidDataException("Could not get found page?!");
             }
 
-            // increment through the packets until we would go past granulePos
-            var packetIndex = -1;
-            var isFirst = pageIndex == _reader.FirstDataPageIndex;
-            while (++packetIndex < packetCount)
+            if (isContinued)
             {
-                var packet = CreatePacket(ref pageIndex, ref packetIndex, false, endGP, isFirst && isResync, isContinued, packetCount, 0);
+                // if continued, the last packet index doesn't apply
+                packetCount--;
+            }
+
+            var packetIndex = packetCount;
+            var isLastInPage = !isContinued;
+            var endGP = pageGranulePos;
+            while (endGP > granulePos && --packetIndex >= firstRealPacket)
+            {
+                // it would be nice to pass false instead of isContinued, but (hypothetically) we don't know if getPacketGranuleCount(...) needs the whole thing...
+                // Vorbis doesn't, but someone might decide to try to use us for another purpose so we'll be good here.
+                var packet = CreatePacket(ref pageIndex, ref packetIndex, false, pageGranulePos, packetIndex == 0 && isResync, isContinued, packetCount, 0);
                 if (packet == null)
                 {
                     throw new System.IO.InvalidDataException("Could not find end of continuation!");
                 }
-                var granules = getPacketGranuleCount(packet, isFirst);
-                if (startGP + granules > granulePos)
-                {
-                    granulePos = startGP;
-                    return packetIndex;
-                }
-                startGP += granules;
-                isFirst = false;
+                endGP -= getPacketGranuleCount(packet, isLastInPage);
+                isLastInPage = false;
             }
 
-            if (isContinued && isRecursed)
+            if (packetIndex < firstRealPacket)
             {
-                granulePos = endGP;
-                return packetCount - 1;
+                // either it's a continued packet OR we've hit the "long->short over page boundary" bug.
+                // in both cases we'll just return the last packet of the previous page.
+                var prevPageIndex = pageIndex;
+                var prevPacketIndex = -1;
+                if (!NormalizePacketIndex(ref prevPageIndex, ref prevPacketIndex))
+                {
+                    throw new System.IO.InvalidDataException("Failed to normalize packet index?");
+                }
+                var packet = CreatePacket(ref prevPageIndex, ref prevPacketIndex, false, endGP, false, isContinuation, prevPacketIndex + 1, 0);
+                if (packet == null)
+                {
+                    throw new System.IO.InvalidDataException("Could not load previous packet!");
+                }
+                granulePos = endGP - getPacketGranuleCount(packet, false);
+                return -1;
             }
 
-            // we ran out of packets?!
-            throw new System.IO.InvalidDataException("Ran out of packets?!");
+            // normal seek; that wasn't so hard, right?
+            granulePos = endGP;
+            return packetIndex;
         }
 
         // this method calc's the appropriate page and packet prior to the one specified, honoring continuations and handling negative packetIndex values

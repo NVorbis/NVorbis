@@ -91,7 +91,7 @@ namespace NVorbis
             }
         }
 
-        private bool GetPacketInfo(IPacket packet, out int blockSize, out int windowIndex, out int leftOverlapHalfSize, out int packetStartIndex, out int packetValidLength, out int packetTotalLength)
+        private bool GetPacketInfo(IPacket packet, bool isLastInPage, out int blockSize, out int windowIndex, out int leftOverlapHalfSize, out int packetStartIndex, out int packetValidLength, out int packetTotalLength)
         {
             bool prevFlag, nextFlag;
             if (_blockFlag)
@@ -123,12 +123,18 @@ namespace NVorbis
             packetStartIndex = blockSize / 4 - leftOverlapHalfSize;
             packetTotalLength = blockSize / 4 * 3 + rightOverlapHalfSize;
             packetValidLength = packetTotalLength - rightOverlapHalfSize * 2;
+
+            if (isLastInPage && _blockFlag && !nextFlag)
+            {
+                // this fixes a bug in certain libvorbis versions where a long->short that crosses a page boundary doesn't get counted correctly in the first page's granulePos
+                packetValidLength -= _block1Size / 4 - _block0Size / 4;
+            }
             return true;
         }
 
         public bool Decode(IPacket packet, float[][] buffer, out int packetStartindex, out int packetValidLength, out int packetTotalLength)
         {
-            if (GetPacketInfo(packet, out var blockSize, out var windowIndex, out _, out packetStartindex, out packetValidLength, out packetTotalLength))
+            if (GetPacketInfo(packet, false, out var blockSize, out var windowIndex, out _, out packetStartindex, out packetValidLength, out packetTotalLength))
             {
                 _mapping.DecodePacket(packet, blockSize, _channels, buffer);
 
@@ -145,10 +151,10 @@ namespace NVorbis
             return false;
         }
 
-        public int GetPacketSampleCount(IPacket packet, bool isFirst)
+        public int GetPacketSampleCount(IPacket packet, bool isLastInPage)
         {
-            GetPacketInfo(packet, out _, out _, out var leftOverlapHalfSize, out var packetStartIndex, out var packetValidLength, out _);
-            return packetValidLength - packetStartIndex - (isFirst ? leftOverlapHalfSize * 2 : 0);
+            GetPacketInfo(packet, isLastInPage, out _, out _, out _, out var packetStartIndex, out var packetValidLength, out _);
+            return packetValidLength - packetStartIndex;
         }
 
         public int BlockSize => _blockFlag ? _block1Size : _block0Size;

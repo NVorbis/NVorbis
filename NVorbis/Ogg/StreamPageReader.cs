@@ -177,14 +177,20 @@ namespace NVorbis.Ogg
                 {
                     if (!GetNextPageGranulePos(out pageGranulePos))
                     {
-                        return -1;
+                        // if we couldn't get a page because we're EOS, allow finding the last granulePos
+                        if (MaxGranulePosition < granulePos)
+                        {
+                            pageIndex = -1;
+                        }
+                        break;
                     }
                 }
                 else
                 {
                     if (!GetPageRaw(pageIndex, out pageGranulePos))
                     {
-                        return -1;
+                        pageIndex = -1;
+                        break;
                     }
                 }
             }
