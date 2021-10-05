@@ -9,13 +9,13 @@ namespace NVorbis
     {
         static IReadOnlyList<string> s_emptyList = new List<string>();
 
-        Dictionary<string, IList<string>> _tags;
+        Dictionary<string, IReadOnlyList<string>> _tags;
 
         public TagData(string vendor, string[] comments)
         {
             EncoderVendor = vendor;
 
-            var tags = new Dictionary<string, IList<string>>();
+            var tags = new Dictionary<string, IReadOnlyList<string>>();
             for (var i = 0; i < comments.Length; i++)
             {
                 var parts = comments[i].Split('=');
@@ -36,7 +36,7 @@ namespace NVorbis
 
                 if (tags.TryGetValue(parts[0].ToUpperInvariant(), out var list))
                 {
-                    list.Add(parts[1]);
+                    ((List<string>)list).Add(parts[1]);
                 }
                 else
                 {
@@ -64,12 +64,12 @@ namespace NVorbis
         {
             if (_tags.TryGetValue(key.ToUpperInvariant(), out var values))
             {
-                return (IReadOnlyList<string>)values;
+                return values;
             }
             return s_emptyList;
         }
 
-        public IReadOnlyDictionary<string, IReadOnlyList<string>> All => (IReadOnlyDictionary<string, IReadOnlyList<string>>)_tags;
+        public IReadOnlyDictionary<string, IReadOnlyList<string>> All => _tags;
 
         public string EncoderVendor { get; }
 
