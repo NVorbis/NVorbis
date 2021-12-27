@@ -25,18 +25,21 @@ namespace NVorbis.Ogg
                 // try to add the page...
                 if (pp.AddPage(pageBuf, isResync))
                 {
-                    // ..., then make sure we're not flagged as the end of the stream...
-                    if (((PageFlags)pageBuf[5] & PageFlags.EndOfStream) == 0)
+                    // ..., then check to see if this is the end of the stream...
+                    if (((PageFlags)pageBuf[5] & PageFlags.EndOfStream) != 0)
                     {
-                        // ... in which case we say we're good.
-                        return true;
+                        // ... and if so tell the packet provider the remove it from our list
+                        pp.SetEndOfStream();
+                        _packetProviders.Remove(streamSerial);
                     }
+                    // ..., then let our caller know we're good
+                    return true;
                 }
-                // otherwise, remove the stream from our list and fall through to:
-                _packetProviders.Remove(streamSerial);
+                // otherwise, let PageReaderBase.ReadNextPage() know that we can't use the page:
+                return false;
             }
 
-            // try to add the stream to the list.
+            // we don't already have the stream, so try to add it to the list.
             pp = CreatePacketProvider(this, streamSerial);
             if (pp.AddPage(pageBuf, isResync))
             {
