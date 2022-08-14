@@ -8,35 +8,29 @@ This implementation is based on the Vorbis specification found on xiph.org. The 
 To use:
 
 ```cs
-// add a reference to NVorbis.dll
+// add a package reference to NVorbis.dll
+// https://www.nuget.org/packages/NVorbis
+
+using NVorbis;
 
 // this is the simplest usage; see the public classes and constructors for other options
-using (var vorbis = new NVorbis.VorbisReader("path/to/file.ogg"))
+string path = "path/to/file.ogg";
+using (VorbisReader vorbis = new VorbisReader(path))
 {
 	// get the channels & sample rate
-    var channels = vorbis.Channels;
-    var sampleRate = vorbis.SampleRate;
+	int channels = vorbis.Channels;
+	int sampleRate = vorbis.SampleRate;
+	int samples = vorbis.TotalSamples;
 
-    // OPTIONALLY: get a TimeSpan indicating the total length of the Vorbis stream
-    var totalTime = vorbis.TotalTime;
-
-	// create a buffer for reading samples
-    var readBuffer = new float[channels * sampleRate / 5];	// 200ms
-
-	// get the initial position (obviously the start)
-    var position = TimeSpan.Zero;
-
-    // go grab samples
-    int cnt;
-    while ((cnt = vorbis.ReadSamples(readBuffer, 0, readBuffer.Length)) > 0)
-    {
-    	// do stuff with the buffer
-    	// samples are interleaved (chan0, chan1, chan0, chan1, etc.)
-    	// sample value range is -0.99999994f to 0.99999994f unless vorbis.ClipSamples == false
-    
-    	// OPTIONALLY: get the position we just read through to...
-        position = vorbis.TimePosition;
-    }
+	// get a TimeSpan indicating the total length of the Vorbis stream
+	TimeSpan totalTime = vorbis.TotalTime;
+	
+	// grab samples
+	float[] readBuffer = new float[(int) samples * channels];
+	vorbis.ReadSamples(readBuffer, 0, (int) samples * channels);
+	
+	Console.WriteLine($"File `{path}` has {channels} channels, sample rate of {sampleRate}, and it will take {totalTime.ToString()} to play.");
+	// push the audio data to your favorite audio API
 }
 ```
 
