@@ -20,7 +20,7 @@ using (VorbisReader vorbis = new VorbisReader(path))
 	// get the channels & sample rate
 	int channels = vorbis.Channels;
 	int sampleRate = vorbis.SampleRate;
-	int samples = vorbis.TotalSamples;
+	long samples = vorbis.TotalSamples;
 
 	// get a TimeSpan indicating the total length of the Vorbis stream
 	TimeSpan totalTime = vorbis.TotalTime;
