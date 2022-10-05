@@ -1,5 +1,6 @@
 name: .NET Core CI
-on: [push]
+on:
+  push:
     paths:
       - 'NVorbis/**'
 
