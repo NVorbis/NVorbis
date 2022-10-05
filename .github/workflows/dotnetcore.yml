@@ -1,8 +1,5 @@
 name: .NET Core CI
-on:
-  push:
-    paths:
-      - 'NVorbis/**'
+on: [push]
 
 jobs:
   build:
