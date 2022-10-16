@@ -627,7 +627,7 @@ namespace NVorbis
             _currentPosition = samplePosition;
         }
 
-        private int GetPacketGranules(IPacket curPacket, bool isLastInPage)
+        private int GetPacketGranules(IPacket curPacket)
         {
             // if it's a resync, there's not any audio data to return
             if (curPacket.IsResync) return 0;
@@ -643,7 +643,7 @@ namespace NVorbis
             // if we got an invalid mode value, we can't decode any audio data anyway...
             if (modeIdx < 0 || modeIdx >= _modes.Length) return 0;
 
-            return _modes[modeIdx].GetPacketSampleCount(curPacket, isLastInPage);
+            return _modes[modeIdx].GetPacketSampleCount(curPacket);
         }
 
         #endregion

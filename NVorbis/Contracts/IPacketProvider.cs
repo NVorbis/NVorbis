@@ -4,10 +4,8 @@
     /// Encapsulates a method that calculates the number of granules decodable from the specified packet.
     /// </summary>
     /// <param name="packet">The <see cref="IPacket"/> to calculate.</param>
-    /// <param name="isFirst"><see langword="true"/> if the packet is the very first packet in the stream, otherwise <see langword="false"/>.</param>
-    /// <param name="isLastInPage"><see langword="true"/> if the packet is the last in the page, otherise <see langword="false"/>.</param>
     /// <returns>The calculated number of granules.</returns>
-    public delegate int GetPacketGranuleCount(IPacket packet, bool isLastInPage);
+    public delegate int GetPacketGranuleCount(IPacket packet);
 
     /// <summary>
     /// Describes an interface for a packet stream reader.
