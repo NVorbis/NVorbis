@@ -12,7 +12,7 @@
     <Version>0.10.5</Version>
     <PackageLicenseUrl></PackageLicenseUrl>
     <PackageProjectUrl>https://github.com/NVorbis/NVorbis</PackageProjectUrl>
-    <PackageReleaseNotes>- Fix seeking issues, properly this time
+    <PackageReleaseNotes>- Fix seeking issues, properly this time</PackageReleaseNotes>
     <PackageTags>ogg vorbis xiph audio c# sound .NET</PackageTags>
     <NeutralLanguage>en</NeutralLanguage>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
