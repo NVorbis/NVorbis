@@ -243,7 +243,7 @@ namespace NVorbis
 
             // Vorbis never used this feature, so we just skip the appropriate number of bits
             var times = (int)packet.ReadBits(6) + 1;
-            packet.SkipBits(16 * times);
+            for (var i = 0; i < times; i++) packet.SkipBits(16);
 
             // read the floors
             var floors = new IFloor[packet.ReadBits(6) + 1];

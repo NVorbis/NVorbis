@@ -210,6 +210,7 @@ namespace NVorbis
         /// <param name="count">The number of bits to skip reading.</param>
         public void SkipBits(int count)
         {
+            if (count < 0 || count > 64) throw new ArgumentOutOfRangeException(nameof(count));
             if (count > 0)
             {
                 if (_bitCount > count)
