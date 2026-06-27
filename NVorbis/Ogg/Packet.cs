@@ -1,6 +1,6 @@
-﻿using NVorbis.Contracts.Ogg;
+using NVorbis.Contracts;
+using NVorbis.Contracts.Ogg;
 using System;
-using System.Collections.Generic;
 
 namespace NVorbis.Ogg
 {
@@ -10,28 +10,42 @@ namespace NVorbis.Ogg
         //   x86:  68 bytes
         //   x64: 104 bytes
 
-        // this is the list of pages & packets in packed 24:8 format
-        // in theory, this is good for up to 1016 GiB of Ogg file
-        // in practice, probably closer to 300 days @ 160k bps
-        private IReadOnlyList<int> _dataParts;
+        // _firstPart stores the 24:8 packed (pageIndex:packetIndex) of the first page.
+        // _extraParts stores packed pageIndex values for any continuation pages (null for
+        // the common single-page case, avoiding the List<int> + backing-array allocation).
+        private readonly int _firstPart;
+        private readonly int[] _extraParts;
+        private readonly int _partCount;
         private IPacketReader _packetReader;                    // IntPtr
         int _dataCount;
         Memory<byte> _data;
         int _dataIndex;                                         // 4
         int _dataOfs;                                           // 4
 
-        internal Packet(IReadOnlyList<int> dataParts, IPacketReader packetReader, Memory<byte> initialData)
+        internal Packet(int firstPart, IPacketReader packetReader, Memory<byte> initialData)
         {
-            _dataParts = dataParts;
+            _firstPart = firstPart;
+            _partCount = 1;
             _packetReader = packetReader;
             _data = initialData;
         }
+
+        internal Packet(int firstPart, int[] extraParts, IPacketReader packetReader, Memory<byte> initialData)
+        {
+            _firstPart = firstPart;
+            _extraParts = extraParts;
+            _partCount = 1 + extraParts.Length;
+            _packetReader = packetReader;
+            _data = initialData;
+        }
+
+        private int GetPart(int index) => index == 0 ? _firstPart : _extraParts[index - 1];
 
         protected override int TotalBits => (_dataCount + _data.Length) * 8;
 
         protected override int ReadNextByte()
         {
-            if (_dataIndex == _dataParts.Count) return -1;
+            if (_dataIndex == _partCount) return -1;
 
             var b = _data.Span[_dataOfs];
 
@@ -39,9 +53,9 @@ namespace NVorbis.Ogg
             {
                 _dataOfs = 0;
                 _dataCount += _data.Length;
-                if (++_dataIndex < _dataParts.Count)
+                if (++_dataIndex < _partCount)
                 {
-                    _data = _packetReader.GetPacketData(_dataParts[_dataIndex]);
+                    _data = _packetReader.GetPacketData(GetPart(_dataIndex));
                 }
                 else
                 {
@@ -56,9 +70,9 @@ namespace NVorbis.Ogg
         {
             _dataIndex = 0;
             _dataOfs = 0;
-            if (_dataParts.Count > 0)
+            if (_partCount > 0)
             {
-                _data = _packetReader.GetPacketData(_dataParts[0]);
+                _data = _packetReader.GetPacketData(_firstPart);
             }
 
             base.Reset();
