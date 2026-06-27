@@ -14,6 +14,7 @@
     <PackageProjectUrl>https://github.com/NVorbis/NVorbis</PackageProjectUrl>
     <PackageReleaseNotes>- Fix seeking issues, properly this time</PackageReleaseNotes>
     <PackageTags>ogg vorbis xiph audio c# sound .NET</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <NeutralLanguage>en</NeutralLanguage>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
@@ -33,10 +34,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="..\LICENSE">
-      <Pack>True</Pack>
-      <PackagePath></PackagePath>
-    </None>
+    <None Include="..\LICENSE" Pack="true" PackagePath="\"  />
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
   <ItemGroup>
