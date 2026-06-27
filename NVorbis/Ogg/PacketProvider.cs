@@ -58,11 +58,27 @@ namespace NVorbis.Ogg
             if (_reader == null) throw new ObjectDisposedException(nameof(PacketProvider));
 
             int pageIndex = _reader.FindPage(granulePos);
-            int packetIndex = FindPacket(pageIndex, preRoll, ref granulePos, getPacketGranuleCount);
+            int packetIndex;
 
-            if (!NormalizePacketIndex(ref pageIndex, ref packetIndex))
+            if (pageIndex <= _reader.FirstDataPageIndex)
             {
-                throw new ArgumentOutOfRangeException(nameof(granulePos));
+                // We are on the very first audio page (or somehow before it). There is no
+                // preceding audio page to validate granule positions against, so skip the
+                // complex FindPacket logic and snap directly to the stream beginning.
+                // packetIndex = 0 is always valid here: the first data page is guaranteed to
+                // start with an audio packet (Vorbis header pages precede it).
+                pageIndex = _reader.FirstDataPageIndex;
+                packetIndex = 0;
+                granulePos = 0;
+            }
+            else
+            {
+                packetIndex = FindPacket(pageIndex, preRoll, ref granulePos, getPacketGranuleCount);
+
+                if (!NormalizePacketIndex(ref pageIndex, ref packetIndex))
+                {
+                    throw new ArgumentOutOfRangeException(nameof(granulePos));
+                }
             }
 
             _lastPacket = null;

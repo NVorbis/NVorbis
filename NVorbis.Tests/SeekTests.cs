@@ -73,5 +73,125 @@ namespace NVorbis.Tests
 
             Assert.Equal(1000L, reader.SamplePosition);
         }
+
+        // Regression tests for issue #37: seeking to position 0 on a file whose last
+        // header page has granule = -1 (spec-compliant) triggered a false positive in
+        // the libogg-bug detector, landing the reader on a header packet and throwing
+        // "Could not read pre-roll packet".
+
+        private const string Issue37File = "issue37test.ogg";
+
+        [Fact]
+        public void Issue37_SeekToZeroAfterEos_DoesNotThrow()
+        {
+            using var reader = new VorbisReader(TestFile(Issue37File));
+            var buf = new float[4096];
+
+            // drain to EOS
+            while (reader.ReadSamples(buf, 0, buf.Length) > 0) { }
+
+            // must not throw
+            reader.SeekTo(0L, SeekOrigin.Begin);
+            Assert.Equal(0L, reader.SamplePosition);
+        }
+
+        [Fact]
+        public void Issue37_SeekToZeroAfterEos_CanReadSamplesAgain()
+        {
+            using var reader = new VorbisReader(TestFile(Issue37File));
+            var buf = new float[4096];
+
+            while (reader.ReadSamples(buf, 0, buf.Length) > 0) { }
+
+            reader.SeekTo(0L, SeekOrigin.Begin);
+
+            var count = reader.ReadSamples(buf, 0, buf.Length);
+            Assert.True(count > 0, "Expected samples after seeking to start");
+        }
+
+        [Fact]
+        public void Issue37_SeekToZeroWithoutEos_DoesNotThrow()
+        {
+            using var reader = new VorbisReader(TestFile(Issue37File));
+
+            reader.SeekTo(0L, SeekOrigin.Begin);
+
+            Assert.Equal(0L, reader.SamplePosition);
+        }
+
+        [Fact]
+        public void Issue37_SeekViaTimePositionAfterEos_DoesNotThrow()
+        {
+            using var reader = new VorbisReader(TestFile(Issue37File));
+            var buf = new float[4096];
+
+            while (reader.ReadSamples(buf, 0, buf.Length) > 0) { }
+
+            reader.SeekTo(TimeSpan.Zero);
+            Assert.Equal(0L, reader.SamplePosition);
+        }
+
+        [Fact]
+        public void Issue37_SeekToEarlyNonZeroPosition_DoesNotThrow()
+        {
+            // Position 64 falls within the first-page shortcut range; verify
+            // the shortcut branch still lands at the right sample offset.
+            using var reader = new VorbisReader(TestFile(Issue37File));
+            var target = Math.Min(64L, reader.TotalSamples - 1);
+            reader.SeekTo(target, SeekOrigin.Begin);
+            Assert.Equal(target, reader.SamplePosition);
+        }
+
+        [Fact]
+        public void Issue37_SeekToMiddle_DoesNotThrow()
+        {
+            // Mid-stream seek exercises the normal FindPacket path (past FDI).
+            using var reader = new VorbisReader(TestFile(Issue37File));
+            var mid = reader.TotalSamples / 2;
+            if (mid == 0) return;
+            reader.SeekTo(mid, SeekOrigin.Begin);
+            Assert.Equal(mid, reader.SamplePosition);
+        }
+
+        [Fact]
+        public void Issue37_SeekToMiddle_CanReadSamples()
+        {
+            using var reader = new VorbisReader(TestFile(Issue37File));
+            var mid = reader.TotalSamples / 2;
+            if (mid == 0) return;
+            reader.SeekTo(mid, SeekOrigin.Begin);
+            Assert.Equal(mid, reader.SamplePosition);
+            var buf = new float[4096];
+            var count = reader.ReadSamples(buf, 0, buf.Length);
+            Assert.True(count > 0, "Expected samples after seeking to midpoint");
+        }
+
+        [Fact]
+        public void Issue37_SeekToMiddleAfterEos_DoesNotThrow()
+        {
+            // Drain to EOS then seek to a non-zero position; exercises the
+            // normal path from a post-EOS state.
+            using var reader = new VorbisReader(TestFile(Issue37File));
+            var mid = reader.TotalSamples / 2;
+            if (mid == 0) return;
+            var buf = new float[4096];
+            while (reader.ReadSamples(buf, 0, buf.Length) > 0) { }
+            reader.SeekTo(mid, SeekOrigin.Begin);
+            Assert.Equal(mid, reader.SamplePosition);
+        }
+
+        [Fact]
+        public void Issue37_SeekToMiddleAfterEos_CanReadSamples()
+        {
+            using var reader = new VorbisReader(TestFile(Issue37File));
+            var mid = reader.TotalSamples / 2;
+            if (mid == 0) return;
+            var buf = new float[4096];
+            while (reader.ReadSamples(buf, 0, buf.Length) > 0) { }
+            reader.SeekTo(mid, SeekOrigin.Begin);
+            Assert.Equal(mid, reader.SamplePosition);
+            var count = reader.ReadSamples(buf, 0, buf.Length);
+            Assert.True(count > 0, "Expected samples after seeking to midpoint post-EOS");
+        }
     }
 }
