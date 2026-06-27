@@ -583,19 +583,12 @@ namespace NVorbis
 
             if (samplePosition < 0) throw new ArgumentOutOfRangeException(nameof(samplePosition));
 
-            int rollForward;
-            if (samplePosition == 0)
-            {
-                // short circuit for the looping case...
-                _packetProvider.SeekTo(0, 0, GetPacketGranules);
-                rollForward = 0;
-            }
-            else
-            {
-                // seek the stream to the correct position
-                var pos = _packetProvider.SeekTo(samplePosition, 1, GetPacketGranules);
-                rollForward = (int)(samplePosition - pos);
-            }
+            // Seek to the packet whose granule range contains samplePosition, pre-rolling
+            // one packet back so the MDCT overlap is valid.  PacketProvider.SeekTo clamps
+            // to the first audio packet when samplePosition falls on the first data page
+            // (covers position 0 and the first ~block_size samples generically).
+            var pos = _packetProvider.SeekTo(samplePosition, 1, GetPacketGranules);
+            var rollForward = (int)(samplePosition - pos);
 
             // clear out old data
             ResetDecoder();
