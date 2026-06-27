@@ -355,7 +355,7 @@ namespace NVorbis
         {
             // don't allow non-aligned reads (always on a full sample boundary!)
             int count = buffer.Length - buffer.Length % _streamDecoder.Channels;
-            if (!buffer.IsEmpty)
+            if (count > 0)
             {
                 return _streamDecoder.Read(buffer, 0, count);
             }
