@@ -31,7 +31,7 @@ namespace NVorbis
             {
                 get
                 {
-                    if (index > _count) throw new ArgumentOutOfRangeException();
+                    if (index >= _count) throw new ArgumentOutOfRangeException();
                     return _start + index;
                 }
             }
