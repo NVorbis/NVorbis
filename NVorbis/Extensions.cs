@@ -148,7 +148,8 @@ namespace NVorbis
         /// <param name="count">The number of bytes to advance.</param>
         public static void SkipBytes(this IPacket packet, int count)
         {
-            packet.SkipBits(count * 8);
+            while (count > 8) { packet.SkipBits(64); count -= 8; }
+            if (count > 0) packet.SkipBits(count * 8);
         }
     }
 }

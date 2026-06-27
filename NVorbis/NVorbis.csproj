@@ -28,6 +28,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+      <_Parameter1>NVorbis.Tests</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+  <ItemGroup>
     <None Include="..\LICENSE" Pack="true" PackagePath="\"  />
     <None Include="..\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>

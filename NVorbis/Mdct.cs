@@ -8,20 +8,28 @@ namespace NVorbis
     {
         const float M_PI = 3.14159265358979323846264f;
 
+        readonly object _cacheLock = new object();
         Dictionary<int, MdctImpl> _setupCache = new Dictionary<int, MdctImpl>();
 
         public void Reverse(float[] samples, int sampleCount)
         {
-            if (!_setupCache.TryGetValue(sampleCount, out var impl))
+            MdctImpl impl;
+            lock (_cacheLock)
             {
-                impl = new MdctImpl(sampleCount);
-                _setupCache[sampleCount] = impl;
+                if (!_setupCache.TryGetValue(sampleCount, out impl))
+                {
+                    impl = new MdctImpl(sampleCount);
+                    _setupCache[sampleCount] = impl;
+                }
             }
             impl.CalcReverse(samples);
         }
 
         class MdctImpl
         {
+            [ThreadStatic]
+            private static float[] _sharedBuf2;
+
             readonly int _n, _n2, _n4, _n8, _ld;
 
             readonly float[] _a, _b, _c;
@@ -66,7 +74,11 @@ namespace NVorbis
             {
                 float[] u, v;
 
-                var buf2 = new float[_n2];
+                float[] buf2 = _sharedBuf2;
+                if (buf2 == null || buf2.Length < _n2)
+                {
+                    _sharedBuf2 = buf2 = new float[_n2];
+                }
 
                 // copy and reflect spectral data
                 // step 0

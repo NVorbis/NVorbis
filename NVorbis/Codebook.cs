@@ -31,7 +31,7 @@ namespace NVorbis
             {
                 get
                 {
-                    if (index > _count) throw new ArgumentOutOfRangeException();
+                    if (index >= _count) throw new ArgumentOutOfRangeException();
                     return _start + index;
                 }
             }
@@ -64,6 +64,7 @@ namespace NVorbis
 
             // get the counts
             Dimensions = (int)packet.ReadBits(16);
+            if (Dimensions < 1) throw new InvalidDataException("Codebook had invalid dimension count!");
             Entries = (int)packet.ReadBits(24);
 
             // init the storage

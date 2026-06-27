@@ -25,7 +25,7 @@ namespace NVorbis
 
         private string _vendor;
         private string[] _comments;
-        private ITagData _tags;
+        private Lazy<ITagData> _tags;
 
         private long _currentPosition;
         private bool _hasClipped;
@@ -65,6 +65,8 @@ namespace NVorbis
 
                 throw GetInvalidStreamException(packet);
             }
+
+            _tags = new Lazy<ITagData>(() => new TagData(_vendor, _comments));
         }
 
         private static Exception GetInvalidStreamException(IPacket packet)
@@ -243,7 +245,7 @@ namespace NVorbis
 
             // Vorbis never used this feature, so we just skip the appropriate number of bits
             var times = (int)packet.ReadBits(6) + 1;
-            packet.SkipBits(16 * times);
+            for (var i = 0; i < times; i++) packet.SkipBits(16);
 
             // read the floors
             var floors = new IFloor[packet.ReadBits(6) + 1];
@@ -570,7 +572,7 @@ namespace NVorbis
                     // no-op
                     break;
                 case SeekOrigin.Current:
-                    samplePosition = SamplePosition - samplePosition;
+                    samplePosition = SamplePosition + samplePosition;
                     break;
                 case SeekOrigin.End:
                     samplePosition = TotalSamples - samplePosition;
@@ -687,7 +689,7 @@ namespace NVorbis
         /// <summary>
         /// Gets the tag data from the stream's header.
         /// </summary>
-        public ITagData Tags => _tags ?? (_tags = new TagData(_vendor, _comments));
+        public ITagData Tags => _tags.Value;
 
         /// <summary>
         /// Gets the total duration of the decoded stream.
