@@ -44,9 +44,16 @@ namespace NVorbis
             _decoders = new List<IStreamDecoder>();
 
             var containerReader = CreateContainerReader(stream, closeOnDispose);
-            containerReader.NewStreamCallback = ProcessNewStream;
+            try
+            {
+                containerReader.NewStreamCallback = ProcessNewStream;
 
-            if (!containerReader.TryInit() || _decoders.Count == 0)
+                if (!containerReader.TryInit() || _decoders.Count == 0)
+                {
+                    throw new ArgumentException("Could not load the specified container!", nameof(containerReader));
+                }
+            }
+            catch
             {
                 containerReader.NewStreamCallback = null;
                 containerReader.Dispose();
@@ -56,8 +63,9 @@ namespace NVorbis
                     stream.Dispose();
                 }
 
-                throw new ArgumentException("Could not load the specified container!", nameof(containerReader));
+                throw;
             }
+
             _closeOnDispose = closeOnDispose;
             _containerReader = containerReader;
             _streamDecoder = _decoders[0];
