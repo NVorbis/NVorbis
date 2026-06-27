@@ -64,6 +64,7 @@ namespace NVorbis
 
             // get the counts
             Dimensions = (int)packet.ReadBits(16);
+            if (Dimensions < 1) throw new InvalidDataException("Codebook had invalid dimension count!");
             Entries = (int)packet.ReadBits(24);
 
             // init the storage
