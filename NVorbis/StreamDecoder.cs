@@ -570,7 +570,7 @@ namespace NVorbis
                     // no-op
                     break;
                 case SeekOrigin.Current:
-                    samplePosition = SamplePosition - samplePosition;
+                    samplePosition = SamplePosition + samplePosition;
                     break;
                 case SeekOrigin.End:
                     samplePosition = TotalSamples - samplePosition;
