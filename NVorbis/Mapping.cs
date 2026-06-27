@@ -54,7 +54,7 @@ namespace NVorbis
                 for (var c = 0; c < channels; c++)
                 {
                     mux[c] = (int)packet.ReadBits(4);
-                    if (mux[c] > submapCount)
+                    if (mux[c] >= submapCount)
                     {
                         throw new System.IO.InvalidDataException("Invalid channel mux submap index in mapping header!");
                     }
