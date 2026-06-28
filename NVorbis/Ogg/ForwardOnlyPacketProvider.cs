@@ -145,22 +145,19 @@ namespace NVorbis.Ogg
             // first, set flags from the start page
             var contOverhead = dataStart;
             var isFirst = packetIndex == 27;
-            if (isCont)
+            if (isCont && isFirst)
             {
-                if (isFirst)
+                // if it's a continuation, we just read it for a new packet and there's a continuity problem
+                isResync = true;
+
+                // skip the first packet; it's a partial
+                contOverhead += GetPacketLength(pageBuf, ref packetIndex);
+
+                // if we moved to the end of the page, we can't satisfy the request from here...
+                if (packetIndex == 27 + pageBuf[26])
                 {
-                    // if it's a continuation, we just read it for a new packet and there's a continuity problem
-                    isResync = true;
-
-                    // skip the first packet; it's a partial
-                    contOverhead += GetPacketLength(pageBuf, ref packetIndex);
-
-                    // if we moved to the end of the page, we can't satisfy the request from here...
-                    if (packetIndex == 27 + pageBuf[26])
-                    {
-                        // ... so we'll just recurse and try again
-                        return GetPacket();
-                    }
+                    // ... so we'll just recurse and try again
+                    return GetPacket();
                 }
             }
             if (!isFirst)

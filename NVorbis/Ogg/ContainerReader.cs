@@ -15,7 +15,7 @@ namespace NVorbis.Ogg
         internal static Func<Stream, bool, Func<Contracts.IPacketProvider, bool>, IPageReader> CreateForwardOnlyPageReader { get; set; } = (s, cod, cb) => new ForwardOnlyPageReader(s, cod, cb);
 
         private IPageReader _reader;
-        private List<WeakReference<Contracts.IPacketProvider>> _packetProviders;
+        private readonly List<WeakReference<Contracts.IPacketProvider>> _packetProviders;
         private bool _foundStream;
 
         /// <summary>

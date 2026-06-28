@@ -7,6 +7,7 @@ namespace NVorbis
     class Huffman : IHuffman, IComparer<HuffmanListNode>
     {
         const int MAX_TABLE_BITS = 10;
+        const int UNUSED_LENGTH = 99999;
 
         public int TableBits { get; private set; }
         public IReadOnlyList<HuffmanListNode> PrefixTree { get; private set; }
@@ -22,7 +23,7 @@ namespace NVorbis
                 list[i] = new HuffmanListNode
                 {
                     Value = values[i],
-                    Length = lengthList[i] <= 0 ? 99999 : lengthList[i],
+                    Length = lengthList[i] <= 0 ? UNUSED_LENGTH : lengthList[i],
                     Bits = codeList[i],
                     Mask = (1 << lengthList[i]) - 1,
                 };
@@ -38,13 +39,13 @@ namespace NVorbis
 
             var prefixList = new List<HuffmanListNode>(1 << tableBits);
             List<HuffmanListNode> overflowList = null;
-            for (int i = 0; i < list.Length && list[i].Length < 99999; i++)
+            for (int i = 0; i < list.Length && list[i].Length < UNUSED_LENGTH; i++)
             {
                 var itemBits = list[i].Length;
                 if (itemBits > tableBits)
                 {
                     overflowList = new List<HuffmanListNode>(list.Length - i);
-                    for (; i < list.Length && list[i].Length < 99999; i++)
+                    for (; i < list.Length && list[i].Length < UNUSED_LENGTH; i++)
                     {
                         overflowList.Add(list[i]);
                     }

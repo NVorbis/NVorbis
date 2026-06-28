@@ -7,7 +7,7 @@ namespace NVorbis.Ogg
 {
     class PacketProvider : Contracts.IPacketProvider, IPacketReader
     {
-        private IStreamPageReader _reader;
+        private readonly IStreamPageReader _reader;
 
         private int _pageIndex;
         private int _packetIndex;
@@ -151,7 +151,7 @@ namespace NVorbis.Ogg
                 endGP -= getPacketGranuleCount(packet);
             }
 
-            // if we're contnued, the the continued packet ends on our calcualted endGP
+            // if we're continued, the continued packet ends on our calculated endGP
             if (firstRealPacket == 1)
             {
                 gps[0] = endGP;
@@ -205,14 +205,7 @@ namespace NVorbis.Ogg
             {
                 if (gps[i] >= granulePos)
                 {
-                    if (i == 0)
-                    {
-                        granulePos = endGP;
-                    }
-                    else
-                    {
-                        granulePos = gps[i - 1];
-                    }
+                    granulePos = i == 0 ? endGP : gps[i - 1];
                     return i;
                 }
             }

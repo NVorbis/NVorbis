@@ -13,8 +13,8 @@ namespace NVorbis
         static internal Func<IFactory> CreateFactory { get; set; } = () => new Factory();
 
         private Contracts.IPacketProvider _packetProvider;
-        private IFactory _factory;
-        private StreamStats _stats;
+        private readonly IFactory _factory;
+        private readonly StreamStats _stats;
 
         private byte _channels;
         private int _sampleRate;
@@ -25,7 +25,7 @@ namespace NVorbis
 
         private string _vendor;
         private string[] _comments;
-        private Lazy<ITagData> _tags;
+        private readonly Lazy<ITagData> _tags;
 
         private long _currentPosition;
         private bool _hasClipped;
