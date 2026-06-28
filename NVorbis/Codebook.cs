@@ -147,12 +147,12 @@ namespace NVorbis
                 }
 
                 int[] values = null;
-                int[] codewords = null;
+                int[] codewords;
                 if (!sparse)
                 {
                     codewords = new int[Entries];
                 }
-                else if (sortedCount != 0)
+                else
                 {
                     codewordLengths = new int[sortedCount];
                     codewords = new int[sortedCount];
