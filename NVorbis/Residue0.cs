@@ -1,5 +1,6 @@
 ﻿using NVorbis.Contracts;
 using System;
+using System.Buffers;
 using System.IO;
 
 namespace NVorbis
@@ -127,52 +128,59 @@ namespace NVorbis
                 var partitionCount = n / _partitionSize;
 
                 var partitionWords = (partitionCount + _classBook.Dimensions - 1) / _classBook.Dimensions;
-                var partWordCache = new int[_channels, partitionWords][];
 
-                for (var stage = 0; stage < _maxStages; stage++)
+                var partWordCache = ArrayPool<int[]>.Shared.Rent(_channels * partitionWords);
+                try
                 {
-                    for (int partitionIdx = 0, entryIdx = 0; partitionIdx < partitionCount; entryIdx++)
+                    for (var stage = 0; stage < _maxStages; stage++)
                     {
-                        if (stage == 0)
+                        for (int partitionIdx = 0, entryIdx = 0; partitionIdx < partitionCount; entryIdx++)
                         {
-                            for (var ch = 0; ch < _channels; ch++)
+                            if (stage == 0)
                             {
-                                var idx = _classBook.DecodeScalar(packet);
-                                if (idx >= 0 && idx < _decodeMap.Length)
+                                for (var ch = 0; ch < _channels; ch++)
                                 {
-                                    partWordCache[ch, entryIdx] = _decodeMap[idx];
-                                }
-                                else
-                                {
-                                    partitionIdx = partitionCount;
-                                    stage = _maxStages;
-                                    break;
+                                    var idx = _classBook.DecodeScalar(packet);
+                                    if (idx >= 0 && idx < _decodeMap.Length)
+                                    {
+                                        partWordCache[ch * partitionWords + entryIdx] = _decodeMap[idx];
+                                    }
+                                    else
+                                    {
+                                        partitionIdx = partitionCount;
+                                        stage = _maxStages;
+                                        break;
+                                    }
                                 }
                             }
-                        }
-                        for (var dimensionIdx = 0; partitionIdx < partitionCount && dimensionIdx < _classBook.Dimensions; dimensionIdx++, partitionIdx++)
-                        {
-                            var offset = _begin + partitionIdx * _partitionSize;
-                            for (var ch = 0; ch < _channels; ch++)
+                            for (var dimensionIdx = 0; partitionIdx < partitionCount && dimensionIdx < _classBook.Dimensions; dimensionIdx++, partitionIdx++)
                             {
-                                var idx = partWordCache[ch, entryIdx][dimensionIdx];
-                                if ((_cascade[idx] & (1 << stage)) != 0)
+                                var offset = _begin + partitionIdx * _partitionSize;
+                                for (var ch = 0; ch < _channels; ch++)
                                 {
-                                    var book = _books[idx][stage];
-                                    if (book != null)
+                                    var idx = partWordCache[ch * partitionWords + entryIdx][dimensionIdx];
+                                    if ((_cascade[idx] & (1 << stage)) != 0)
                                     {
-                                        if (WriteVectors(book, packet, buffer, ch, offset, _partitionSize))
+                                        var book = _books[idx][stage];
+                                        if (book != null)
                                         {
-                                            // bad packet...  exit now and try to use what we already have
-                                            partitionIdx = partitionCount;
-                                            stage = _maxStages;
-                                            break;
+                                            if (WriteVectors(book, packet, buffer, ch, offset, _partitionSize))
+                                            {
+                                                // bad packet...  exit now and try to use what we already have
+                                                partitionIdx = partitionCount;
+                                                stage = _maxStages;
+                                                break;
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
                     }
+                }
+                finally
+                {
+                    ArrayPool<int[]>.Shared.Return(partWordCache);
                 }
             }
         }
@@ -181,23 +189,29 @@ namespace NVorbis
         {
             var res = residue[channel];
             var steps = partitionSize / codebook.Dimensions;
-            var entryCache = new int[steps];
-
-            for (var i = 0; i < steps; i++)
+            var entryCache = ArrayPool<int>.Shared.Rent(steps);
+            try
             {
-                if ((entryCache[i] = codebook.DecodeScalar(packet)) == -1)
+                for (var i = 0; i < steps; i++)
                 {
-                    return true;
+                    if ((entryCache[i] = codebook.DecodeScalar(packet)) == -1)
+                    {
+                        return true;
+                    }
                 }
+                for (var dim = 0; dim < codebook.Dimensions; dim++)
+                {
+                    for (var step = 0; step < steps; step++, offset++)
+                    {
+                        res[offset] += codebook[entryCache[step], dim];
+                    }
+                }
+                return false;
             }
-            for (var dim = 0; dim < codebook.Dimensions; dim++)
+            finally
             {
-                for (var step = 0; step < steps; step++, offset++)
-                {
-                    res[offset] += codebook[entryCache[step], dim];
-                }
+                ArrayPool<int>.Shared.Return(entryCache);
             }
-            return false;
         }
     }
 }
