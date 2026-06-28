@@ -33,7 +33,7 @@ namespace NVorbis.Ogg
         private bool VerifyPage(byte[] headerBuf, int index, int cnt, out byte[] pageBuf, out int bytesRead)
         {
             var segCnt = headerBuf[index + 26];
-            if (cnt - index < index + 27 + segCnt)
+            if (cnt - index < 27 + segCnt)
             {
                 pageBuf = null;
                 bytesRead = 0;
@@ -157,7 +157,7 @@ namespace NVorbis.Ogg
                     {
                         cnt += EnsureRead(buffer, index + 27, segCnt);
                     }
-                    if (cnt == index + 27 + segCnt)
+                    if (cnt >= index + 27 + segCnt)
                     {
                         return true;
                     }
