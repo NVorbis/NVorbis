@@ -3,6 +3,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace NVorbis
 {
@@ -71,6 +73,35 @@ namespace NVorbis
             _containerReader = containerReader;
             _streamDecoder = _decoders[0];
         }
+
+        /// <summary>
+        /// Opens the specified file on a background thread and returns a <see cref="VorbisReader"/> once the stream headers have been read.
+        /// </summary>
+        /// <param name="fileName">The file to read from.</param>
+        /// <param name="cancellationToken">A token to cancel the operation.</param>
+        /// <returns>A <see cref="Task{VorbisReader}"/> that completes when the instance is ready to decode.</returns>
+        /// <remarks>
+        /// Use this overload from UI or async contexts to avoid blocking while the file is opened and headers are parsed.
+        /// Once the returned instance is ready, call <see cref="ReadSamples(float[], int, int)"/> or
+        /// <see cref="ReadSamples(Span{float})"/> on a single dedicated background thread for the lifetime of the instance.
+        /// </remarks>
+        public static Task<VorbisReader> OpenAsync(string fileName, CancellationToken cancellationToken = default)
+            => Task.Run(() => new VorbisReader(fileName), cancellationToken);
+
+        /// <summary>
+        /// Initializes a <see cref="VorbisReader"/> from the specified stream on a background thread and returns it once the stream headers have been read.
+        /// </summary>
+        /// <param name="stream">The <see cref="Stream"/> to read from.</param>
+        /// <param name="closeOnDispose"><see langword="true"/> to take ownership and close the stream when disposed, otherwise <see langword="false"/>.</param>
+        /// <param name="cancellationToken">A token to cancel the operation.</param>
+        /// <returns>A <see cref="Task{VorbisReader}"/> that completes when the instance is ready to decode.</returns>
+        /// <remarks>
+        /// Use this overload from UI or async contexts to avoid blocking while stream headers are parsed.
+        /// Once the returned instance is ready, call <see cref="ReadSamples(float[], int, int)"/> or
+        /// <see cref="ReadSamples(Span{float})"/> on a single dedicated background thread for the lifetime of the instance.
+        /// </remarks>
+        public static Task<VorbisReader> OpenAsync(Stream stream, bool closeOnDispose = true, CancellationToken cancellationToken = default)
+            => Task.Run(() => new VorbisReader(stream, closeOnDispose), cancellationToken);
 
 #pragma warning disable CS1591 // Missing XML comment for publicly visible type or member
         [Obsolete("Use \"new StreamDecoder(Contracts.IPacketProvider)\" and the container's NewStreamCallback or Streams property instead.", true)]
@@ -338,7 +369,15 @@ namespace NVorbis
         /// <param name="count">The number of samples that should be read into the buffer.</param>
         /// <returns>The number of floats read into the buffer.</returns>
         /// <exception cref="ArgumentOutOfRangeException">Thrown when the buffer is too small or <paramref name="offset"/> is less than zero.</exception>
-        /// <remarks>The data populated into <paramref name="buffer"/> is interleaved by channel in normal PCM fashion: Left, Right, Left, Right, Left, Right</remarks>
+        /// <remarks>
+        /// The data populated into <paramref name="buffer"/> is interleaved by channel in normal PCM fashion: Left, Right, Left, Right, Left, Right.
+        /// <para>
+        /// This method is not thread-safe.  All calls to <see cref="ReadSamples(float[], int, int)"/>, <see cref="ReadSamples(Span{float})"/>,
+        /// and <see cref="SeekTo(long, SeekOrigin)"/> on a given instance must be made from a single thread.
+        /// To avoid blocking a UI or async context, open the instance with <see cref="OpenAsync(string, CancellationToken)"/>
+        /// and call this method from a dedicated background thread.
+        /// </para>
+        /// </remarks>
         public int ReadSamples(float[] buffer, int offset, int count)
         {
             // don't allow non-aligned reads (always on a full sample boundary!)
@@ -355,8 +394,15 @@ namespace NVorbis
         /// </summary>
         /// <param name="buffer">The buffer to read the samples into.</param>
         /// <returns>The number of floats read into the buffer.</returns>
-        /// <exception cref="ArgumentOutOfRangeException">Thrown when the buffer is too small.</exception>
-        /// <remarks>The data populated into <paramref name="buffer"/> is interleaved by channel in normal PCM fashion: Left, Right, Left, Right, Left, Right</remarks>
+        /// <remarks>
+        /// The data populated into <paramref name="buffer"/> is interleaved by channel in normal PCM fashion: Left, Right, Left, Right, Left, Right.
+        /// <para>
+        /// This method is not thread-safe.  All calls to <see cref="ReadSamples(float[], int, int)"/>, <see cref="ReadSamples(Span{float})"/>,
+        /// and <see cref="SeekTo(long, SeekOrigin)"/> on a given instance must be made from a single thread.
+        /// To avoid blocking a UI or async context, open the instance with <see cref="OpenAsync(string, CancellationToken)"/>
+        /// and call this method from a dedicated background thread.
+        /// </para>
+        /// </remarks>
         public int ReadSamples(Span<float> buffer)
         {
             return _streamDecoder.Read(buffer);
