@@ -1,4 +1,5 @@
-﻿using NVorbis.Contracts;
+using NVorbis.Contracts;
+using System.Threading;
 
 namespace NVorbis
 {
@@ -6,8 +7,10 @@ namespace NVorbis
     {
         private int _sampleRate;
 
-        private readonly int[] _packetBits = new int[2];
-        private readonly int[] _packetSamples = new int[2];
+        // Each slot packs (bits: int hi, samples: int lo) so InstantBitRate reads
+        // a consistent pair with a single Volatile.Read — no lock required.
+        private long _packetSlot0;
+        private long _packetSlot1;
         private int _packetIndex;
 
         private long _totalSamples;
@@ -15,25 +18,19 @@ namespace NVorbis
         private long _headerBits;
         private long _containerBits;
         private long _wasteBits;
-
-        private object _lock = new object();
         private int _packetCount;
+
+        private static long Pack(int bits, int samples) => ((long)bits << 32) | (uint)samples;
+        private static int UnpackBits(long slot) => (int)(slot >> 32);
+        private static int UnpackSamples(long slot) => (int)slot;
 
         public int EffectiveBitRate
         {
             get
             {
-                long samples, bits;
-                lock (_lock)
-                {
-                    samples = _totalSamples;
-                    bits = _audioBits + _headerBits + _containerBits + _wasteBits;
-                }
-                if (samples > 0)
-                {
-                    return (int)(((double)bits / samples) * _sampleRate);
-                }
-                return 0;
+                var samples = _totalSamples;
+                var bits = _audioBits + _headerBits + _containerBits + _wasteBits;
+                return samples > 0 ? (int)(((double)bits / samples) * _sampleRate) : 0;
             }
         }
 
@@ -41,17 +38,11 @@ namespace NVorbis
         {
             get
             {
-                int samples, bits;
-                lock (_lock)
-                {
-                    bits = _packetBits[0] + _packetBits[1];
-                    samples = _packetSamples[0] + _packetSamples[1];
-                }
-                if (samples > 0)
-                {
-                    return (int)(((double)bits / samples) * _sampleRate);
-                }
-                return 0;
+                var slot0 = Volatile.Read(ref _packetSlot0);
+                var slot1 = Volatile.Read(ref _packetSlot1);
+                var bits = UnpackBits(slot0) + UnpackBits(slot1);
+                var samples = UnpackSamples(slot0) + UnpackSamples(slot1);
+                return samples > 0 ? (int)(((double)bits / samples) * _sampleRate) : 0;
             }
         }
 
@@ -67,57 +58,47 @@ namespace NVorbis
 
         public void ResetStats()
         {
-            lock (_lock)
-            {
-                _packetBits[0] = _packetBits[1] = 0;
-                _packetSamples[0] = _packetSamples[1] = 0;
-                _packetIndex = 0;
-                _packetCount = 0;
-                _audioBits = 0;
-                _totalSamples = 0;
-                _headerBits = 0;
-                _containerBits = 0;
-                _wasteBits = 0;
-            }
+            Volatile.Write(ref _packetSlot0, 0L);
+            Volatile.Write(ref _packetSlot1, 0L);
+            _packetIndex = 0;
+            _packetCount = 0;
+            _audioBits = 0;
+            _totalSamples = 0;
+            _headerBits = 0;
+            _containerBits = 0;
+            _wasteBits = 0;
         }
 
         internal void SetSampleRate(int sampleRate)
         {
-            lock (_lock)
-            {
-                _sampleRate = sampleRate;
-
-                ResetStats();
-            }
+            _sampleRate = sampleRate;
+            ResetStats();
         }
 
         internal void AddPacket(int samples, int bits, int waste, int container)
         {
-            lock (_lock)
+            if (samples >= 0)
             {
-                if (samples >= 0)
-                {
-                    // audio packet
-                    _audioBits += bits;
-                    _wasteBits += waste;
-                    _containerBits += container;
-                    _totalSamples += samples;
-                    _packetBits[_packetIndex] = bits + waste;
-                    _packetSamples[_packetIndex] = samples;
-                    _packetCount++;
-
-                    if (++_packetIndex == 2)
-                    {
-                        _packetIndex = 0;
-                    }
-                }
+                // audio packet
+                _audioBits += bits;
+                _wasteBits += waste;
+                _containerBits += container;
+                _totalSamples += samples;
+                var slot = Pack(bits + waste, samples);
+                if (_packetIndex == 0)
+                    Volatile.Write(ref _packetSlot0, slot);
                 else
-                {
-                    // header packet
-                    _headerBits += bits;
-                    _wasteBits += waste;
-                    _containerBits += container;
-                }
+                    Volatile.Write(ref _packetSlot1, slot);
+                _packetCount++;
+                if (++_packetIndex == 2)
+                    _packetIndex = 0;
+            }
+            else
+            {
+                // header packet
+                _headerBits += bits;
+                _wasteBits += waste;
+                _containerBits += container;
             }
         }
     }
