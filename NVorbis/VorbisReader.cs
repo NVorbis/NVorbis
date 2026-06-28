@@ -2,7 +2,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -103,14 +102,6 @@ namespace NVorbis
         public static Task<VorbisReader> OpenAsync(Stream stream, bool closeOnDispose = true, CancellationToken cancellationToken = default)
             => Task.Run(() => new VorbisReader(stream, closeOnDispose), cancellationToken);
 
-#pragma warning disable CS1591 // Missing XML comment for publicly visible type or member
-        [Obsolete("Use \"new StreamDecoder(Contracts.IPacketProvider)\" and the container's NewStreamCallback or Streams property instead.", true)]
-        public VorbisReader(Contracts.IContainerReader containerReader) => throw new NotSupportedException();
-
-        [Obsolete("Use \"new StreamDecoder(Contracts.IPacketProvider)\" instead.", true)]
-        public VorbisReader(Contracts.IPacketProvider packetProvider) => throw new NotSupportedException();
-#pragma warning restore CS1591 // Missing XML comment for publicly visible type or member
-
         private bool ProcessNewStream(Contracts.IPacketProvider packetProvider)
         {
             var decoder = CreateStreamDecoder(packetProvider);
@@ -188,24 +179,6 @@ namespace NVorbis
         public ITagData Tags => _streamDecoder.Tags;
 
         /// <summary>
-        /// Gets the encoder's vendor string for the current selected Vorbis stream
-        /// </summary>
-        [Obsolete("Use .Tags.EncoderVendor instead.")]
-        public string Vendor => _streamDecoder.Tags.EncoderVendor;
-
-        /// <summary>
-        /// Gets the comments in the current selected Vorbis stream
-        /// </summary>
-        [Obsolete("Use .Tags.All instead.")]
-        public string[] Comments => _streamDecoder.Tags.All.SelectMany(k => k.Value, (kvp, Item) => $"{kvp.Key}={Item}").ToArray();
-
-        /// <summary>
-        /// Gets whether the previous short sample count was due to a parameter change in the stream.
-        /// </summary>
-        [Obsolete("No longer supported.  Will receive a new stream when parameters change.", true)]
-        public bool IsParameterChange => throw new NotSupportedException();
-
-        /// <summary>
         /// Gets the number of bits read that are related to framing and transport alone.
         /// </summary>
         public long ContainerOverheadBits => _containerReader?.ContainerBits ?? 0;
@@ -219,32 +192,6 @@ namespace NVorbis
         /// Gets the currently-selected stream's index.
         /// </summary>
         public int StreamIndex => _decoders.IndexOf(_streamDecoder);
-
-        /// <summary>
-        /// Returns the number of logical streams found so far in the physical container.
-        /// </summary>
-        [Obsolete("Use .Streams.Count instead.")]
-        public int StreamCount => _decoders.Count;
-
-        /// <summary>
-        /// Gets or Sets the current timestamp of the decoder.  Is the timestamp before the next sample to be decoded.
-        /// </summary>
-        [Obsolete("Use VorbisReader.TimePosition instead.")]
-        public TimeSpan DecodedTime
-        {
-            get => _streamDecoder.TimePosition;
-            set => TimePosition = value;
-        }
-
-        /// <summary>
-        /// Gets or Sets the current position of the next sample to be decoded.
-        /// </summary>
-        [Obsolete("Use VorbisReader.SamplePosition instead.")]
-        public long DecodedPosition
-        {
-            get => _streamDecoder.SamplePosition;
-            set => SamplePosition = value;
-        }
 
         /// <summary>
         /// Gets the total duration of the decoded stream.
@@ -303,12 +250,6 @@ namespace NVorbis
         /// Gets the <see cref="IStreamStats"/> instance for this stream.
         /// </summary>
         public IStreamStats StreamStats => _streamDecoder.Stats;
-
-        /// <summary>
-        /// Gtes stats from each decoder stream available.
-        /// </summary>
-        [Obsolete("Use Streams[*].Stats instead.", true)]
-        public IVorbisStreamStatus[] Stats => throw new NotSupportedException();
 
         /// <summary>
         /// Searches for the next stream in a concatenated file.  Will raise <see cref="NewStream"/> for the found stream, and will add it to <see cref="Streams"/> if not marked as ignored.
@@ -407,12 +348,6 @@ namespace NVorbis
         {
             return _streamDecoder.Read(buffer);
         }
-
-        /// <summary>
-        /// Acknowledges a parameter change as signalled by <see cref="ReadSamples(float[], int, int)"/>.
-        /// </summary>
-        [Obsolete("No longer needed.", true)]
-        public void ClearParameterChange() => throw new NotSupportedException();
 
         #endregion
     }
