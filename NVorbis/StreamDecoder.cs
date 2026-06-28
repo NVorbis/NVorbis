@@ -314,29 +314,20 @@ namespace NVorbis
         /// Reads samples into the specified buffer.
         /// </summary>
         /// <param name="buffer">The buffer to read the samples into.</param>
-        /// <param name="offset">The index to start reading samples into the buffer.</param>
-        /// <param name="count">The number of samples that should be read into the buffer.  Must be a multiple of <see cref="Channels"/>.</param>
         /// <returns>The number of samples read into the buffer.</returns>
-        /// <exception cref="ArgumentOutOfRangeException">Thrown when the buffer is too small or <paramref name="offset"/> is less than zero.</exception>
         /// <remarks>The data populated into <paramref name="buffer"/> is interleaved by channel in normal PCM fashion: Left, Right, Left, Right, Left, Right</remarks>
-        public int Read(Span<float> buffer, int offset, int count)
+        public int Read(Span<float> buffer)
         {
-            if (offset < 0 || offset + count > buffer.Length) throw new ArgumentOutOfRangeException(nameof(offset));
-            if (count % _channels != 0) throw new ArgumentOutOfRangeException(nameof(count), "Must be a multiple of Channels!");
             if (_packetProvider == null) throw new ObjectDisposedException(nameof(StreamDecoder));
 
             // if the caller didn't ask for any data, bail early
-            if (count == 0)
+            if (buffer.IsEmpty)
             {
                 return 0;
             }
 
-            // save off value to track when we're done with the request
-            var idx = offset;
-            var tgt = offset + count;
-
-            // try to fill the buffer; drain the last buffer if EOS, resync, bad packet, or parameter change
-            while (idx < tgt)
+            int count = 0;
+            while (buffer.Length >= _channels)
             {
                 // if we don't have any more valid data in the current packet, read in the next packet
                 if (_prevPacketStart == _prevPacketEnd)
@@ -350,7 +341,7 @@ namespace NVorbis
                         break;
                     }
 
-                    if (!ReadNextPacket((idx - offset) / _channels, out var samplePosition))
+                    if (!ReadNextPacket(count / _channels, out var samplePosition))
                     {
                         // drain the current packet (the windowing will fade it out)
                         _prevPacketEnd = _prevPacketStop;
@@ -360,27 +351,27 @@ namespace NVorbis
                     if (samplePosition.HasValue && !_hasPosition)
                     {
                         _hasPosition = true;
-                        _currentPosition = samplePosition.Value - (_prevPacketEnd - _prevPacketStart) - (idx - offset) / _channels;
+                        _currentPosition = samplePosition.Value - (_prevPacketEnd - _prevPacketStart) - count / _channels;
                     }
                 }
 
                 // we read out the valid samples from the previous packet
-                var copyLen = Math.Min((tgt - idx) / _channels, _prevPacketEnd - _prevPacketStart);
+                var copyLen = Math.Min(buffer.Length / _channels, _prevPacketEnd - _prevPacketStart) * _channels;
                 if (copyLen > 0)
                 {
+                    int written;
                     if (ClipSamples)
                     {
-                        idx += ClippingCopyBuffer(buffer, idx, copyLen);
+                        written = ClippingCopyBuffer(buffer.Slice(0, copyLen));
                     }
                     else
                     {
-                        idx += CopyBuffer(buffer, idx, copyLen);
+                        written = CopyBuffer(buffer.Slice(0, copyLen));
                     }
+                    count += written;
+                    buffer = buffer.Slice(written);
                 }
             }
-
-            // update the count of floats written
-            count = idx - offset;
 
             // update the position
             _currentPosition += count / _channels;
@@ -389,30 +380,49 @@ namespace NVorbis
             return count;
         }
 
-        private int ClippingCopyBuffer(Span<float> target, int targetIndex, int count)
+        /// <summary>
+        /// Reads samples into the specified buffer.
+        /// </summary>
+        /// <param name="buffer">The buffer to read the samples into.</param>
+        /// <param name="offset">The index to start reading samples into the buffer.</param>
+        /// <param name="count">The number of samples that should be read into the buffer.  Must be a multiple of <see cref="Channels"/>.</param>
+        /// <returns>The number of samples read into the buffer.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when the buffer is too small or <paramref name="offset"/> is less than zero.</exception>
+        /// <remarks>The data populated into <paramref name="buffer"/> is interleaved by channel in normal PCM fashion: Left, Right, Left, Right, Left, Right</remarks>
+        [Obsolete("Use Read(Span<float>) instead.")]
+        public int Read(Span<float> buffer, int offset, int count)
         {
-            var idx = targetIndex;
-            for (; count > 0; _prevPacketStart++, count--)
+            if (offset < 0 || offset + count > buffer.Length) throw new ArgumentOutOfRangeException(nameof(offset));
+            if (count % _channels != 0) throw new ArgumentOutOfRangeException(nameof(count), "Must be a multiple of Channels!");
+            return Read(buffer.Slice(offset, count));
+        }
+
+        private int ClippingCopyBuffer(Span<float> target)
+        {
+            var idx = 0;
+            while (idx < target.Length)
             {
                 for (var ch = 0; ch < _channels; ch++)
                 {
                     target[idx++] = Utils.ClipValue(_prevPacketBuf[ch][_prevPacketStart], ref _hasClipped);
                 }
+                ++_prevPacketStart;
             }
-            return idx - targetIndex;
+            return idx;
         }
 
-        private int CopyBuffer(Span<float> target, int targetIndex, int count)
+        private int CopyBuffer(Span<float> target)
         {
-            var idx = targetIndex;
-            for (; count > 0; _prevPacketStart++, count--)
+            var idx = 0;
+            while (idx < target.Length)
             {
                 for (var ch = 0; ch < _channels; ch++)
                 {
                     target[idx++] = _prevPacketBuf[ch][_prevPacketStart];
                 }
+                ++_prevPacketStart;
             }
-            return idx - targetIndex;
+            return idx;
         }
 
         private bool ReadNextPacket(int bufferedSamples, out long? samplePosition)

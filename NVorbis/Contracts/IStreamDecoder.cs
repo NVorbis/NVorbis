@@ -96,11 +96,20 @@ namespace NVorbis.Contracts
         /// Reads samples into the specified buffer.
         /// </summary>
         /// <param name="buffer">The buffer to read the samples into.</param>
+        /// <returns>The number of samples read into the buffer.</returns>
+        /// <remarks>The data populated into <paramref name="buffer"/> is interleaved by channel in normal PCM fashion: Left, Right, Left, Right, Left, Right</remarks>
+        int Read(Span<float> buffer);
+
+        /// <summary>
+        /// Reads samples into the specified buffer.
+        /// </summary>
+        /// <param name="buffer">The buffer to read the samples into.</param>
         /// <param name="offset">The index to start reading samples into the buffer.</param>
         /// <param name="count">The number of samples that should be read into the buffer.  Must be a multiple of <see cref="Channels"/>.</param>
         /// <returns>The number of samples read into the buffer.</returns>
         /// <exception cref="ArgumentOutOfRangeException">Thrown when the buffer is too small or <paramref name="offset"/> is less than zero.</exception>
         /// <remarks>The data populated into <paramref name="buffer"/> is interleaved by channel in normal PCM fashion: Left, Right, Left, Right, Left, Right</remarks>
+        [Obsolete("Use Read(Span<float>) instead.")]
         int Read(Span<float> buffer, int offset, int count);
     }
 }

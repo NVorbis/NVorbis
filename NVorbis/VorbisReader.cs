@@ -345,7 +345,7 @@ namespace NVorbis
             count -= count % _streamDecoder.Channels;
             if (count > 0)
             {
-                return _streamDecoder.Read(buffer, offset, count);
+                return _streamDecoder.Read(new Span<float>(buffer, offset, count));
             }
             return 0;
         }
@@ -359,13 +359,7 @@ namespace NVorbis
         /// <remarks>The data populated into <paramref name="buffer"/> is interleaved by channel in normal PCM fashion: Left, Right, Left, Right, Left, Right</remarks>
         public int ReadSamples(Span<float> buffer)
         {
-            // don't allow non-aligned reads (always on a full sample boundary!)
-            int count = buffer.Length - buffer.Length % _streamDecoder.Channels;
-            if (count > 0)
-            {
-                return _streamDecoder.Read(buffer, 0, count);
-            }
-            return 0;
+            return _streamDecoder.Read(buffer);
         }
 
         /// <summary>
