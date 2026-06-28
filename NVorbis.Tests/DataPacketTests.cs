@@ -1,3 +1,4 @@
+using NVorbis.Contracts;
 using System;
 using Xunit;
 
@@ -59,6 +60,89 @@ namespace NVorbis.Tests
 
             // 72 total bits - 21 read = 51 remaining
             Assert.Equal(21, packet.BitsRead);
+        }
+
+        // ── TryPeekBits does not consume ─────────────────────────────────────
+
+        [Fact]
+        public void TryPeekBits_DoesNotAdvanceBitsRead()
+        {
+            var data = new byte[] { 0xAB, 0xCD };
+            var packet = new ByteArrayPacket(data);
+            packet.TryPeekBits(8, out _);
+            Assert.Equal(0, packet.BitsRead);
+        }
+
+        [Fact]
+        public void TryPeekBits_RepeatedCall_ReturnsSameValue()
+        {
+            var data = new byte[] { 0x5A };
+            var packet = new ByteArrayPacket(data);
+            var v1 = packet.TryPeekBits(8, out _);
+            var v2 = packet.TryPeekBits(8, out _);
+            Assert.Equal(v1, v2);
+        }
+
+        [Fact]
+        public void TryPeekBits_AtEnd_BitsReadIsZero()
+        {
+            var data = new byte[] { 0xFF };
+            var packet = new ByteArrayPacket(data);
+            packet.SkipBits(8);
+            packet.TryPeekBits(8, out var bitsRead);
+            Assert.Equal(0, bitsRead);
+        }
+
+        // ── ReadBits LSB-first ───────────────────────────────────────────────
+
+        [Fact]
+        public void ReadBits_SingleBit_ReturnsLsb()
+        {
+            // byte 0b00000001 → bit 0 = 1, bit 1 = 0
+            var data = new byte[] { 0x01 };
+            IPacket packet = new ByteArrayPacket(data);
+            Assert.Equal(1UL, packet.ReadBits(1));
+            Assert.Equal(0UL, packet.ReadBits(1));
+        }
+
+        [Fact]
+        public void ReadBits_LsbFirst_ByteValue()
+        {
+            // 0xB4 = 1011 0100; LSB-first 4 bits = 0100 = 4, next 4 bits = 1011 = 11
+            var data = new byte[] { 0xB4 };
+            IPacket packet = new ByteArrayPacket(data);
+            Assert.Equal(4UL, packet.ReadBits(4));
+            Assert.Equal(11UL, packet.ReadBits(4));
+        }
+
+        // ── BitsRead / BitsRemaining ─────────────────────────────────────────
+
+        [Fact]
+        public void BitsRead_AfterReadBits_Advances()
+        {
+            var data = new byte[] { 0xFF, 0xFF };
+            IPacket packet = new ByteArrayPacket(data);
+            packet.ReadBits(5);
+            Assert.Equal(5, packet.BitsRead);
+        }
+
+        [Fact]
+        public void BitsRemaining_DecreasesAsRead()
+        {
+            var data = new byte[] { 0xAA, 0xBB };
+            IPacket packet = new ByteArrayPacket(data);
+            int initial = packet.BitsRemaining;
+            packet.ReadBits(8);
+            Assert.Equal(initial - 8, packet.BitsRemaining);
+        }
+
+        [Fact]
+        public void SkipBits_AdvancesBitsRead()
+        {
+            var data = new byte[] { 0xFF, 0xFF };
+            var packet = new ByteArrayPacket(data);
+            packet.SkipBits(13);
+            Assert.Equal(13, packet.BitsRead);
         }
     }
 }

@@ -583,16 +583,29 @@ namespace NVorbis
 
             if (samplePosition < 0) throw new ArgumentOutOfRangeException(nameof(samplePosition));
 
-            // Seek to the packet whose granule range contains samplePosition, pre-rolling
-            // one packet back so the MDCT overlap is valid.  PacketProvider.SeekTo clamps
-            // to the first audio packet when samplePosition falls on the first data page
-            // (covers position 0 and the first ~block_size samples generically).
-            var pos = _packetProvider.SeekTo(samplePosition, 1, GetPacketGranules);
-            var rollForward = (int)(samplePosition - pos);
-
             // clear out old data
             ResetDecoder();
             _hasPosition = true;
+
+            long pos;
+            int rollForward;
+            try
+            {
+                // Seek to the packet whose granule range contains samplePosition, pre-rolling
+                // one packet back so the MDCT overlap is valid.  PacketProvider.SeekTo clamps
+                // to the first audio packet when samplePosition falls on the first data page
+                // (covers position 0 and the first ~block_size samples generically).
+                pos = _packetProvider.SeekTo(samplePosition, 1, GetPacketGranules);
+                rollForward = (int)(samplePosition - pos);
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                // the requested position is past the end of the stream
+                _currentPosition = _packetProvider.GetGranuleCount();
+                _prevPacketStart = _prevPacketEnd = 0;
+                _eosFound = true;
+                return;
+            }
 
             // read the pre-roll packet
             if (!ReadNextPacket(0, out _))
@@ -618,6 +631,18 @@ namespace NVorbis
             }
 
             // adjust our indexes to match what we want
+            while (_prevPacketStart + rollForward > _prevPacketEnd && !_eosFound)
+            {
+                var size = _prevPacketEnd - _prevPacketStart;
+                rollForward -= size;
+                if (!ReadNextPacket(0, out _))
+                {
+                    _prevPacketStart = _prevPacketEnd;
+                    rollForward = 0;
+                    break;
+                }
+            }
+
             _prevPacketStart += rollForward;
             _currentPosition = samplePosition;
         }

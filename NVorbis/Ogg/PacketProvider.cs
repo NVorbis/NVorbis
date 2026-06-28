@@ -167,9 +167,9 @@ namespace NVorbis.Ogg
             if (endGP != lastPageGranulePos)
             {
                 var diff = endGP - lastPageGranulePos;
-                if (GetIsVorbisBugDiff(diff))
+                if (diff > 0)
                 {
-                    if (diff > 0)
+                    if (GetIsVorbisBugDiff(diff))
                     {
                         // the last packet in the last page is a long block that was mis-counted by libvorbis
                         // if the requested granulePos is <= endGP, it's in that packet
@@ -181,21 +181,22 @@ namespace NVorbis.Ogg
                             return -1;
                         }
                     }
-                    else
+                    // if we're not on the first page, there's a problem...
+                    // technically there could still be a problem on the first page, but we're ignoring it
+                    else if (pageIndex > _reader.FirstDataPageIndex)
                     {
-                        // our pageGranulePos is wrong, so adjust everything and let the normal logic apply
-                        for (var i = 0; i < gps.Length; i++)
-                        {
-                            gps[i] -= diff;
-                        }
+                        // unknown error...
+                        throw new System.IO.InvalidDataException($"GranulePos mismatch: Page {pageIndex}, expected {lastPageGranulePos}, calculated {endGP}");
                     }
                 }
-                // if we're not on the first page, there's a problem...
-                // technically there could still be a problem on the first page, but we're ignoring it
-                else if (pageIndex > _reader.FirstDataPageIndex)
+                else
                 {
-                    // unknown error...
-                    throw new System.IO.InvalidDataException($"GranulePos mismatch: Page {pageIndex}, expected {lastPageGranulePos}, calculated {endGP}");
+                    // backward calculation over-counted samples (e.g., EOS-clipped last page);
+                    // shift gps up to align with the known previous-page boundary
+                    for (var i = 0; i < gps.Length; i++)
+                    {
+                        gps[i] -= diff;
+                    }
                 }
             }
 

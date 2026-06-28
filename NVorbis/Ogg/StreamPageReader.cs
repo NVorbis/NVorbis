@@ -143,6 +143,11 @@ namespace NVorbis.Ogg
                     {
                         pageIndex = FindPageForward(lastPageIndex, pageGP, granulePos);
                     }
+                    // if we're looking at the last page in the stream, there's nowhere else to go
+                    else if (lastPageIndex == _pageOffsets.Count - 1 && HasAllPages)
+                    {
+                        pageIndex = -1;
+                    }
                     // but of course, it's possible (though highly unlikely) that the last read page ended on the granule we're looking for.
                     else
                     {
@@ -161,9 +166,18 @@ namespace NVorbis.Ogg
         {
             while (!_firstDataPageIndex.HasValue)
             {
-                if (!GetPageRaw(_pageOffsets.Count, out _))
+                _reader.Lock();
+                try
                 {
-                    return -1;
+                    if (!_reader.ReadNextPage())
+                    {
+                        HasAllPages = true;
+                        return -1;
+                    }
+                }
+                finally
+                {
+                    _reader.Release();
                 }
             }
             return _firstDataPageIndex.Value;
