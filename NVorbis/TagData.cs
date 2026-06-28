@@ -9,7 +9,7 @@ namespace NVorbis
     {
         static readonly IReadOnlyList<string> s_emptyList = Array.Empty<string>();
 
-        Dictionary<string, IReadOnlyList<string>> _tags;
+        readonly Dictionary<string, IReadOnlyList<string>> _tags;
 
         public TagData(string vendor, string[] comments)
         {

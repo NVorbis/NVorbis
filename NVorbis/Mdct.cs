@@ -7,7 +7,7 @@ namespace NVorbis
     class Mdct : IMdct
     {
         readonly object _cacheLock = new object();
-        Dictionary<int, MdctImpl> _setupCache = new Dictionary<int, MdctImpl>();
+        readonly Dictionary<int, MdctImpl> _setupCache = new Dictionary<int, MdctImpl>();
 
         public void Reverse(float[] samples, int sampleCount)
         {

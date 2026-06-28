@@ -16,7 +16,7 @@ namespace NVorbis.Ogg
         private readonly int _firstPart;
         private readonly int[] _extraParts;
         private readonly int _partCount;
-        private IPacketReader _packetReader;                    // IntPtr
+        private readonly IPacketReader _packetReader;                    // IntPtr
         int _dataCount;
         Memory<byte> _data;
         int _dataIndex;                                         // 4

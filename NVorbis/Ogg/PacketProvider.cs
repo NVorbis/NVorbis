@@ -7,7 +7,7 @@ namespace NVorbis.Ogg
 {
     class PacketProvider : Contracts.IPacketProvider, IPacketReader
     {
-        private IStreamPageReader _reader;
+        private readonly IStreamPageReader _reader;
 
         private int _pageIndex;
         private int _packetIndex;
@@ -205,14 +205,7 @@ namespace NVorbis.Ogg
             {
                 if (gps[i] >= granulePos)
                 {
-                    if (i == 0)
-                    {
-                        granulePos = endGP;
-                    }
-                    else
-                    {
-                        granulePos = gps[i - 1];
-                    }
+                    granulePos = i == 0 ? endGP : gps[i - 1];
                     return i;
                 }
             }

@@ -9,7 +9,7 @@ namespace NVorbis
     {
         class Data : IFloorData
         {
-            internal int[] Posts = new int[64];
+            internal readonly int[] Posts = new int[64];
             internal int PostCount;
 
             public bool ExecuteChannel => (ForceEnergy || PostCount > 0) && !ForceNoEnergy;
@@ -241,15 +241,7 @@ namespace NVorbis
                 var val = data.Posts[i];
                 var highroom = _range - predicted;
                 var lowroom = predicted;
-                int room;
-                if (highroom < lowroom)
-                {
-                    room = highroom * 2;
-                }
-                else
-                {
-                    room = lowroom * 2;
-                }
+                int room = (highroom < lowroom ? highroom : lowroom) * 2;
                 if (val != 0)
                 {
                     stepFlags[lowOfs] = true;
@@ -303,14 +295,7 @@ namespace NVorbis
             var ady = Math.Abs(dy);
             var err = ady * (X - x0);
             var off = err / adx;
-            if (dy < 0)
-            {
-                return y0 - off;
-            }
-            else
-            {
-                return y0 + off;
-            }
+            return dy < 0 ? y0 - off : y0 + off;
         }
 
         void RenderLineMulti(int x0, int y0, int x1, int y1, float[] v)

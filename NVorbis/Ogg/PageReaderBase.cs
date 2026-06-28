@@ -16,7 +16,7 @@ namespace NVorbis.Ogg
         private int _overflowBufIndex;
 
         private Stream _stream;
-        private bool _closeOnDispose;
+        private readonly bool _closeOnDispose;
 
         protected PageReaderBase(Stream stream, bool closeOnDispose)
         {

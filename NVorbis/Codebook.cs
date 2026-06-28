@@ -135,16 +135,8 @@ namespace NVorbis
                     sparse = false;
                 }
 
-                int sortedCount;
+                int sortedCount = sparse ? total : 0;
                 // compute size of sorted tables
-                if (sparse)
-                {
-                    sortedCount = total;
-                }
-                else
-                {
-                    sortedCount = 0;
-                }
 
                 int[] values = null;
                 int[] codewords;
