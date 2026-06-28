@@ -277,9 +277,9 @@ namespace NVorbis
 
         int lookup1_values()
         {
-            var r = (int)Math.Floor(Math.Exp(Math.Log(Entries) / Dimensions));
+            var r = (int)MathF.Floor(MathF.Exp(MathF.Log(Entries) / Dimensions));
 
-            if (Math.Floor(Math.Pow(r + 1, Dimensions)) <= Entries) ++r;
+            if (MathF.Floor(MathF.Pow(r + 1, Dimensions)) <= Entries) ++r;
 
             return r;
         }

@@ -15,8 +15,8 @@ namespace NVorbis.Tests
         static readonly MethodInfo _synthBark =
             _floor0Type.GetMethod("SynthesizeBarkCurve", BindingFlags.NonPublic | BindingFlags.Instance)!;
 
-        static double ToBark(double lsp) =>
-            (double)_toBark.Invoke(null, new object[] { lsp })!;
+        static float ToBark(float lsp) =>
+            (float)_toBark.Invoke(null, new object[] { lsp })!;
 
         static object MakeFloor0(int rate, int barkMapSize)
         {
@@ -34,36 +34,27 @@ namespace NVorbis.Tests
         // ── toBARK precision ────────────────────────────────────────────────
 
         [Fact]
-        public void ToBark_ReturnType_IsDouble()
+        public void ToBark_ReturnType_IsFloat()
         {
-            Assert.Equal(typeof(double), _toBark.ReturnType);
-        }
-
-        [Fact]
-        public void ToBark_Result_HasSubFloatPrecision()
-        {
-            // If toBARK still returned float the double value would equal its own
-            // float cast. A true double return carries bits below float precision.
-            double val = ToBark(22050.0);
-            Assert.NotEqual((double)(float)val, val);
+            Assert.Equal(typeof(float), _toBark.ReturnType);
         }
 
         [Fact]
         public void ToBark_HalfNyquist_IsPositive()
         {
-            Assert.True(ToBark(11025.0) > 0.0);
+            Assert.True(ToBark(11025f) > 0f);
         }
 
         [Fact]
         public void ToBark_Zero_IsZero()
         {
-            Assert.Equal(0.0, ToBark(0.0));
+            Assert.Equal(0f, ToBark(0f));
         }
 
         [Fact]
         public void ToBark_IsMonotonicallyIncreasing()
         {
-            Assert.True(ToBark(11025.0) < ToBark(22050.0));
+            Assert.True(ToBark(11025f) < ToBark(22050f));
         }
 
         // ── SynthesizeBarkCurve ─────────────────────────────────────────────

@@ -79,9 +79,9 @@ namespace NVorbis
 
             for (int i = 0; i < left; i++)
             {
-                var x = (float)Math.Sin((i + .5) / left * M_PI2);
+                var x = MathF.Sin((i + .5f) / left * M_PI2);
                 x *= x;
-                array[leftbegin + i] = (float)Math.Sin(x * M_PI2);
+                array[leftbegin + i] = MathF.Sin(x * M_PI2);
             }
 
             for (int i = leftbegin + left; i < rightbegin; i++)
@@ -91,9 +91,9 @@ namespace NVorbis
 
             for (int i = 0; i < right; i++)
             {
-                var x = (float)Math.Sin((right - i - .5) / right * M_PI2);
+                var x = MathF.Sin((right - i - .5f) / right * M_PI2);
                 x *= x;
-                array[rightbegin + i] = (float)Math.Sin(x * M_PI2);
+                array[rightbegin + i] = MathF.Sin(x * M_PI2);
             }
         
             return array;
