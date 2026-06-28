@@ -341,14 +341,14 @@ namespace NVorbis.Ogg
         {
             // save off the packet data for the initial packet
             var firstPacketData = _reader.GetPagePackets(pageIndex)[packetIndex];
-
-            // create the packet list and add the item to it
-            var pktList = new List<int>(2) { (pageIndex << 8) | packetIndex };
+            var firstPart = (pageIndex << 8) | packetIndex;
 
             // make sure we handle continuations
             bool isLastPacket;
             bool isFirstPacket;
             var finalPage = pageIndex;
+            int[] extraParts = null;
+
             if (isContinued && packetIndex == packetCount - 1)
             {
                 // by definition, it's the first packet in the page it ends on
@@ -362,6 +362,7 @@ namespace NVorbis.Ogg
 
                 // go read the next page(s) that include this packet
                 var contPageIdx = pageIndex;
+                List<int> extraList = null;
                 while (isContinued)
                 {
                     if (!_reader.GetPage(++contPageIdx, out granulePos, out isResync, out var isContinuation, out isContinued, out packetCount, out var contPageOverhead))
@@ -383,9 +384,12 @@ namespace NVorbis.Ogg
                         isContinued = false;
                     }
 
-                    // add the packet to the list
-                    pktList.Add(contPageIdx << 8);
+                    // track the continuation page
+                    if (extraList == null) extraList = new List<int>();
+                    extraList.Add(contPageIdx << 8);
                 }
+
+                extraParts = extraList?.ToArray();
 
                 // we're now the first packet in the final page, so we'll act like it...
                 isLastPacket = packetCount == 1;
@@ -399,11 +403,11 @@ namespace NVorbis.Ogg
                 isLastPacket = packetIndex == packetCount - 1;
             }
 
-            // create the packet instance and populate it with the appropriate initial data
-            var packet = new Packet(pktList, this, firstPacketData)
-            {
-                IsResync = isResync,
-            };
+            // create the packet instance — avoid List<int> allocation for the common single-page case
+            var packet = extraParts != null
+                ? new Packet(firstPart, extraParts, this, firstPacketData)
+                : new Packet(firstPart, this, firstPacketData);
+            packet.IsResync = isResync;
 
             // if it's the first packet, associate the container overhead with it
             if (isFirstPacket)
