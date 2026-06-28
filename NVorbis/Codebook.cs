@@ -249,10 +249,10 @@ namespace NVorbis
                 for (var idx = 0; idx < Entries; idx++)
                 {
                     var last = 0.0;
-                    var idxDiv = 1;
+                    var idxDiv = 1L;
                     for (var i = 0; i < Dimensions; i++)
                     {
-                        var moff = (idx / idxDiv) % lookupValueCount;
+                        var moff = (int)((idx / idxDiv) % lookupValueCount);
                         var value = (float)multiplicands[moff] * deltaValue + minValue + last;
                         lookupTable[idx * Dimensions + i] = (float)value;
 

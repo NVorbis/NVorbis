@@ -19,6 +19,7 @@ namespace NVorbis
         private readonly bool _closeOnDispose;
 
         private IStreamDecoder _streamDecoder;
+        private bool _disposed;
 
         /// <summary>
         /// Raised when a new stream has been encountered in the file or container.
@@ -99,22 +100,19 @@ namespace NVorbis
         /// </summary>
         public void Dispose()
         {
-            if (_decoders != null)
-            {
-                foreach (var decoder in _decoders)
-                {
-                    decoder.Dispose();
-                }
-                _decoders.Clear();
-            }
+            if (_disposed) return;
+            _disposed = true;
 
-            if (_containerReader != null)
+            foreach (var decoder in _decoders)
             {
-                _containerReader.NewStreamCallback = null;
-                if (_closeOnDispose)
-                {
-                    _containerReader.Dispose();
-                }
+                decoder.Dispose();
+            }
+            _decoders.Clear();
+
+            _containerReader.NewStreamCallback = null;
+            if (_closeOnDispose)
+            {
+                _containerReader.Dispose();
             }
         }
 
