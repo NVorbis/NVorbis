@@ -79,7 +79,7 @@ namespace NVorbis
             _books = new ICodebook[_classifications][];
 
             acc = 0;
-            var maxstage = 0;
+            var maxStage = 0;
             int stages;
             for (int j = 0; j < _classifications; j++)
             {
@@ -87,7 +87,7 @@ namespace NVorbis
                 _books[j] = new ICodebook[stages];
                 if (stages > 0)
                 {
-                    maxstage = Math.Max(maxstage, stages);
+                    maxStage = Math.Max(maxStage, stages);
                     for (int k = 0; k < stages; k++)
                     {
                         if ((_cascade[j] & (1 << k)) > 0)
@@ -97,7 +97,7 @@ namespace NVorbis
                     }
                 }
             }
-            _maxStages = maxstage;
+            _maxStages = maxStage;
 
             _decodeMap = new int[partvals][];
             for (int j = 0; j < partvals; j++)

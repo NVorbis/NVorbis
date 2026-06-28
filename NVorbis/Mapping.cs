@@ -7,7 +7,7 @@ namespace NVorbis
     {
         IMdct _mdct;
         int[] _couplingAngle;
-        int[] _couplingMangitude;
+        int[] _couplingMagnitude;
         IFloor[] _submapFloor;
         IResidue[] _submapResidue;
         IFloor[] _channelFloor;
@@ -30,7 +30,7 @@ namespace NVorbis
 
             var couplingBits = Utils.ilog(channels - 1);
             _couplingAngle = new int[couplingSteps];
-            _couplingMangitude = new int[couplingSteps];
+            _couplingMagnitude = new int[couplingSteps];
             for (var j = 0; j < couplingSteps; j++)
             {
                 var magnitude = (int)packet.ReadBits(couplingBits);
@@ -40,7 +40,7 @@ namespace NVorbis
                     throw new System.IO.InvalidDataException("Invalid magnitude or angle in mapping header!");
                 }
                 _couplingAngle[j] = angle;
-                _couplingMangitude[j] = magnitude;
+                _couplingMagnitude[j] = magnitude;
             }
 
             if (0 != packet.ReadBits(2))
@@ -111,10 +111,10 @@ namespace NVorbis
             // make sure we handle no-energy channels correctly given the couplings..
             for (var i = 0; i < _couplingAngle.Length; i++)
             {
-                if (floorData[_couplingAngle[i]].ExecuteChannel || floorData[_couplingMangitude[i]].ExecuteChannel)
+                if (floorData[_couplingAngle[i]].ExecuteChannel || floorData[_couplingMagnitude[i]].ExecuteChannel)
                 {
                     floorData[_couplingAngle[i]].ForceEnergy = true;
-                    floorData[_couplingMangitude[i]].ForceEnergy = true;
+                    floorData[_couplingMagnitude[i]].ForceEnergy = true;
                 }
             }
 
@@ -136,9 +136,9 @@ namespace NVorbis
             // inverse coupling
             for (var i = _couplingAngle.Length - 1; i >= 0; i--)
             {
-                if (floorData[_couplingAngle[i]].ExecuteChannel || floorData[_couplingMangitude[i]].ExecuteChannel)
+                if (floorData[_couplingAngle[i]].ExecuteChannel || floorData[_couplingMagnitude[i]].ExecuteChannel)
                 {
-                    var magnitude = buffer[_couplingMangitude[i]];
+                    var magnitude = buffer[_couplingMagnitude[i]];
                     var angle = buffer[_couplingAngle[i]];
 
                     // we only have to do the first half; MDCT ignores the last half

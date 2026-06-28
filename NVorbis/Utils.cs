@@ -2,6 +2,7 @@
 {
     static class Utils
     {
+        const float ClipThreshold = 0.99999994f;
         static internal int ilog(int x)
         {
             int cnt = 0;
@@ -29,15 +30,15 @@
 
         static internal float ClipValue(float value, ref bool clipped)
         {
-            if (value > .99999994f)
+            if (value > ClipThreshold)
             {
                 clipped = true;
-                return 0.99999994f;
+                return ClipThreshold;
             }
-            if (value < -.99999994f)
+            if (value < -ClipThreshold)
             {
                 clipped = true;
-                return -0.99999994f;
+                return -ClipThreshold;
             }
             return value;
         }

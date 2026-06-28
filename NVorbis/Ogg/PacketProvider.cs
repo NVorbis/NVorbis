@@ -151,7 +151,7 @@ namespace NVorbis.Ogg
                 endGP -= getPacketGranuleCount(packet);
             }
 
-            // if we're contnued, the the continued packet ends on our calcualted endGP
+            // if we're continued, the continued packet ends on our calculated endGP
             if (firstRealPacket == 1)
             {
                 gps[0] = endGP;
