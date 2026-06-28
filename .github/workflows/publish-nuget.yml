@@ -9,21 +9,42 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v3
-      - name: Setup .NET Core
-        uses: actions/setup-dotnet@v3
+      - uses: actions/checkout@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 6.0.x
+          dotnet-version: 10.x
       - name: Build with dotnet
         run: dotnet build --configuration Release
       - name: Test with dotnet
         run: dotnet test
+
   deploy:
     needs: build
     runs-on: windows-latest
+    permissions:
+      id-token: write
+    environment: nuget-publish
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.x
       - name: Pack nuget Package
         run: dotnet pack --configuration Release
+      - name: Get NuGet publish token
+        id: get-token
+        shell: pwsh
+        run: |
+          $oidcToken = (Invoke-RestMethod `
+            -Uri "$env:ACTIONS_ID_TOKEN_REQUEST_URL&audience=api://AzureADTokenExchange" `
+            -Headers @{ Authorization = "Bearer $env:ACTIONS_ID_TOKEN_REQUEST_TOKEN" }).value
+          $nugetKey = (Invoke-RestMethod `
+            -Uri 'https://api.nuget.org/v1/publisher/authorize' `
+            -Method Post `
+            -Body (@{ OidcToken = $oidcToken } | ConvertTo-Json) `
+            -ContentType 'application/json').apiKey
+          "NUGET_API_KEY=$nugetKey" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
       - name: Push package to nuget
-        run: dotnet nuget push **/*.nupkg --api-key ${{ secrets.NUGET_DEPLOY_KEY }} --source https://api.nuget.org/v3/index.json
+        run: dotnet nuget push **/*.nupkg --api-key ${{ steps.get-token.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate

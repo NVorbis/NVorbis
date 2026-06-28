@@ -1,4 +1,4 @@
-NVorbis    [![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/ioctlLR/NVorbis?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+NVorbis
 -------
 
 NVorbis is a .Net library for decoding Xiph.org Vorbis files. It is designed to run in partial trust environments and does not require P/Invoke or unsafe code. It is built for .Net Standard 2.0 and .Net Framework 4.5.
@@ -43,7 +43,5 @@ using (var vorbis = new NVorbis.VorbisReader("path/to/file.ogg"))
 NVorbis can be downloaded on [NuGet](https://www.nuget.org/packages/NVorbis/).
 
 If you are using [NAudio](https://github.com/naudio/NAudio), support is available via [NAudio.Vorbis](https://github.com/NAudio/Vorbis).
-
-Support for [OpenTK](https://github.com/opentk/opentk) also exists and can be downloaded on [NuGet](https://www.nuget.org/packages/NVorbis.OpenTKSupport/).
 
 If you have any questions or comments, feel free to join us on Gitter.  If you have any issues or feature requests, please submit them in the issue tracker.
