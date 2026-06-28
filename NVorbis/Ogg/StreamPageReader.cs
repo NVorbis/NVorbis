@@ -368,13 +368,14 @@ namespace NVorbis.Ogg
 
         private void ReadPageData(int pageIndex, out long granulePos, out bool isContinuation, out bool isContinued, out int packetCount, out int pageOverhead)
         {
-            _cachedPagePackets = null;
             _lastPageGranulePos = granulePos = _reader.GranulePosition;
             _lastPageIsContinuation = isContinuation = (_reader.PageFlags & PageFlags.ContinuesPacket) != 0;
             _lastPageIsContinued = isContinued = _reader.IsContinued;
             _lastPagePacketCount = packetCount = _reader.PacketCount;
             _lastPageOverhead = pageOverhead = _reader.PageOverhead;
             _lastPageIndex = pageIndex;
+            // cache packets while the page is already loaded — avoids a second ReadPageAt in GetPagePackets
+            _cachedPagePackets = _reader.GetPackets();
         }
 
         public void SetEndOfStream()
