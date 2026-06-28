@@ -104,6 +104,7 @@ namespace NVorbis
                     _totalSamples += samples;
                     _packetBits[_packetIndex] = bits + waste;
                     _packetSamples[_packetIndex] = samples;
+                    _packetCount++;
 
                     if (++_packetIndex == 2)
                     {

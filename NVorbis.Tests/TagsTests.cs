@@ -70,5 +70,54 @@ namespace NVorbis.Tests
             using var reader = new VorbisReader(TestFile("3test.ogg"));
             Assert.NotNull(reader.Tags.All);
         }
+
+        // ── API correctness (key case-insensitivity, GetTagSingle/Multi) ─────
+
+        [Fact]
+        public void Tags_GetTagSingle_MissingKey_ReturnsEmpty()
+        {
+            using var reader = new VorbisReader(TestFile("3test.ogg"));
+            Assert.Equal(string.Empty, reader.Tags.GetTagSingle("NONEXISTENT_KEY_XYZ"));
+        }
+
+        [Fact]
+        public void Tags_GetTagMulti_MissingKey_ReturnsEmptyList()
+        {
+            using var reader = new VorbisReader(TestFile("3test.ogg"));
+            Assert.Empty(reader.Tags.GetTagMulti("NONEXISTENT_KEY_XYZ"));
+        }
+
+        [Fact]
+        public void Tags_GetTagSingle_CaseInsensitive()
+        {
+            using var reader = new VorbisReader(TestFile("3test.ogg"));
+            // Both forms must agree regardless of case
+            var upper = reader.Tags.GetTagSingle("TITLE");
+            var lower = reader.Tags.GetTagSingle("title");
+            Assert.Equal(upper, lower);
+        }
+
+        [Fact]
+        public void Tags_StandardProperties_NotNull()
+        {
+            using var reader = new VorbisReader(TestFile("3test.ogg"));
+            var tags = reader.Tags;
+            // All standard properties must return non-null (empty string / empty list when absent)
+            Assert.NotNull(tags.Title);
+            Assert.NotNull(tags.Album);
+            Assert.NotNull(tags.Artist);
+            Assert.NotNull(tags.TrackNumber);
+            Assert.NotNull(tags.Copyright);
+            Assert.NotNull(tags.License);
+            Assert.NotNull(tags.Organization);
+            Assert.NotNull(tags.Description);
+            Assert.NotNull(tags.Contact);
+            Assert.NotNull(tags.Isrc);
+            Assert.NotNull(tags.Version);
+            Assert.NotNull(tags.Performers);
+            Assert.NotNull(tags.Genres);
+            Assert.NotNull(tags.Dates);
+            Assert.NotNull(tags.Locations);
+        }
     }
 }
