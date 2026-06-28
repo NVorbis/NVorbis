@@ -385,7 +385,8 @@ namespace NVorbis.Ogg
                     }
 
                     // track the continuation page
-                    (extraList ??= new List<int>()).Add(contPageIdx << 8);
+                    if (extraList == null) extraList = new List<int>();
+                    extraList.Add(contPageIdx << 8);
                 }
 
                 extraParts = extraList?.ToArray();
