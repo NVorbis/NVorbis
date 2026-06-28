@@ -286,11 +286,21 @@ namespace NVorbis.Ogg
 
             var pgIdx = pageIndex;
             var pktIdx = packetIndex;
+            var firstDataPage = _reader.FirstDataPageIndex;
 
             while (pktIdx < (isContinuation ? 1: 0))
             {
                 // can't merge across resync
                 if (isContinuation && isResync) return false;
+
+                // walked back to the first audio page without resolving — snap to stream
+                // beginning, consistent with the SeekTo first-page shortcut
+                if (pgIdx <= firstDataPage)
+                {
+                    pageIndex = firstDataPage;
+                    packetIndex = 0;
+                    return true;
+                }
 
                 // get the previous packet
                 var wasContinuation = isContinuation;
