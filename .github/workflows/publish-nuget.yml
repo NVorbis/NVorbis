@@ -33,18 +33,10 @@ jobs:
           dotnet-version: 10.x
       - name: Pack nuget Package
         run: dotnet pack --configuration Release
-      - name: Get NuGet publish token
-        id: get-token
-        shell: pwsh
-        run: |
-          $oidcToken = (Invoke-RestMethod `
-            -Uri "$env:ACTIONS_ID_TOKEN_REQUEST_URL&audience=api://AzureADTokenExchange" `
-            -Headers @{ Authorization = "Bearer $env:ACTIONS_ID_TOKEN_REQUEST_TOKEN" }).value
-          $nugetKey = (Invoke-RestMethod `
-            -Uri 'https://api.nuget.org/v1/publisher/authorize' `
-            -Method Post `
-            -Body (@{ OidcToken = $oidcToken } | ConvertTo-Json) `
-            -ContentType 'application/json').apiKey
-          "NUGET_API_KEY=$nugetKey" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+      - name: NuGet login (OIDC -> temp API key)
+        uses: NuGet/login@v1
+        id: login
+        with:
+          user: ${{ secrets.NUGET_USER }}
       - name: Push package to nuget
-        run: dotnet nuget push **/*.nupkg --api-key ${{ steps.get-token.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+        run: dotnet nuget push **/*.nupkg --api-key ${{ steps.login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
