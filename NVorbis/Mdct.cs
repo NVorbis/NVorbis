@@ -6,8 +6,6 @@ namespace NVorbis
 {
     class Mdct : IMdct
     {
-        const float M_PI = 3.14159265358979323846264f;
-
         readonly object _cacheLock = new object();
         Dictionary<int, MdctImpl> _setupCache = new Dictionary<int, MdctImpl>();
 
@@ -51,15 +49,15 @@ namespace NVorbis
                 int k, k2;
                 for (k = k2 = 0; k < _n4; ++k, k2 += 2)
                 {
-                    _a[k2] = (float)Math.Cos(4 * k * M_PI / n);
-                    _a[k2 + 1] = (float)-Math.Sin(4 * k * M_PI / n);
-                    _b[k2] = (float)Math.Cos((k2 + 1) * M_PI / n / 2) * .5f;
-                    _b[k2 + 1] = (float)Math.Sin((k2 + 1) * M_PI / n / 2) * .5f;
+                    _a[k2] = (float)Math.Cos(4.0 * k * Math.PI / n);
+                    _a[k2 + 1] = (float)-Math.Sin(4.0 * k * Math.PI / n);
+                    _b[k2] = (float)Math.Cos((k2 + 1) * Math.PI / n / 2) * .5f;
+                    _b[k2 + 1] = (float)Math.Sin((k2 + 1) * Math.PI / n / 2) * .5f;
                 }
                 for (k = k2 = 0; k < _n8; ++k, k2 += 2)
                 {
-                    _c[k2] = (float)Math.Cos(2 * (k2 + 1) * M_PI / n);
-                    _c[k2 + 1] = (float)-Math.Sin(2 * (k2 + 1) * M_PI / n);
+                    _c[k2] = (float)Math.Cos(2.0 * (k2 + 1) * Math.PI / n);
+                    _c[k2 + 1] = (float)-Math.Sin(2.0 * (k2 + 1) * Math.PI / n);
                 }
 
                 // now, calc the bit reverse table
