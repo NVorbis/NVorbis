@@ -13,6 +13,8 @@ namespace NVorbis.Tests
             _floor1Type.GetMethod("RenderPoint", BindingFlags.NonPublic | BindingFlags.Instance)!;
         static readonly MethodInfo _unwrapPosts =
             _floor1Type.GetMethod("UnwrapPosts", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        static readonly MethodInfo _apply =
+            _floor1Type.GetMethod("Apply", BindingFlags.Public | BindingFlags.Instance)!;
 
         static void SetField(object target, string name, object value) =>
             target.GetType().GetField(name, BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(target, value);
@@ -130,6 +132,71 @@ namespace NVorbis.Tests
             UnwrapPosts(floor, data);
             Assert.Equal(40, Posts(data)[0]);
             Assert.Equal(70, Posts(data)[1]);
+        }
+
+        // ── Apply: render the floor curve into the residue buffer ────────────
+
+        const float DbTable0 = 1.0649863e-07f; // inverse_dB_table[0]
+
+        // 2-post floor spanning [0, n); a single line from post 0 to post 1
+        static object MakeApplyFloor(int n, int multiplier)
+        {
+            var floor = Activator.CreateInstance(_floor1Type, nonPublic: true)!;
+            SetField(floor, "_range", 256);
+            SetField(floor, "_multiplier", multiplier);
+            SetField(floor, "_xList", new[] { 0, n });
+            SetField(floor, "_sortIdx", new[] { 0, 1 });
+            SetField(floor, "_lNeigh", new[] { 0, 0 });
+            SetField(floor, "_hNeigh", new[] { 0, 1 });
+            return floor;
+        }
+
+        static void Apply(object floor, object data, int blockSize, float[] residue) =>
+            _apply.Invoke(floor, new object[] { data, blockSize, residue });
+
+        [Fact]
+        public void Apply_FlatFloorAtZero_MultipliesByTableZero()
+        {
+            const int blockSize = 8; // n = 4
+            var floor = MakeApplyFloor(4, multiplier: 1);
+            var data = MakeData(0, 0); // both posts at y=0 → flat line at dB index 0
+
+            var residue = new[] { 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f };
+            Apply(floor, data, blockSize, residue);
+
+            // front half scaled by inverse_dB_table[0] (exact: 1f * x == x); back half untouched
+            for (int i = 0; i < 4; i++) Assert.Equal(DbTable0, residue[i]);
+            for (int i = 4; i < 8; i++) Assert.Equal(1f, residue[i]);
+        }
+
+        [Fact]
+        public void Apply_RisingFloor_ProducesMonotonicCurve()
+        {
+            const int blockSize = 8;
+            var floor = MakeApplyFloor(4, multiplier: 1);
+            var data = MakeData(0, 255); // rising from dB index 0 to 255
+
+            var residue = new[] { 1f, 1f, 1f, 1f };
+            Apply(floor, data, blockSize, residue);
+
+            // inverse_dB_table is strictly increasing, so a rising floor yields a rising curve
+            Assert.True(residue[1] > residue[0]);
+            Assert.True(residue[2] > residue[1]);
+            Assert.True(residue[3] > residue[2]);
+        }
+
+        [Fact]
+        public void Apply_NoPosts_ClearsResidue()
+        {
+            const int blockSize = 8;
+            var floor = MakeApplyFloor(4, multiplier: 1);
+            var data = MakeData(); // PostCount == 0
+
+            var residue = new[] { 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f };
+            Apply(floor, data, blockSize, residue);
+
+            // no energy → front half cleared
+            for (int i = 0; i < 4; i++) Assert.Equal(0f, residue[i]);
         }
     }
 }
