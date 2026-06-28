@@ -475,6 +475,17 @@ namespace NVorbis
 
         private float[][] DecodeNextPacket(out int packetStartindex, out int packetValidLength, out int packetTotalLength, out bool isEndOfStream, out long? samplePosition, out int bitsRead, out int bitsRemaining, out int containerOverheadBits)
         {
+            // initialize the outputs up front so the bad/short/non-audio packet paths can report real
+            // bit counts to the stats without being clobbered by a trailing reset block
+            packetStartindex = 0;
+            packetValidLength = 0;
+            packetTotalLength = 0;
+            isEndOfStream = false;
+            samplePosition = null;
+            bitsRead = 0;
+            bitsRemaining = 0;
+            containerOverheadBits = 0;
+
             IPacket packet = null;
             try
             {
@@ -525,13 +536,6 @@ namespace NVorbis
                         bitsRemaining = packet.BitsRead + packet.BitsRemaining;
                     }
                 }
-                packetStartindex = 0;
-                packetValidLength = 0;
-                packetTotalLength = 0;
-                samplePosition = null;
-                bitsRead = 0;
-                bitsRemaining = 0;
-                containerOverheadBits = 0;
                 return null;
             }
             finally
@@ -636,7 +640,7 @@ namespace NVorbis
                 ResetDecoder();
                 // we'll use this to force ReadSamples to fail to read
                 _eosFound = true;
-                throw new InvalidOperationException("Could not read pre-roll packet!  Try seeking again prior to reading more samples.");
+                throw new InvalidOperationException("Could not read seek packet!  Try seeking again prior to reading more samples.");
             }
 
             // adjust our indexes to match what we want

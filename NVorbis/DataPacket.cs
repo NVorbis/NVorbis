@@ -108,7 +108,8 @@ namespace NVorbis
         /// </summary>
         abstract protected int TotalBits { get; }
 
-        bool GetFlag(PacketFlags flag) => _packetFlags.HasFlag(flag);
+        // bitwise test instead of Enum.HasFlag, which boxes on .NET Framework; this runs per-packet
+        bool GetFlag(PacketFlags flag) => (_packetFlags & flag) == flag;
 
         void SetFlag(PacketFlags flag, bool value)
         {

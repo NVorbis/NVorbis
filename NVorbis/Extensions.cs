@@ -18,7 +18,7 @@ namespace NVorbis
         /// <returns>The number of bytes actually read into the buffer.</returns>
         public static int Read(this IPacket packet, byte[] buffer, int index, int count)
         {
-            if (index < 0 || index >= buffer.Length) throw new ArgumentOutOfRangeException(nameof(index));
+            if (index < 0) throw new ArgumentOutOfRangeException(nameof(index));
             if (count < 0 || index + count > buffer.Length) throw new ArgumentOutOfRangeException(nameof(count));
             for (int i = 0; i < count; i++)
             {
