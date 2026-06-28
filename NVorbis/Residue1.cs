@@ -16,6 +16,7 @@ namespace NVorbis
                 {
                     return true;
                 }
+                // codebook.Dimensions >= 1 is guaranteed by Codebook.Init; i always advances
                 for (int j = 0; j < codebook.Dimensions; i++, j++)
                 {
                     res[offset + i] += codebook[entry, j];
