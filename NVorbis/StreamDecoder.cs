@@ -123,8 +123,7 @@ namespace NVorbis
                 return false;
             }
 
-            _currentPosition = 0;
-            ResetDecoder();
+            ResetDecoder(); // also clears _currentPosition
             return true;
         }
 
@@ -304,6 +303,14 @@ namespace NVorbis
             _eosFound = false;
             _hasClipped = false;
             _hasPosition = false;
+            // Clear the stale output position.  SeekTo() calls ResetDecoder() before reading its
+            // pre-roll/seek packets and only assigns _currentPosition afterward.  ReadNextPacket's
+            // end-of-stream valid-length backoff (see below) uses _currentPosition; if it still held
+            // the position left over from a previous decode, the backoff would compute a bogus
+            // negative valid length on a near-end re-seek -- returning zero samples (and, before the
+            // Read() guard, spinning forever).  Every caller sets _currentPosition right before or
+            // right after this reset, so clearing it here is safe.
+            _currentPosition = 0;
         }
 
         #endregion
@@ -329,8 +336,14 @@ namespace NVorbis
             int count = 0;
             while (buffer.Length >= _channels)
             {
-                // if we don't have any more valid data in the current packet, read in the next packet
-                if (_prevPacketStart == _prevPacketEnd)
+                // If we don't have any more valid data in the current packet, read in the next packet.
+                // Use ">=" rather than "==": a seek near the end of the stream can leave the decode
+                // state with _prevPacketEnd < _prevPacketStart (a negative valid length).  With "=="
+                // that state would never re-enter this block to refill, yet copyLen below would be
+                // non-positive, so neither branch makes progress and Read() spins forever (issue #40).
+                // Treating "no valid samples available" (start >= end) the same as "exhausted" routes
+                // the degenerate state into the EOS/refill handling and the loop terminates.
+                if (_prevPacketStart >= _prevPacketEnd)
                 {
                     if (_eosFound)
                     {
