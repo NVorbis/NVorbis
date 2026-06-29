@@ -329,8 +329,14 @@ namespace NVorbis
             int count = 0;
             while (buffer.Length >= _channels)
             {
-                // if we don't have any more valid data in the current packet, read in the next packet
-                if (_prevPacketStart == _prevPacketEnd)
+                // If we don't have any more valid data in the current packet, read in the next packet.
+                // Use ">=" rather than "==": a seek near the end of the stream can leave the decode
+                // state with _prevPacketEnd < _prevPacketStart (a negative valid length).  With "=="
+                // that state would never re-enter this block to refill, yet copyLen below would be
+                // non-positive, so neither branch makes progress and Read() spins forever (issue #40).
+                // Treating "no valid samples available" (start >= end) the same as "exhausted" routes
+                // the degenerate state into the EOS/refill handling and the loop terminates.
+                if (_prevPacketStart >= _prevPacketEnd)
                 {
                     if (_eosFound)
                     {
