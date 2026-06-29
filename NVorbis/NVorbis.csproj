@@ -6,13 +6,19 @@
     <Description>A fully managed implementation of a Xiph.org Foundation Ogg Vorbis decoder.</Description>
     <Company>Andrew Ward</Company>
     <Copyright>Copyright © Andrew Ward 2021</Copyright>
-    <AssemblyVersion>1.0.0.0</AssemblyVersion>
-    <FileVersion>1.0.0.0</FileVersion>
+    <AssemblyVersion>1.0.0.1</AssemblyVersion>
+    <FileVersion>1.0.0.1</FileVersion>
     <Authors>Andrew Ward</Authors>
-    <Version>1.0.0-alpha.1</Version>
+    <Version>1.0.0-alpha.2</Version>
     <PackageLicenseUrl></PackageLicenseUrl>
     <PackageProjectUrl>https://github.com/NVorbis/NVorbis</PackageProjectUrl>
     <PackageReleaseNotes>
+1.0.0-alpha.2:
+- Fix dead loop in StreamDecoder.Read on a near-end re-seek + over-read; re-seek is now correct/idempotent (#40, #74)
+- NuGet publish via GitHub OIDC trusted publishing (#73)
+
+1.0.0-alpha.1:
+
 Reliability and correctness:
 - Fix SeekOrigin.Current seeking backward instead of forward (#46)
 - Fix mux submap bounds check off-by-one (#47)
