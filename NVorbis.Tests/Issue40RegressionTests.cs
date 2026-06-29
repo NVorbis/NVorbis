@@ -53,17 +53,23 @@ namespace NVorbis.Tests
                 using var reader = new VorbisReader(TestFile(file));
                 long total = reader.TotalSamples;
                 long target = Math.Max(0, total - 40); // lands inside the final page
-                var buf = new float[reader.Channels * 4096]; // far larger than the samples that remain
+                var buf1 = new float[reader.Channels * 4096]; // far larger than the samples that remain
+                var buf2 = new float[reader.Channels * 4096];
 
                 // first read drains the tail to end-of-stream
                 reader.SeekTo(target, SeekOrigin.Begin);
-                reader.ReadSamples(buf, 0, buf.Length);
+                int first = reader.ReadSamples(buf1, 0, buf1.Length);
 
-                // re-seek into the same tail region and read again -- this used to spin forever
+                // re-seek into the same tail region and read again -- this used to spin forever,
+                // and after the loop guard alone it returned 0 (a stale _currentPosition drove the
+                // EOS valid-length backoff negative).  Re-seeking to the same position must be
+                // idempotent: the second read returns the same samples as the first.
                 reader.SeekTo(target, SeekOrigin.Begin);
-                int second = reader.ReadSamples(buf, 0, buf.Length);
+                int second = reader.ReadSamples(buf2, 0, buf2.Length);
 
-                Assert.True(second >= 0);
+                Assert.True(first > 0);
+                Assert.Equal(first, second);
+                Assert.Equal(buf1[..first], buf2[..second]);
             });
         }
 
@@ -77,11 +83,13 @@ namespace NVorbis.Tests
                 long target = Math.Max(0, reader.TotalSamples - 1);
                 var buf = new float[reader.Channels * 4096];
 
+                int expected = -1;
                 for (int i = 0; i < 5; i++)
                 {
                     reader.SeekTo(target, SeekOrigin.Begin);
                     int n = reader.ReadSamples(buf, 0, buf.Length);
-                    Assert.True(n >= 0);
+                    if (expected < 0) expected = n;
+                    Assert.Equal(expected, n); // every re-seek to the same position yields the same read
                 }
             });
         }

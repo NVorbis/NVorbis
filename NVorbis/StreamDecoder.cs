@@ -123,8 +123,7 @@ namespace NVorbis
                 return false;
             }
 
-            _currentPosition = 0;
-            ResetDecoder();
+            ResetDecoder(); // also clears _currentPosition
             return true;
         }
 
@@ -304,6 +303,14 @@ namespace NVorbis
             _eosFound = false;
             _hasClipped = false;
             _hasPosition = false;
+            // Clear the stale output position.  SeekTo() calls ResetDecoder() before reading its
+            // pre-roll/seek packets and only assigns _currentPosition afterward.  ReadNextPacket's
+            // end-of-stream valid-length backoff (see below) uses _currentPosition; if it still held
+            // the position left over from a previous decode, the backoff would compute a bogus
+            // negative valid length on a near-end re-seek -- returning zero samples (and, before the
+            // Read() guard, spinning forever).  Every caller sets _currentPosition right before or
+            // right after this reset, so clearing it here is safe.
+            _currentPosition = 0;
         }
 
         #endregion
