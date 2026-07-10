@@ -9,7 +9,7 @@
     <AssemblyVersion>1.0.0.1</AssemblyVersion>
     <FileVersion>1.0.0.1</FileVersion>
     <Authors>Andrew Ward</Authors>
-    <Version>1.0.0-alpha.2</Version>
+    <Version>1.0.0-beta.1</Version>
     <PackageProjectUrl>https://github.com/NVorbis/NVorbis</PackageProjectUrl>
     <PackageReleaseNotes>See https://github.com/NVorbis/NVorbis/releases for full release notes.</PackageReleaseNotes>
     <PackageTags>ogg vorbis xiph audio c# sound .NET</PackageTags>
