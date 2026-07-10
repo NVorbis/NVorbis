@@ -28,7 +28,7 @@ namespace NVorbis
         private readonly Lazy<ITagData> _tags;
 
         private long _currentPosition;
-        private long _granuleOffset;
+        private readonly long _granuleOffset;
         private bool _hasClipped;
         private bool _hasPosition;
         private bool _eosFound;
