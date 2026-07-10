@@ -28,6 +28,7 @@ namespace NVorbis
         private readonly Lazy<ITagData> _tags;
 
         private long _currentPosition;
+        private long _granuleOffset;
         private bool _hasClipped;
         private bool _hasPosition;
         private bool _eosFound;
@@ -64,6 +65,23 @@ namespace NVorbis
                 packet.Reset();
 
                 throw GetInvalidStreamException(packet);
+            }
+
+            if (_packetProvider.CanSeek)
+            {
+                try
+                {
+                    // Find where the stream's granule timeline starts.  Normally that's 0, but a
+                    // stream cut or captured mid-timeline starts later (issue #35); all positions
+                    // we report are normalized so the first decodable sample is position 0.
+                    // The provider is already positioned at the first audio packet, so this seek
+                    // doesn't change any state we care about.
+                    _granuleOffset = _packetProvider.SeekTo(0, 0, GetPacketGranules);
+                }
+                catch (ArgumentOutOfRangeException)
+                {
+                    // no audio pages; nothing to normalize
+                }
             }
 
             _tags = new Lazy<ITagData>(() => new TagData(_vendor, _comments));
@@ -356,15 +374,30 @@ namespace NVorbis
 
                     if (!ReadNextPacket(count / _channels, out var samplePosition))
                     {
-                        // drain the current packet (the windowing will fade it out)
-                        _prevPacketEnd = _prevPacketStop;
+                        // Drain the current packet (the windowing will fade it out). Left
+                        // unclamped, this can emit past the stream's stated end when EOS wasn't
+                        // flagged during decode (HasAllPages was still false, so the normal EOS
+                        // valid-length backoff in ReadNextPacket never ran) -- making the total
+                        // emitted length depend on whether TotalSamples was queried first. Clamp
+                        // the drain to what's actually left. GetGranuleCount() (via TotalSamples)
+                        // is cheap here: reaching this branch means the provider already hit EOF,
+                        // so HasAllPages is already true and no extra I/O is triggered.
+                        long drainSpan = _prevPacketStop - _prevPacketStart;
+                        if (_packetProvider.CanSeek)
+                        {
+                            var allowed = TotalSamples - (_currentPosition + count / _channels);
+                            drainSpan = Math.Min(drainSpan, Math.Max(0, allowed));
+                        }
+                        _prevPacketEnd = _prevPacketStart + (int)drainSpan;
                     }
 
-                    // if we need to pick up a position, and the packet had one, apply the position now
+                    // If we need to pick up a position, and the packet had one, apply it now.
+                    // _granuleOffset translates the stream's timeline (which doesn't necessarily
+                    // start at zero -- issue #35) to the 0-based positions we report.
                     if (samplePosition.HasValue && !_hasPosition)
                     {
                         _hasPosition = true;
-                        _currentPosition = samplePosition.Value - (_prevPacketEnd - _prevPacketStart) - count / _channels;
+                        _currentPosition = samplePosition.Value - _granuleOffset - (_prevPacketEnd - _prevPacketStart) - count / _channels;
                     }
                 }
 
@@ -453,7 +486,7 @@ namespace NVorbis
             if (samplePosition.HasValue && isEndOfStream)
             {
                 var actualEnd = _currentPosition + bufferedSamples + validLen - startIndex;
-                var diff = (int)(samplePosition.Value - actualEnd);
+                var diff = (int)(samplePosition.Value - _granuleOffset - actualEnd);
                 if (diff < 0)
                 {
                     validLen += diff;
@@ -621,16 +654,26 @@ namespace NVorbis
                 // one packet back so the MDCT overlap is valid.  PacketProvider.SeekTo clamps
                 // to the first audio packet when samplePosition falls on the first data page
                 // (covers position 0 and the first ~block_size samples generically).
-                pos = _packetProvider.SeekTo(samplePosition, 1, GetPacketGranules);
-                rollForward = (int)(samplePosition - pos);
+                // _granuleOffset translates our 0-based position onto the stream's timeline.
+                pos = _packetProvider.SeekTo(samplePosition + _granuleOffset, 1, GetPacketGranules);
+                rollForward = (int)(samplePosition + _granuleOffset - pos);
             }
             catch (ArgumentOutOfRangeException)
             {
                 // the requested position is past the end of the stream
-                _currentPosition = _packetProvider.GetGranuleCount();
+                _currentPosition = _packetProvider.GetGranuleCount() - _granuleOffset;
                 _prevPacketStart = _prevPacketEnd = 0;
                 _eosFound = true;
                 return;
+            }
+
+            if (rollForward < 0)
+            {
+                // The target falls in a granule hole -- a gap in the stream's timeline, e.g. a
+                // spliced stream (issue #39) -- so the provider gave us the first packet after
+                // the hole.  Snap forward to the first sample that actually exists.
+                samplePosition = pos - _granuleOffset;
+                rollForward = 0;
             }
 
             // read the pre-roll packet
@@ -638,7 +681,7 @@ namespace NVorbis
             {
                 // we'll use this to force ReadSamples to fail to read
                 _eosFound = true;
-                if (_packetProvider.GetGranuleCount() != samplePosition)
+                if (_packetProvider.GetGranuleCount() - _granuleOffset != samplePosition)
                 {
                     throw new InvalidOperationException("Could not read pre-roll packet!  Try seeking again prior to reading more samples.");
                 }
@@ -743,7 +786,7 @@ namespace NVorbis
         /// <summary>
         /// Gets the total number of samples in the decoded stream.
         /// </summary>
-        public long TotalSamples => _packetProvider?.GetGranuleCount() ?? throw new ObjectDisposedException(nameof(StreamDecoder));
+        public long TotalSamples => (_packetProvider ?? throw new ObjectDisposedException(nameof(StreamDecoder))).GetGranuleCount() - _granuleOffset;
 
         /// <summary>
         /// Gets or sets the current time position of the stream.
