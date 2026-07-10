@@ -10,7 +10,6 @@
     <FileVersion>1.0.0.1</FileVersion>
     <Authors>Andrew Ward</Authors>
     <Version>1.0.0-alpha.2</Version>
-    <PackageLicenseUrl></PackageLicenseUrl>
     <PackageProjectUrl>https://github.com/NVorbis/NVorbis</PackageProjectUrl>
     <PackageReleaseNotes>
 1.0.0-alpha.2:
@@ -52,7 +51,6 @@ Tests:
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <NeutralLanguage>en</NeutralLanguage>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
-    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <RepositoryUrl>https://github.com/NVorbis/NVorbis</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
