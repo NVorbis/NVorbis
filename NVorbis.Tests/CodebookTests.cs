@@ -1,4 +1,6 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using Xunit;
@@ -57,6 +59,44 @@ namespace NVorbis.Tests
 
             var ex = Assert.Throws<TargetInvocationException>(() => GetItem(range, 6));
             Assert.IsType<ArgumentOutOfRangeException>(ex.InnerException);
+        }
+
+        // FastRange is private, but it implements the public IReadOnlyList<int> (and thus
+        // IEnumerable<int>/IEnumerable), so a boxed instance can be used through those
+        // interfaces directly without further reflection.
+
+        [Fact]
+        public void Count_ReturnsConfiguredCount()
+        {
+            var range = (IReadOnlyList<int>)MakeRange(start: 3, count: 7);
+            Assert.Equal(7, range.Count);
+        }
+
+        [Fact]
+        public void GenericGetEnumerator_ThrowsNotSupportedException()
+        {
+            var range = (IEnumerable<int>)MakeRange(start: 0, count: 3);
+            Assert.Throws<NotSupportedException>(() => range.GetEnumerator());
+        }
+
+        [Fact]
+        public void NonGenericGetEnumerator_DelegatesAndThrowsNotSupportedException()
+        {
+            var range = (IEnumerable)MakeRange(start: 0, count: 3);
+            Assert.Throws<NotSupportedException>(() => range.GetEnumerator());
+        }
+
+        [Fact]
+        public void Get_ReusesThreadStaticInstance_AndMutatesInPlace()
+        {
+            // Get() caches one instance per thread and rewrites its fields on each call --
+            // callers must not hold a FastRange across a later Get() call and expect stable
+            // values. This is the behavior Codebook.Init relies on (use-immediately, don't cache).
+            var first = MakeRange(start: 1, count: 3);
+            var second = MakeRange(start: 10, count: 3);
+
+            Assert.Same(first, second);
+            Assert.Equal(10, GetItem(first, 0)); // `first` now reflects the second Get() call
         }
 
         // Codebook.Init validation: Dimensions == 0 must be rejected at load time.
