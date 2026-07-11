@@ -119,5 +119,60 @@ namespace NVorbis.Tests
             Assert.NotNull(tags.Dates);
             Assert.NotNull(tags.Locations);
         }
+
+        // ── Comment-parsing internals (constructed directly, no fixture needed) ─
+
+        [Fact]
+        public void TagData_CommentWithoutEquals_TreatsWholeCommentAsKeyWithEmptyValue()
+        {
+            var tags = new TagData("vendor", new[] { "NOEQUALSIGN" });
+            Assert.Equal(string.Empty, tags.GetTagSingle("NOEQUALSIGN"));
+            Assert.Equal(new[] { string.Empty }, tags.GetTagMulti("NOEQUALSIGN"));
+        }
+
+        [Fact]
+        public void TagData_DuplicateKey_GetTagMulti_ReturnsAllValuesInOrder()
+        {
+            var tags = new TagData("vendor", new[] { "GENRE=Rock", "GENRE=Jazz", "GENRE=Blues" });
+            Assert.Equal(new[] { "Rock", "Jazz", "Blues" }, tags.GetTagMulti("GENRE"));
+        }
+
+        [Fact]
+        public void TagData_DuplicateKey_GetTagSingle_ReturnsLastValue()
+        {
+            var tags = new TagData("vendor", new[] { "GENRE=Rock", "GENRE=Jazz" });
+            Assert.Equal("Jazz", tags.GetTagSingle("GENRE"));
+        }
+
+        [Fact]
+        public void TagData_DuplicateKey_GetTagSingleConcatenate_JoinsWithNewline()
+        {
+            var tags = new TagData("vendor", new[] { "GENRE=Rock", "GENRE=Jazz" });
+            Assert.Equal("Rock" + Environment.NewLine + "Jazz", tags.GetTagSingle("GENRE", concatenate: true));
+        }
+
+        [Fact]
+        public void TagData_BracketSyntax_PrefixesValueWithUppercasedBracketContent()
+        {
+            // "PERFORMER[vocals]=Alice" -> key "PERFORMER", value "VOCALS: Alice"
+            var tags = new TagData("vendor", new[] { "PERFORMER[vocals]=Alice" });
+            Assert.Equal("VOCALS: Alice", tags.GetTagSingle("PERFORMER"));
+        }
+
+        [Fact]
+        public void TagData_EmptyCommentsArray_AllIsEmpty()
+        {
+            var tags = new TagData("vendor", Array.Empty<string>());
+            Assert.Empty(tags.All);
+        }
+
+        [Fact]
+        public void TagData_All_ExposesRawDictionary()
+        {
+            var tags = new TagData("vendor", new[] { "TITLE=Song", "ARTIST=Band" });
+            Assert.Equal(2, tags.All.Count);
+            Assert.Equal("Song", tags.All["TITLE"][0]);
+            Assert.Equal("Band", tags.All["ARTIST"][0]);
+        }
     }
 }
