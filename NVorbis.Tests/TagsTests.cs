@@ -159,6 +159,16 @@ namespace NVorbis.Tests
             Assert.Equal("VOCALS: Alice", tags.GetTagSingle("PERFORMER"));
         }
 
+        // Fixed defect: a key containing '[' with no closing ']' used to compute a negative
+        // Substring length (bktIdx math assumed the bracket was always closed), throwing
+        // ArgumentOutOfRangeException instead of just treating '[' as a literal character.
+        [Fact]
+        public void TagData_UnclosedBracket_TreatedAsLiteralKey_DoesNotThrow()
+        {
+            var tags = new TagData("vendor", new[] { "PERFORMER[guitar=Jimi Hendrix" });
+            Assert.Equal("Jimi Hendrix", tags.GetTagSingle("PERFORMER[guitar"));
+        }
+
         [Fact]
         public void TagData_EmptyCommentsArray_AllIsEmpty()
         {

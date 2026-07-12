@@ -25,6 +25,79 @@ namespace NVorbis.Tests
             public IReadOnlyList<Contracts.IPacketProvider> GetStreams() =>
                 Array.Empty<Contracts.IPacketProvider>();
             public void Dispose() => Disposed = true;
+
+            // Test-only hook to simulate the container discovering another logical stream
+            // after construction (e.g. a chained/concatenated file), so tests can subscribe
+            // to VorbisReader.NewStream first and then observe how it's handled.
+            public void RaiseNewStream(Contracts.IPacketProvider pp) => NewStreamCallback(pp);
+        }
+
+        private sealed class FakePacketProvider : Contracts.IPacketProvider
+        {
+            public bool CanSeek => false;
+            public int StreamSerial => 1;
+            public Contracts.IPacket GetNextPacket() => null;
+            public Contracts.IPacket PeekNextPacket() => null;
+            public long SeekTo(long granulePos, int preRoll, Contracts.GetPacketGranuleCount getPacketGranuleCount) => 0;
+            public long GetGranuleCount() => 0;
+        }
+
+        // Minimal Contracts.IStreamDecoder spy that only tracks whether Dispose() was called.
+        private sealed class SpyStreamDecoder : Contracts.IStreamDecoder
+        {
+            public bool Disposed { get; private set; }
+            public int Channels => 0;
+            public int SampleRate => 0;
+            public int UpperBitrate => 0;
+            public int NominalBitrate => 0;
+            public int LowerBitrate => 0;
+            public Contracts.ITagData Tags => null;
+            public TimeSpan TotalTime => TimeSpan.Zero;
+            public long TotalSamples => 0;
+            public TimeSpan TimePosition { get; set; }
+            public long SamplePosition { get; set; }
+            public bool ClipSamples { get; set; }
+            public bool HasClipped => false;
+            public bool IsEndOfStream => false;
+            public Contracts.IStreamStats Stats => null;
+            public void SeekTo(TimeSpan timePosition, SeekOrigin seekOrigin = SeekOrigin.Begin) { }
+            public void SeekTo(long samplePosition, SeekOrigin seekOrigin = SeekOrigin.Begin) { }
+            public int Read(Span<float> buffer) => 0;
+            [Obsolete]
+            public int Read(Span<float> buffer, int offset, int count) => 0;
+            public void Dispose() => Disposed = true;
+        }
+
+        // Fixed defect: when a NewStream handler set ea.IgnoreStream, the freshly-constructed
+        // decoder (which owns real resources) was dropped without calling Dispose().
+        [Fact]
+        public void ProcessNewStream_StreamIgnoredViaEvent_DisposesDecoder()
+        {
+            var firstProvider = new FakePacketProvider();
+            var secondProvider = new FakePacketProvider();
+            var firstDecoder = new SpyStreamDecoder();
+            var secondDecoder = new SpyStreamDecoder();
+            var decoderByProvider = new Dictionary<Contracts.IPacketProvider, Contracts.IStreamDecoder>
+            {
+                [firstProvider] = firstDecoder,
+                [secondProvider] = secondDecoder,
+            };
+
+            StubContainerReader stub = null;
+            stub = new StubContainerReader(() =>
+            {
+                // Accepted: no NewStream subscriber exists yet at this point in construction.
+                stub.RaiseNewStream(firstProvider);
+                return true;
+            });
+
+            using var reader = new VorbisReader(Stream.Null, false, (_, __) => stub, pp => decoderByProvider[pp]);
+            reader.NewStream += (_, ea) => ea.IgnoreStream = true;
+
+            stub.RaiseNewStream(secondProvider);
+
+            Assert.True(secondDecoder.Disposed, "decoder must be disposed when the NewStream handler sets IgnoreStream");
+            Assert.False(firstDecoder.Disposed, "the accepted first stream's decoder must remain undisposed");
         }
 
         // When TryInit() throws, containerReader must be disposed — it was leaked before the fix.

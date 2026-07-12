@@ -124,6 +124,7 @@ namespace NVorbis
                 _decoders.Add(decoder);
                 return true;
             }
+            decoder.Dispose();
             return false;
         }
 
