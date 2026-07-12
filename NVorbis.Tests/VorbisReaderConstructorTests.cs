@@ -27,44 +27,24 @@ namespace NVorbis.Tests
             public void Dispose() => Disposed = true;
         }
 
-        private static void WithFactory(
-            Func<Stream, bool, Contracts.IContainerReader> factory,
-            Action body)
-        {
-            var original = VorbisReader.CreateContainerReader;
-            VorbisReader.CreateContainerReader = factory;
-            try { body(); }
-            finally { VorbisReader.CreateContainerReader = original; }
-        }
-
         // When TryInit() throws, containerReader must be disposed — it was leaked before the fix.
         [Fact]
         public void Constructor_TryInitThrows_DisposesContainerReader()
         {
-            StubContainerReader stub = null;
-            WithFactory(
-                (_, __) => stub = new StubContainerReader(() => throw new InvalidOperationException("TryInit failed")),
-                () =>
-                {
-                    Assert.Throws<InvalidOperationException>(() =>
-                        new VorbisReader(Stream.Null, closeOnDispose: false));
-                    Assert.True(stub.Disposed, "containerReader must be disposed when TryInit throws");
-                });
+            var stub = new StubContainerReader(() => throw new InvalidOperationException("TryInit failed"));
+            Assert.Throws<InvalidOperationException>(() =>
+                new VorbisReader(Stream.Null, false, (_, __) => stub, pp => throw new InvalidOperationException("not expected")));
+            Assert.True(stub.Disposed, "containerReader must be disposed when TryInit throws");
         }
 
         // When TryInit() returns false, containerReader must also be disposed (pre-existing behaviour preserved).
         [Fact]
         public void Constructor_TryInitReturnsFalse_DisposesContainerReader()
         {
-            StubContainerReader stub = null;
-            WithFactory(
-                (_, __) => stub = new StubContainerReader(() => false),
-                () =>
-                {
-                    Assert.Throws<ArgumentException>(() =>
-                        new VorbisReader(Stream.Null, closeOnDispose: false));
-                    Assert.True(stub.Disposed, "containerReader must be disposed when TryInit returns false");
-                });
+            var stub = new StubContainerReader(() => false);
+            Assert.Throws<ArgumentException>(() =>
+                new VorbisReader(Stream.Null, false, (_, __) => stub, pp => throw new InvalidOperationException("not expected")));
+            Assert.True(stub.Disposed, "containerReader must be disposed when TryInit returns false");
         }
 
         // When TryInit() throws and closeOnDispose is true, the stream must be disposed.
@@ -72,14 +52,11 @@ namespace NVorbis.Tests
         public void Constructor_TryInitThrows_ClosesStreamWhenCloseOnDispose()
         {
             var ms = new MemoryStream(new byte[1]);
-            WithFactory(
-                (_, __) => new StubContainerReader(() => throw new InvalidOperationException()),
-                () =>
-                {
-                    Assert.Throws<InvalidOperationException>(() =>
-                        new VorbisReader(ms, closeOnDispose: true));
-                    Assert.Throws<ObjectDisposedException>(() => ms.ReadByte());
-                });
+            Assert.Throws<InvalidOperationException>(() =>
+                new VorbisReader(ms, true,
+                    (_, __) => new StubContainerReader(() => throw new InvalidOperationException()),
+                    pp => throw new InvalidOperationException("not expected")));
+            Assert.Throws<ObjectDisposedException>(() => ms.ReadByte());
         }
 
         // When TryInit() throws and closeOnDispose is false, the stream must NOT be disposed.
@@ -87,14 +64,11 @@ namespace NVorbis.Tests
         public void Constructor_TryInitThrows_LeavesStreamOpenWhenNotCloseOnDispose()
         {
             var ms = new MemoryStream(new byte[1]);
-            WithFactory(
-                (_, __) => new StubContainerReader(() => throw new InvalidOperationException()),
-                () =>
-                {
-                    Assert.Throws<InvalidOperationException>(() =>
-                        new VorbisReader(ms, closeOnDispose: false));
-                    Assert.True(ms.CanRead, "stream must remain open when closeOnDispose is false");
-                });
+            Assert.Throws<InvalidOperationException>(() =>
+                new VorbisReader(ms, false,
+                    (_, __) => new StubContainerReader(() => throw new InvalidOperationException()),
+                    pp => throw new InvalidOperationException("not expected")));
+            Assert.True(ms.CanRead, "stream must remain open when closeOnDispose is false");
         }
     }
 }

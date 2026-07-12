@@ -35,19 +35,8 @@ namespace NVorbis.Tests
             public long GetGranuleCount() => 0;
         }
 
-        private static ContainerReader MakeReader()
-        {
-            var original = ContainerReader.CreatePageReader;
-            ContainerReader.CreatePageReader = (s, cod, cb) => new FakePageReader();
-            try
-            {
-                return new ContainerReader(new MemoryStream(), closeOnDispose: false);
-            }
-            finally
-            {
-                ContainerReader.CreatePageReader = original;
-            }
-        }
+        private static ContainerReader MakeReader() =>
+            new ContainerReader(new MemoryStream(), false, (s, cod, cb) => new FakePageReader());
 
         private static List<WeakReference<IPacketProvider>> PacketProviders(ContainerReader reader) =>
             (List<WeakReference<IPacketProvider>>)typeof(ContainerReader)

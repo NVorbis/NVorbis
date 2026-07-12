@@ -10,8 +10,6 @@ namespace NVorbis
     /// </summary>
     public sealed class StreamDecoder : IStreamDecoder
     {
-        static internal Func<IFactory> CreateFactory { get; set; } = () => new Factory();
-
         private Contracts.IPacketProvider _packetProvider;
         private readonly IFactory _factory;
         private readonly StreamStats _stats;

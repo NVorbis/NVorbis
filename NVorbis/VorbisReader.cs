@@ -12,12 +12,10 @@ namespace NVorbis
     /// </summary>
     public sealed class VorbisReader : IVorbisReader
     {
-        internal static Func<Stream, bool, Contracts.IContainerReader> CreateContainerReader { get; set; } = (s, cod) => new Ogg.ContainerReader(s, cod);
-        internal static Func<Contracts.IPacketProvider, IStreamDecoder> CreateStreamDecoder { get; set; } = pp => new StreamDecoder(pp, new Factory());
-
         private readonly List<IStreamDecoder> _decoders;
         private readonly Contracts.IContainerReader _containerReader;
         private readonly bool _closeOnDispose;
+        private readonly Func<Contracts.IPacketProvider, IStreamDecoder> _createStreamDecoder;
 
         private IStreamDecoder _streamDecoder;
         private bool _disposed;
@@ -42,10 +40,22 @@ namespace NVorbis
         /// <param name="stream">The <see cref="Stream"/> to read from.</param>
         /// <param name="closeOnDispose"><see langword="true"/> to take ownership and clean up the instance when disposed, otherwise <see langword="false"/>.</param>
         public VorbisReader(Stream stream, bool closeOnDispose = true)
+            : this(stream, closeOnDispose,
+                (s, cod) => new Ogg.ContainerReader(s, cod),
+                pp => new StreamDecoder(pp, new Factory()))
+        {
+        }
+
+        internal VorbisReader(
+            Stream stream,
+            bool closeOnDispose,
+            Func<Stream, bool, Contracts.IContainerReader> createContainerReader,
+            Func<Contracts.IPacketProvider, IStreamDecoder> createStreamDecoder)
         {
             _decoders = new List<IStreamDecoder>();
+            _createStreamDecoder = createStreamDecoder;
 
-            var containerReader = CreateContainerReader(stream, closeOnDispose);
+            var containerReader = createContainerReader(stream, closeOnDispose);
             try
             {
                 containerReader.NewStreamCallback = ProcessNewStream;
@@ -104,7 +114,7 @@ namespace NVorbis
 
         private bool ProcessNewStream(Contracts.IPacketProvider packetProvider)
         {
-            var decoder = CreateStreamDecoder(packetProvider);
+            var decoder = _createStreamDecoder(packetProvider);
             decoder.ClipSamples = true;
 
             var ea = new NewStreamEventArgs(decoder);

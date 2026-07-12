@@ -11,9 +11,6 @@ namespace NVorbis.Ogg
     /// </summary>
     public sealed class ContainerReader : Contracts.IContainerReader
     {
-        internal static Func<Stream, bool, Func<Contracts.IPacketProvider, bool>, IPageReader> CreatePageReader { get; set; } = (s, cod, cb) => new PageReader(s, cod, cb);
-        internal static Func<Stream, bool, Func<Contracts.IPacketProvider, bool>, IPageReader> CreateForwardOnlyPageReader { get; set; } = (s, cod, cb) => new ForwardOnlyPageReader(s, cod, cb);
-
         private IPageReader _reader;
         private readonly List<WeakReference<Contracts.IPacketProvider>> _packetProviders;
         private bool _foundStream;
@@ -67,20 +64,26 @@ namespace NVorbis.Ogg
         /// <param name="closeOnDispose"><c>True</c> to close the stream when disposed, otherwise <c>false</c>.</param>
         /// <exception cref="ArgumentException"><paramref name="stream"/>'s <see cref="Stream.CanSeek"/> is <c>False</c>.</exception>
         public ContainerReader(Stream stream, bool closeOnDispose)
+            : this(stream, closeOnDispose, SelectPageReaderFactory(stream))
+        {
+        }
+
+        private static Func<Stream, bool, Func<Contracts.IPacketProvider, bool>, IPageReader> SelectPageReaderFactory(Stream stream)
         {
             if (stream == null) throw new ArgumentNullException(nameof(stream));
+            return stream.CanSeek
+                ? (Func<Stream, bool, Func<Contracts.IPacketProvider, bool>, IPageReader>)((s, cod, cb) => new PageReader(s, cod, cb))
+                : (s, cod, cb) => new ForwardOnlyPageReader(s, cod, cb);
+        }
 
+        internal ContainerReader(
+            Stream stream,
+            bool closeOnDispose,
+            Func<Stream, bool, Func<Contracts.IPacketProvider, bool>, IPageReader> createReader)
+        {
             _packetProviders = new List<WeakReference<Contracts.IPacketProvider>>();
-
-            if (stream.CanSeek)
-            {
-                _reader = CreatePageReader(stream, closeOnDispose, ProcessNewStream);
-                CanSeek = true;
-            }
-            else
-            {
-                _reader = CreateForwardOnlyPageReader(stream, closeOnDispose, ProcessNewStream);
-            }
+            CanSeek = stream.CanSeek;
+            _reader = createReader(stream, closeOnDispose, ProcessNewStream);
         }
 
         /// <summary>
