@@ -150,15 +150,27 @@ namespace NVorbis
 
                 // step 3
 
+                // step3_inner_s_loop_ld654 below always processes the final three FFT
+                // stages, and step 2 above is the first stage. The fixed iteration 0/1
+                // calls cover the stages in between, so they must be skipped for small
+                // blocks where they would overlap the final three stages and corrupt
+                // the output (bug inherited from upstream stb_vorbis).
+
                 // iteration 0
-                step3_iter0_loop(_n >> 4, u, _n2 - 1 - _n4 * 0, -_n8);
-                step3_iter0_loop(_n >> 4, u, _n2 - 1 - _n4 * 1, -_n8);
+                if (_n > 64)
+                {
+                    step3_iter0_loop(_n >> 4, u, _n2 - 1 - _n4 * 0, -_n8);
+                    step3_iter0_loop(_n >> 4, u, _n2 - 1 - _n4 * 1, -_n8);
+                }
 
                 // iteration 1
-                step3_inner_r_loop(_n >> 5, u, _n2 - 1 - _n8 * 0, -(_n >> 4), 16);
-                step3_inner_r_loop(_n >> 5, u, _n2 - 1 - _n8 * 1, -(_n >> 4), 16);
-                step3_inner_r_loop(_n >> 5, u, _n2 - 1 - _n8 * 2, -(_n >> 4), 16);
-                step3_inner_r_loop(_n >> 5, u, _n2 - 1 - _n8 * 3, -(_n >> 4), 16);
+                if (_n > 128)
+                {
+                    step3_inner_r_loop(_n >> 5, u, _n2 - 1 - _n8 * 0, -(_n >> 4), 16);
+                    step3_inner_r_loop(_n >> 5, u, _n2 - 1 - _n8 * 1, -(_n >> 4), 16);
+                    step3_inner_r_loop(_n >> 5, u, _n2 - 1 - _n8 * 2, -(_n >> 4), 16);
+                    step3_inner_r_loop(_n >> 5, u, _n2 - 1 - _n8 * 3, -(_n >> 4), 16);
+                }
 
                 // iterations 2 ... x
                 var l = 2;

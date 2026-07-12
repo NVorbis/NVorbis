@@ -102,6 +102,92 @@ namespace NVorbis.Tests
             }
         }
 
+        // Reference implementation: direct O(n²) inverse MDCT per Vorbis I spec §1.3.2
+        // (same formula as stb_vorbis's inverse_mdct_slow debug reference).
+        private static double[] NaiveImdct(float[] spectrum, int n)
+        {
+            var y = new double[n];
+            for (int j = 0; j < n; j++)
+            {
+                double sum = 0;
+                for (int k = 0; k < n / 2; k++)
+                    sum += spectrum[k] * Math.Cos(Math.PI / (2.0 * n) * (2 * j + 1 + n / 2.0) * (2 * k + 1));
+                y[j] = sum;
+            }
+            return y;
+        }
+
+        private static ulong Fnv1aHash(float[] data)
+        {
+            ulong h = 14695981039346656037UL;
+            foreach (var f in data)
+            {
+                var bits = (uint)BitConverter.SingleToInt32Bits(f);
+                for (int s = 0; s < 32; s += 8)
+                {
+                    h ^= (bits >> s) & 0xFF;
+                    h *= 1099511628211UL;
+                }
+            }
+            return h;
+        }
+
+        // Output must be the actual inverse MDCT defined by the Vorbis spec, not merely
+        // self-consistent. Catches the (upstream stb_vorbis) small-block bug where the
+        // fixed step-3 iteration 0/1 calls overlap the combined final three FFT stages
+        // for n < 256, producing garbage for legal block sizes 64 and 128.
+        [Theory]
+        [InlineData(64, 1f)]
+        [InlineData(64, 2.5f)]
+        [InlineData(128, 1f)]
+        [InlineData(128, 2.5f)]
+        [InlineData(256, 1f)]
+        [InlineData(512, 1f)]
+        public void Reverse_MatchesNaiveSpecImdct(int n, float seed)
+        {
+            var buf = MakeInput(n, seed);
+            var spectrum = new float[n / 2];
+            Array.Copy(buf, spectrum, n / 2);
+
+            new Mdct().Reverse(buf, n);
+            var reference = NaiveImdct(spectrum, n);
+
+            double maxRef = 0;
+            for (int j = 0; j < n; j++)
+                maxRef = Math.Max(maxRef, Math.Abs(reference[j]));
+
+            for (int j = 0; j < n; j++)
+                Assert.True(Math.Abs(buf[j] - reference[j]) <= 5e-5 * maxRef,
+                    $"n={n} seed={seed} j={j}: got {buf[j]}, expected {reference[j]}");
+        }
+
+        // Bit-exact golden outputs for every legal Vorbis block size. Pins the exact
+        // arithmetic so refactors (e.g. bounds-check-elimination) can prove they did
+        // not change a single operation. Regenerate only for a deliberate change in
+        // numeric behavior, and only after Reverse_MatchesNaiveSpecImdct passes.
+        [Theory]
+        [InlineData(64, 1f, 0x653757E457244495UL)]
+        [InlineData(64, 2.5f, 0x2BDC91750253834DUL)]
+        [InlineData(128, 1f, 0xC50C35CC3D91234DUL)]
+        [InlineData(128, 2.5f, 0x3FEB85480BC9C349UL)]
+        [InlineData(256, 1f, 0x0D66048BF0197E7DUL)]
+        [InlineData(256, 2.5f, 0xA7C2DEB9AA81D799UL)]
+        [InlineData(512, 1f, 0x610D7FA5D7541C5DUL)]
+        [InlineData(512, 2.5f, 0x6EDE0495506E2E41UL)]
+        [InlineData(1024, 1f, 0x53437BAC881CD6ADUL)]
+        [InlineData(1024, 2.5f, 0x3FF46FFB2936781DUL)]
+        [InlineData(2048, 1f, 0x5DE665695975AD29UL)]
+        [InlineData(2048, 2.5f, 0xCDE9C2AFBBDC31ADUL)]
+        [InlineData(4096, 1f, 0x7DE27D9924C8BD45UL)]
+        [InlineData(4096, 2.5f, 0xB14DAA6B9C503369UL)]
+        [InlineData(8192, 1f, 0x52373326A0A06E91UL)]
+        [InlineData(8192, 2.5f, 0x98CE711F9CBABD09UL)]
+        public void Reverse_GoldenOutput_BitExact(int n, float seed, ulong expectedHash)
+        {
+            var result = RunReverse(n, seed);
+            Assert.Equal(expectedHash, Fnv1aHash(result));
+        }
+
         // Item 8: Reverse called concurrently with a new sampleCount must not corrupt cache
         [Fact]
         public void Reverse_ConcurrentNewSampleCounts_CachePopulatesSafely()
