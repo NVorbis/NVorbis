@@ -1,23 +1,42 @@
-﻿using NVorbis.Contracts;
+using NVorbis.Contracts;
 using System;
-using System.Collections.Generic;
+using System.Collections.Concurrent;
+using System.Threading;
 
 namespace NVorbis
 {
+    /// <summary>
+    /// Inverse MDCT implementation derived from stb_vorbis.
+    /// </summary>
     class Mdct : IMdct
     {
-        readonly object _cacheLock = new object();
-        readonly Dictionary<int, MdctImpl> _setupCache = new Dictionary<int, MdctImpl>();
+        // The twiddle tables are immutable once built and depend only on the block size,
+        // so they are shared process-wide instead of being rebuilt per decoder.
+        static readonly ConcurrentDictionary<int, MdctImpl> s_implCache = new ConcurrentDictionary<int, MdctImpl>();
+
+        // A Vorbis stream uses at most two block sizes, so two slots cover every valid
+        // stream without taking a lock or hashing on the per-packet path.
+        MdctImpl _impl0, _impl1;
 
         public void Reverse(float[] samples, int sampleCount)
         {
-            MdctImpl impl;
-            lock (_cacheLock)
+            if (samples == null) throw new ArgumentNullException(nameof(samples));
+            if (sampleCount < 64 || sampleCount > 8192 || (sampleCount & (sampleCount - 1)) != 0)
+                throw new ArgumentOutOfRangeException(nameof(sampleCount), "Must be a power of two between 64 and 8192.");
+            if (samples.Length < sampleCount)
+                throw new ArgumentException("Buffer must hold at least sampleCount entries.", nameof(samples));
+
+            var impl = _impl0;
+            if (impl == null || impl.N != sampleCount)
             {
-                if (!_setupCache.TryGetValue(sampleCount, out impl))
+                impl = _impl1;
+                if (impl == null || impl.N != sampleCount)
                 {
-                    impl = new MdctImpl(sampleCount);
-                    _setupCache[sampleCount] = impl;
+                    impl = s_implCache.GetOrAdd(sampleCount, n => new MdctImpl(n));
+                    if (Interlocked.CompareExchange(ref _impl0, impl, null) != null)
+                    {
+                        Interlocked.CompareExchange(ref _impl1, impl, null);
+                    }
                 }
             }
             impl.CalcReverse(samples);
@@ -32,6 +51,8 @@ namespace NVorbis
 
             readonly float[] _a, _b, _c;
             readonly ushort[] _bitrev;
+
+            internal int N => _n;
 
             public MdctImpl(int n)
             {

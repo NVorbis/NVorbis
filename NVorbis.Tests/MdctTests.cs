@@ -188,6 +188,29 @@ namespace NVorbis.Tests
             Assert.Equal(expectedHash, Fnv1aHash(result));
         }
 
+        [Theory]
+        [InlineData(0)]
+        [InlineData(32)]     // below Vorbis minimum
+        [InlineData(96)]     // not a power of two
+        [InlineData(16384)]  // above Vorbis maximum
+        [InlineData(-64)]
+        public void Reverse_InvalidSampleCount_Throws(int n)
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(() => new Mdct().Reverse(new float[16384], n));
+        }
+
+        [Fact]
+        public void Reverse_BufferTooSmall_Throws()
+        {
+            Assert.Throws<ArgumentException>(() => new Mdct().Reverse(new float[64], 128));
+        }
+
+        [Fact]
+        public void Reverse_NullBuffer_Throws()
+        {
+            Assert.Throws<ArgumentNullException>(() => new Mdct().Reverse(null, 128));
+        }
+
         // Item 8: Reverse called concurrently with a new sampleCount must not corrupt cache
         [Fact]
         public void Reverse_ConcurrentNewSampleCounts_CachePopulatesSafely()

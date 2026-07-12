@@ -211,6 +211,14 @@ namespace NVorbis
             _block0Size = 1 << (int)packet.ReadBits(4);
             _block1Size = 1 << (int)packet.ReadBits(4);
 
+            // Vorbis I spec §4.2.2: block sizes must be between 64 and 8192 with
+            // blocksize[0] <= blocksize[1]; the stream is undecodable otherwise.
+            // Mdct also relies on this range.
+            if (_block0Size < 64 || _block1Size < _block0Size || _block1Size > 8192)
+            {
+                return false;
+            }
+
             if (NominalBitrate == 0 && UpperBitrate > 0 && LowerBitrate > 0)
             {
                 NominalBitrate = (UpperBitrate + LowerBitrate) / 2;
