@@ -88,7 +88,7 @@ namespace NVorbis.Tests
             public long GetGranuleCount() => throw new NotSupportedException();
         }
 
-        private static readonly byte[] ValidStreamHeader =
+        private static byte[] StreamHeaderWithBlockSizes(int block0Exp, int block1Exp) =>
             new BitWriter()
                 .WriteBytes(0x01, 0x76, 0x6f, 0x72, 0x62, 0x69, 0x73, 0x00, 0x00, 0x00, 0x00) // "\x01vorbis\0\0\0\0"
                 .Write(2, 8)            // channels
@@ -96,9 +96,11 @@ namespace NVorbis.Tests
                 .Write(0, 32)           // upper bitrate
                 .Write(128000, 32)      // nominal bitrate
                 .Write(0, 32)           // lower bitrate
-                .Write(8, 4)            // block0Size exponent (2^8 = 256)
-                .Write(11, 4)           // block1Size exponent (2^11 = 2048)
+                .Write((ulong)block0Exp, 4)
+                .Write((ulong)block1Exp, 4)
                 .ToArray();
+
+        private static readonly byte[] ValidStreamHeader = StreamHeaderWithBlockSizes(8, 11); // 256/2048
 
         private static byte[] ValidCommentsHeader(string vendor = "", int commentCount = 0) =>
             new BitWriter()
@@ -232,6 +234,42 @@ namespace NVorbis.Tests
                 .ToArray();
 
             var ex = ConstructAndCapture(ValidStreamHeader, packet);
+            Assert.IsType<InvalidDataException>(ex);
+        }
+
+        // ── Block-size validation ──────────────────────────────────────────────
+        // Vorbis I spec §4.2.2: legal block sizes are 64..8192 with blocksize[0] <= blocksize[1].
+        // The 4-bit exponent field can encode 1..32768, so out-of-range values must be rejected
+        // at the header instead of reaching Mdct (where e.g. n < 64 corrupts its setup tables).
+
+        [Theory]
+        [InlineData(5, 11)]     // block0 = 32, below minimum
+        [InlineData(0, 11)]     // block0 = 1
+        [InlineData(8, 14)]     // block1 = 16384, above maximum
+        [InlineData(11, 8)]     // block0 > block1
+        [InlineData(15, 15)]    // both 32768
+        public void StreamHeader_IllegalBlockSizes_ThrowsArgumentException(int block0Exp, int block1Exp)
+        {
+            var ex = ConstructAndCapture(StreamHeaderWithBlockSizes(block0Exp, block1Exp));
+            Assert.IsType<ArgumentException>(ex);
+        }
+
+        [Theory]
+        [InlineData(6, 6)]      // 64/64 — smallest legal
+        [InlineData(6, 13)]     // 64/8192 — full legal span
+        [InlineData(13, 13)]    // 8192/8192 — largest legal
+        public void StreamHeader_LegalBlockSizes_PassesHeaderStage(int block0Exp, int block1Exp)
+        {
+            // Follow the header with a comments packet that declares a vendor string longer
+            // than the packet. That stage throws InvalidDataException -- so seeing it proves
+            // the stream header stage accepted these block sizes (rejection would surface as
+            // ArgumentException before the comments packet is ever parsed).
+            var badComments = new BitWriter()
+                .WriteBytes(0x03, 0x76, 0x6f, 0x72, 0x62, 0x69, 0x73) // "\x03vorbis"
+                .Write(100, 32)
+                .ToArray();
+
+            var ex = ConstructAndCapture(StreamHeaderWithBlockSizes(block0Exp, block1Exp), badComments);
             Assert.IsType<InvalidDataException>(ex);
         }
 
