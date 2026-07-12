@@ -37,7 +37,7 @@ namespace NVorbis.Ogg
                 }
                 else
                 {
-                    list.RemoveAt(i);
+                    _packetProviders.RemoveAt(i);
                     --i;
                 }
             }

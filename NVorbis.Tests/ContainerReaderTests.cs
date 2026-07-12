@@ -78,13 +78,12 @@ namespace NVorbis.Tests
             Assert.Empty(reader.GetStreams());
         }
 
-        // Known defect (documented in DESIGN_DECISIONS.md): when a WeakReference has been
-        // collected, GetStreams's cleanup branch calls list.RemoveAt(i) against the *output*
-        // list (which never contained the dead entry) using the *source* list's index, so it
-        // throws instead of silently dropping the stale entry. This test pins the current
-        // (broken) behavior so a future fix is a deliberate, visible change.
+        // Fixed defect (was documented in DESIGN_DECISIONS.md): GetStreams's cleanup branch
+        // used to call list.RemoveAt(i) against the *output* list (which never contained the
+        // dead entry) using the *source* list's index, throwing instead of silently dropping
+        // the stale entry. Now prunes the source list (_packetProviders) instead.
         [Fact]
-        public void GetStreams_CollectedWeakReference_ThrowsDueToIndexMismatchBug()
+        public void GetStreams_CollectedWeakReference_IsSilentlyDropped()
         {
             var reader = MakeReader();
             var dead = MakeDeadWeakReference();
@@ -94,9 +93,15 @@ namespace NVorbis.Tests
 
             Assert.False(dead.TryGetTarget(out _), "test setup invariant: reference must be collected");
 
+            var live = new FakePacketProvider();
             PacketProviders(reader).Add(dead);
+            PacketProviders(reader).Add(new WeakReference<IPacketProvider>(live));
 
-            Assert.Throws<ArgumentOutOfRangeException>(() => reader.GetStreams());
+            var streams = reader.GetStreams();
+
+            Assert.Single(streams);
+            Assert.Same(live, streams[0]);
+            Assert.Single(PacketProviders(reader)); // dead entry pruned from source list too
         }
     }
 }
