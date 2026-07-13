@@ -3,7 +3,9 @@
 
 # Local coverage runs
 coverage.cobertura.xml
+coverage/
 coveragereport/
+*.coverage
 
 # User-specific files
 *.suo
