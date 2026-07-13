@@ -25,7 +25,7 @@ namespace NVorbis
                 }
 
                 var bktIdx = parts[0].IndexOf('[');
-                if (bktIdx > -1)
+                if (bktIdx > -1 && parts[0][parts[0].Length - 1] == ']')
                 {
                     parts[1] = parts[0].Substring(bktIdx + 1, parts[0].Length - bktIdx - 2)
                                        .ToUpper(System.Globalization.CultureInfo.CurrentCulture)
