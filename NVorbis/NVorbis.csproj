@@ -6,10 +6,8 @@
     <Description>A fully managed implementation of a Xiph.org Foundation Ogg Vorbis decoder.</Description>
     <Company>Andrew Ward</Company>
     <Copyright>Copyright © Andrew Ward $([System.DateTime]::Now.Year)</Copyright>
-    <AssemblyVersion>1.0.0.1</AssemblyVersion>
-    <FileVersion>1.0.0.1</FileVersion>
     <Authors>Andrew Ward</Authors>
-    <Version>1.0.0-beta.1</Version>
+    <!-- Version, AssemblyVersion, and FileVersion are supplied by Nerdbank.GitVersioning (version.json). -->
     <PackageProjectUrl>https://github.com/NVorbis/NVorbis</PackageProjectUrl>
     <PackageReleaseNotes>See https://github.com/NVorbis/NVorbis/releases for full release notes.</PackageReleaseNotes>
     <PackageTags>ogg vorbis xiph audio c# sound .NET</PackageTags>
@@ -41,6 +39,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
     <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.0.0" />
+    <PackageReference Include="Nerdbank.GitVersioning" Version="3.10.91" PrivateAssets="All" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
