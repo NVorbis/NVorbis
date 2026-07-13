@@ -14,5 +14,21 @@ jobs:
           dotnet-version: 10.x
       - name: Build with dotnet
         run: dotnet build --configuration Release
-      - name: Test with dotnet
-        run: dotnet test
+      - name: Test with coverage
+        run: dotnet test --configuration Release --no-build --collect:"XPlat Code Coverage" --results-directory ./coverage
+      - name: Generate coverage report
+        if: always()
+        run: |
+          dotnet tool install --global dotnet-reportgenerator-globaltool --version 5.5.10
+          reportgenerator "-reports:./coverage/**/coverage.cobertura.xml" "-targetdir:./coverage/report" "-reporttypes:Html;TextSummary;MarkdownSummaryGithub"
+      - name: Write coverage to job summary
+        if: always()
+        shell: bash
+        run: cat ./coverage/report/SummaryGithub.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: ./coverage/report
+          if-no-files-found: error
