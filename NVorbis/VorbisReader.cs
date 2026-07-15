@@ -62,7 +62,7 @@ namespace NVorbis
 
                 if (!containerReader.TryInit() || _decoders.Count == 0)
                 {
-                    throw new ArgumentException("Could not load the specified container!", nameof(containerReader));
+                    throw new ArgumentException("Could not load the specified container!", nameof(stream));
                 }
             }
             catch

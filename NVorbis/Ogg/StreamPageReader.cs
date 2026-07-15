@@ -35,7 +35,7 @@ namespace NVorbis.Ogg
             // The user has a reference to the packet provider.
             // So long as the user doesn't drop their reference and the page reader doesn't drop us,
             //  the packet provider will stay alive.
-            // This is important since the container reader only holds a week reference to it.
+            // This is important since the container reader only holds a weak reference to it.
             PacketProvider = new PacketProvider(this, streamSerial);
         }
 

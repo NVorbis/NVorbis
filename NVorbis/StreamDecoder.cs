@@ -110,7 +110,7 @@ namespace NVorbis
                 }
                 else if ((header & 0xFFFFFFFFFFFF00ul) == 0x61726f65687400ul)
                 {
-                    return new ArgumentException("Found Theora bitsream.");
+                    return new ArgumentException("Found Theora bitstream.");
                 }
                 return new ArgumentException("Could not find Vorbis data to decode.");
             }
