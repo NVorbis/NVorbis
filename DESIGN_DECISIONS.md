@@ -466,10 +466,10 @@ for (var i = 0; i < _packetProviders.Count; i++)
 
 **How to apply:** If ever tempted to "finish the job" and bit-trick the exponent step too, re-read this comment first — the author already considered it and stopped deliberately, not for lack of trying.
 
-## Packaging: frozen `AssemblyVersion`/`FileVersion` vs. moving NuGet `Version`
+## Packaging: pinned `AssemblyVersion`/`FileVersion` vs. moving NuGet `Version`
 
-**Decision:** `NVorbis.csproj:9-12` freezes `AssemblyVersion`/`FileVersion` at `1.0.0.1` across alpha.1 → alpha.2 → beta.1, while `Version` (the NuGet-visible package version) moves normally (`1.0.0-beta.1`).
+**Decision:** `AssemblyVersion`/`FileVersion` stay pinned to `major.minor` while `Version` (the NuGet-visible package version) moves with git height/prerelease label. This was originally a manual freeze at `1.0.0.1` in `NVorbis.csproj` across alpha.1 → alpha.2 → beta.1; it is now enforced declaratively by **Nerdbank.GitVersioning (NBGV)** via `version.json`'s `assemblyVersion.precision: "minor"` (migration completed, PR #81). `NVorbis.csproj` no longer carries `Version`/`AssemblyVersion`/`FileVersion` properties — a comment at `NVorbis.csproj:10` points to `version.json`, and `version.json` carries the "why" comment above `assemblyVersion`.
 
 **Why:** Avoids binding-redirect churn for consumers on every prerelease bump — a moving `AssemblyVersion` forces consumers with a strong-named reference to add a new binding redirect on every single prerelease, which is disproportionate churn for a prerelease train.
 
-**How to apply:** When automating versioning (planned, not yet done), use **Nerdbank.GitVersioning (NBGV)**, not MinVer — MinVer would make `AssemblyVersion` track `Version` again, undoing the freeze. NBGV's `version.json` supports `assemblyVersion.precision: "major.minor"` to keep `AssemblyVersion` pinned while `Version`/the NuGet package version keeps incrementing with git height/prerelease label, replicating the current manual pattern declaratively. When picked up: configure `version.json` with assembly-version precision pinned to major.minor (or a fixed value matching `1.0.0.1`), and verify a full pack/build cycle shows `Version` advancing but `AssemblyVersion` static across prereleases.
+**How to apply:** Keep `assemblyVersion.precision` at `minor` in `version.json`; don't switch to MinVer (it would make `AssemblyVersion` track `Version` again, undoing the pin). After any versioning change, verify a full pack/build cycle shows `Version` advancing but `AssemblyVersion` static across prereleases.

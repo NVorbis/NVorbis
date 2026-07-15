@@ -28,6 +28,9 @@ namespace NVorbis.Ogg
 
         public long WasteBits { get; private set; }
 
+        // CRC is the only correctness gate that a page "found" by scanning for the "OggS" pattern is real
+        // (the pattern can occur by chance in arbitrary bytes). Every candidate is verified before AddPage;
+        // there is deliberately no API to disable this, not even for a "trusted" input.
         private bool VerifyPage(byte[] headerBuf, int index, int cnt, out byte[] pageBuf, out int bytesRead)
         {
             var segCnt = headerBuf[index + 26];
@@ -265,6 +268,8 @@ namespace NVorbis.Ogg
                         }
                         else if (pageBuf != null)
                         {
+                            // Read-ahead bytes of a CRC-failed page are queued, not discarded, so a later
+                            // scan can consume them without re-reading the stream (impossible on non-seekable).
                             EnqueueData(pageBuf, bytesRead);
                         }
                     }
@@ -272,6 +277,8 @@ namespace NVorbis.Ogg
                     isResync = true;
                 }
 
+                // Carry the last 3 bytes to the front before refilling: an "OggS" capture pattern can
+                // straddle the boundary between two reads, so dropping the tail would miss it.
                 if (cnt >= 3)
                 {
                     _headerBuf[0] = _headerBuf[cnt - 3];

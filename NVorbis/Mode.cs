@@ -5,6 +5,7 @@ namespace NVorbis
 {
     class Mode : IMode
     {
+        // struct, not class: looked up on every packet decode, so a value type avoids heap indirection there.
         private struct OverlapInfo
         {
             public int PacketStartIndex;
@@ -38,6 +39,9 @@ namespace NVorbis
             }
             _mapping = mappings[mappingIdx];
 
+            // Vorbis allows adjacent blocks of different sizes and the overlap-add window shape depends on
+            // both neighbors, so precompute all 4 (prevFlag, nextFlag) combinations once here rather than
+            // repeating the trig-heavy CalcWindow per packet. Decode selects via a 2-bit index (see Decode).
             if (_blockFlag)
             {
                 _blockSize = block1Size;

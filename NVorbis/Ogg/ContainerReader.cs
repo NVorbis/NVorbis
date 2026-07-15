@@ -34,6 +34,7 @@ namespace NVorbis.Ogg
                 }
                 else
                 {
+                    // Prune the dead weakref from the source list
                     _packetProviders.RemoveAt(i);
                     --i;
                 }
@@ -68,6 +69,9 @@ namespace NVorbis.Ogg
         {
         }
 
+        // Picks the reader hierarchy once, up front. Seekable and forward-only are deliberately separate
+        // class trees, not one flexible class: the seekable path buffers all page offsets for bisection
+        // seeking; the forward-only path keeps a bounded queue and can't afford that bookkeeping/locking.
         private static Func<Stream, bool, Func<Contracts.IPacketProvider, bool>, IPageReader> SelectPageReaderFactory(Stream stream)
         {
             if (stream == null) throw new ArgumentNullException(nameof(stream));

@@ -30,10 +30,15 @@ namespace NVorbis
             {
                 var samples = _totalSamples;
                 var bits = _audioBits + _headerBits + _containerBits + _wasteBits;
+                // double, not float: bits is a large accumulated long; float's 24-bit mantissa would lose
+                // precision. Called once per query, not per sample, so the cost is irrelevant.
                 return samples > 0 ? (int)(((double)bits / samples) * _sampleRate) : 0;
             }
         }
 
+        // The ONLY member with a cross-thread guarantee: packed bits/samples read via Volatile.Read so a UI
+        // thread never sees a torn pair while decode runs on a background thread. Every other field here is
+        // plain, decode-thread-only, and NOT safe to read from another thread.
         public int InstantBitRate
         {
             get

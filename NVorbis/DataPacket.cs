@@ -12,7 +12,8 @@ namespace NVorbis
         /// Defines flags to apply to the current packet
         /// </summary>
         [Flags]
-        // for now, let's use a byte... if we find we need more space, we can always expand it...
+        // Sized as byte deliberately: User0-User4 are reserved for container-specific subclasses (e.g.
+        // Ogg.Packet) to stash their own per-packet flags without a second field. Expandable if needed.
         protected enum PacketFlags : byte
         {
             /// <summary>
@@ -50,6 +51,9 @@ namespace NVorbis
             User4 = 0x80,
         }
 
+        // Hand-rolled bit reader (per-bit hottest path). Bits accumulate LSB-first into a 64-bit bucket;
+        // _overflowBits holds the odd byte that would push past 64, so the bucket can carry >64 bits
+        // mid-shift without a wider type or an array window.
         ulong _bitBucket;
         int _bitCount;
         byte _overflowBits;
@@ -211,6 +215,9 @@ namespace NVorbis
         /// <param name="count">The number of bits to skip reading.</param>
         public void SkipBits(int count)
         {
+            // count > 64 must throw, not silently proceed: with overflow bits present, the internal
+            // (64 - count) shift goes negative and C# masks shift amounts mod 64 rather than saturating,
+            // corrupting _bitBucket. Callers needing to skip more must chunk into <=64-bit pieces.
             if (count < 0 || count > 64) throw new ArgumentOutOfRangeException(nameof(count));
             if (count > 0)
             {

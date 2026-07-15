@@ -166,6 +166,9 @@ namespace NVorbis.Ogg
             return (gps, endGP);
         }
 
+        // Three deliberately narrow, evidence-based cases when calculated end-granule != next page's stored
+        // granule: (1) libvorbis bug bit-pattern, (2) genuine spliced-timeline hole, (3) EOS-clip over-count.
+        // A fourth scenario found in the wild should be a fourth explicit case, not folded into these.
         private int FindPacket(long[] gps, long endGP, long lastPageGranulePos, int lastPagePacketLength, ref long granulePos)
         {
             // next check for a bugged vorbis encoder...
@@ -323,7 +326,9 @@ namespace NVorbis.Ogg
                 if (isContinuation && isResync) return false;
 
                 // walked back to the first audio page without resolving — snap to stream
-                // beginning, consistent with the SeekTo first-page shortcut
+                // beginning, consistent with the SeekTo first-page shortcut. Without this bound, a
+                // pathological one-continued-packet-per-page stream is an O(N) walk that only ends when
+                // GetPage throws on a negative index; the bound makes it an O(1) snap.
                 if (pgIdx <= firstDataPage)
                 {
                     pageIndex = firstDataPage;

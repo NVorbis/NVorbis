@@ -129,6 +129,9 @@ namespace NVorbis
 
                 var partitionWords = (partitionCount + _classBook.Dimensions - 1) / _classBook.Dimensions;
 
+                // Pooled instead of allocated per packet (hundreds of small allocs/packet on stereo 44kHz).
+                // The ch * partitionWords + entryIdx flattening is a direct consequence: ArrayPool has no
+                // clean 2D/jagged rental, so the old [_channels, partitionWords] 2D array is flattened to 1D.
                 var partWordCache = ArrayPool<int[]>.Shared.Rent(_channels * partitionWords);
                 try
                 {
@@ -189,6 +192,8 @@ namespace NVorbis
         {
             var res = residue[channel];
             var steps = partitionSize / codebook.Dimensions;
+            // Pooled: WriteVectors runs per channel x partition x stage, so a fresh alloc here would be a
+            // per-decoded-packet allocation storm.
             var entryCache = ArrayPool<int>.Shared.Rent(steps);
             try
             {

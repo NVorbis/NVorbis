@@ -108,7 +108,8 @@ namespace NVorbis
                 Array.Clear(buffer[i], 0, halfBlockSize);
             }
 
-            // make sure we handle no-energy channels correctly given the couplings..
+            // A channel with no encoded energy must still be processed if its coupled partner has energy:
+            // the magnitude/angle transform redistributes energy across the pair, so ForceEnergy on both.
             for (var i = 0; i < _couplingAngle.Length; i++)
             {
                 if (floorData[_couplingAngle[i]].ExecuteChannel || floorData[_couplingMagnitude[i]].ExecuteChannel)
@@ -134,6 +135,9 @@ namespace NVorbis
             }
 
             // inverse coupling
+            // Reverse order is required: coupling is a chain where later steps can reference channels
+            // produced by earlier ones, so it must be undone in the reverse of declaration order.
+            // Do NOT change to forward iteration - nothing else in the loop body signals order matters.
             for (var i = _couplingAngle.Length - 1; i >= 0; i--)
             {
                 if (floorData[_couplingAngle[i]].ExecuteChannel || floorData[_couplingMagnitude[i]].ExecuteChannel)

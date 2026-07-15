@@ -8,6 +8,10 @@ namespace NVorbis
 {
     class Codebook : ICodebook
     {
+        // Allocation-free stand-in for an identity value list (0..N-1): the indexer computes
+        // _start + index instead of materializing an int[]. Shared thread-static instance, so it
+        // is only valid under the single-threaded-per-decode contract; never retain one across calls.
+        //
         // FastRange is "borrowed" from GitHub: TechnologicalPizza/MonoGame.NVorbis
         class FastRange : IReadOnlyList<int>
         {
@@ -64,6 +68,8 @@ namespace NVorbis
 
             // get the counts
             Dimensions = (int)packet.ReadBits(16);
+            // Dimensions >= 1 is load-bearing outside this file: Residue1.WriteVectors' inner loop
+            // (j < Dimensions) would never advance i on a 0-dimension book, spinning forever.
             if (Dimensions < 1) throw new InvalidDataException("Codebook had invalid dimension count!");
             Entries = (int)packet.ReadBits(24);
 
@@ -162,6 +168,10 @@ namespace NVorbis
             }
         }
 
+        // Spec-mandated canonical Huffman assignment (Vorbis I spec 3.2.1), ported from libvorbis via
+        // the available[] next-free-codeword-per-length table. Not a from-scratch tree build: a subtly
+        // different codeword ordering would silently desync the bitstream. Cross-check the reference, not
+        // first principles, before changing.
         bool ComputeCodewords(bool sparse, int[] codewords, int[] codewordLengths, int[] len, int n, int[] values)
         {
             int i, k, m = 0;
@@ -241,6 +251,8 @@ namespace NVorbis
                 for (var idx = 0; idx < Entries; idx++)
                 {
                     var last = 0.0;
+                    // long, not int: idxDiv *= lookupValueCount silently wraps as int once Dimensions > ~9,
+                    // producing a wrong moff and quietly corrupting this entry's lookup table (no throw).
                     var idxDiv = 1L;
                     for (var i = 0; i < Dimensions; i++)
                     {
@@ -284,6 +296,9 @@ namespace NVorbis
             return r;
         }
 
+        // Two-tier decode, not a bit-by-bit tree walk: codes up to TableBits get an O(1) direct-indexed
+        // prefix table lookup; only the rare longer codes pay the linear OverflowList scan. Don't collapse
+        // to a plain tree walk or one flat table sized to the longest code - both regress the hot path.
         public int DecodeScalar(IPacket packet)
         {
             var data = (int)packet.TryPeekBits(_prefixBitLength, out var bitsRead);

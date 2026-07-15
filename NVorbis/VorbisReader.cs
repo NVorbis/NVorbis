@@ -67,6 +67,9 @@ namespace NVorbis
             }
             catch
             {
+                // Clean up on EVERY failure path, not just the expected `false`/throw-from-TryInit one:
+                // when TryInit threw, the local containerReader was previously never disposed, leaking the
+                // underlying stream. Any partial-acquisition failure here must release what it acquired.
                 containerReader.NewStreamCallback = null;
                 containerReader.Dispose();
 
@@ -133,6 +136,8 @@ namespace NVorbis
         /// </summary>
         public void Dispose()
         {
+            // Explicit flag needed for idempotency: _decoders/_containerReader are readonly and non-null
+            // after construction, so a null-check on them can never guard a second Dispose call.
             if (_disposed) return;
             _disposed = true;
 
@@ -285,11 +290,14 @@ namespace NVorbis
             var oldDecoder = _streamDecoder;
             if (newDecoder == oldDecoder) return false;
 
-            // carry-through the clipping setting
+            // Carry ClipSamples across: it should behave like a VorbisReader-level setting, not silently
+            // reset on every chained-stream transition.
             newDecoder.ClipSamples = oldDecoder.ClipSamples;
 
             _streamDecoder = newDecoder;
 
+            // Return true only on a format change (channels/sample rate), not merely a stream switch: that
+            // is precisely when a playback pipeline must reconfigure its output device/resampler.
             return newDecoder.Channels != oldDecoder.Channels || newDecoder.SampleRate != oldDecoder.SampleRate;
         }
 

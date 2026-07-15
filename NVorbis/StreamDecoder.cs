@@ -26,6 +26,9 @@ namespace NVorbis
         private readonly Lazy<ITagData> _tags;
 
         private long _currentPosition;
+        // Timeline normalization: every public position/seek/total-samples computation subtracts this so
+        // callers always see position 0 as the first decodable sample (streams needn't start at granule 0).
+        // Part of the public-position API contract, not a local detail — any new position member must apply it.
         private readonly long _granuleOffset;
         private bool _hasClipped;
         private bool _hasPosition;
@@ -347,6 +350,8 @@ namespace NVorbis
         /// <param name="buffer">The buffer to read the samples into.</param>
         /// <returns>The number of samples read into the buffer.</returns>
         /// <remarks>The data populated into <paramref name="buffer"/> is interleaved by channel in normal PCM fashion: Left, Right, Left, Right, Left, Right</remarks>
+        // No null-check on buffer: Span<float> is a struct and can't be null, so a check would be dead code
+        // that misleads readers into thinking null is accepted. Don't re-add one when porting float[] patterns.
         public int Read(Span<float> buffer)
         {
             if (_packetProvider == null) throw new ObjectDisposedException(nameof(StreamDecoder));
@@ -787,6 +792,7 @@ namespace NVorbis
         /// <summary>
         /// Gets the total duration of the decoded stream.
         /// </summary>
+        // double, not float: TimeSpan.FromSeconds has no float overload (BCL constraint, not a hot path).
         public TimeSpan TotalTime => TimeSpan.FromSeconds((double)TotalSamples / _sampleRate);
 
         /// <summary>
@@ -799,6 +805,7 @@ namespace NVorbis
         /// </summary>
         public TimeSpan TimePosition
         {
+            // double is BCL-forced here (TimeSpan.FromSeconds), same as TotalTime.
             get => TimeSpan.FromSeconds((double)_currentPosition / _sampleRate);
             set => SeekTo(value);
         }

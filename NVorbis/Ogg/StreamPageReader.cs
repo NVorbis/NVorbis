@@ -29,16 +29,33 @@ namespace NVorbis.Ogg
         {
             _reader = pageReader;
 
-            // The packet provider has a reference to us, and we have a reference to it.
-            // The page reader has a reference to us.
-            // The container reader has a _weak_ reference to the packet provider.
-            // The user has a reference to the packet provider.
-            // So long as the user doesn't drop their reference and the page reader doesn't drop us,
-            //  the packet provider will stay alive.
-            // This is important since the container reader only holds a weak reference to it.
+            /*
+             * Reference-ownership graph  ( | = strong ref,  : = weak ref ):
+             *
+             *       user            ContainerReader
+             *         |                   :
+             *  strong |                   : weak
+             *         v                   v
+             *       +-----------------------+
+             *       |    PacketProvider     |
+             *       +-----------------------+
+             *            ^        |
+             *     strong |        | strong
+             *            |        v             (mutual)
+             *       +-----------------------+              +------------+
+             *       | StreamPageReader(this)| <--strong--> | PageReader |
+             *       +-----------------------+              +------------+
+             *
+             * The container reaches the provider ONLY through that weak ref, on purpose: once the
+             * user drops the provider, this stream's whole subgraph becomes GC-eligible, so no
+             * explicit "close stream" API is needed. The provider stays alive exactly while the
+             * user holds it AND the page reader still holds us.
+             */
             PacketProvider = new PacketProvider(this, streamSerial);
         }
 
+        // The throws below are defensive invariant checks against malformed-but-CRC-valid streams: CRC only
+        // proves bytes weren't corrupted in transit, not that the encoder produced a spec-valid stream.
         public void AddPage()
         {
             // verify we haven't read all pages
@@ -246,6 +263,8 @@ namespace NVorbis.Ogg
             while ((dist = high - low) > 0)
             {
                 // try to find the right page by assumming they are all about the same size
+                // double, not float: dividing two long granule positions. float's 24-bit mantissa loses
+                // precision past ~16M, landing on the wrong page (and corrupting the seek) on large files.
                 var index = low + (int)(dist * ((granulePos - lowGranulePos) / (double)(highGranulePos - lowGranulePos)));
 
                 // go get the actual position of the selected page
@@ -386,7 +405,9 @@ namespace NVorbis.Ogg
             _lastPagePacketCount = packetCount = _reader.PacketCount;
             _lastPageOverhead = pageOverhead = _reader.PageOverhead;
             _lastPageIndex = pageIndex;
-            // cache packets while the page is already loaded — avoids a second ReadPageAt in GetPagePackets
+            // Fetch packets here, while the page is already loaded and the lock still held — avoids a second
+            // ReadPageAt in GetPagePackets. Ordering matters: fetching lazily on first access would regress
+            // to the double disk read this exists to prevent.
             _cachedPagePackets = _reader.GetPackets();
         }
 

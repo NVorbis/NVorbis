@@ -9,6 +9,8 @@ namespace NVorbis
     {
         class Data : IFloorData
         {
+            // 64 is the Vorbis spec's hard cap on floor1 partition points, not an arbitrary size -
+            // exploiting it keeps this allocation-free by construction. Don't swap for a dynamic collection.
             internal readonly int[] Posts = new int[64];
             internal int PostCount;
 
@@ -223,6 +225,7 @@ namespace NVorbis
 
         bool[] UnwrapPosts(Data data)
         {
+            // Fixed 64 again: same spec-derived partition-point cap as Data.Posts.
             var stepFlags = new bool[64];
             stepFlags[0] = true;
             stepFlags[1] = true;
@@ -298,6 +301,9 @@ namespace NVorbis
             return dy < 0 ? y0 - off : y0 + off;
         }
 
+        // Integer Bresenham line rendering (the spec's render_line), NOT float interpolation: this must
+        // match the spec bit-for-bit for decoder interop. Float interpolation would draw a different,
+        // spec-noncompliant curve. This is a correctness requirement, not a style/perf choice.
         void RenderLineMulti(int x0, int y0, int x1, int y1, float[] v)
         {
             var dy = y1 - y0;
@@ -327,6 +333,9 @@ namespace NVorbis
 
         #region dB inversion table
 
+        // Direct-index lookup converting dB-domain floor values to a linear multiplier, replacing a
+        // MathF.Pow/Exp call in the per-bin/per-channel/per-block inner loop - ~1KB static for no
+        // transcendental in one of the hottest paths in floor application.
         static readonly float[] inverse_dB_table = {
                                                         1.0649863e-07f, 1.1341951e-07f, 1.2079015e-07f, 1.2863978e-07f,
                                                         1.3699951e-07f, 1.4590251e-07f, 1.5538408e-07f, 1.6548181e-07f,

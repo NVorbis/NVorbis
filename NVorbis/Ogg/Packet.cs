@@ -6,21 +6,19 @@ namespace NVorbis.Ogg
 {
     internal class Packet : DataPacket
     {
-        // size with 1-2 packet segments (> 2 packet segments should be very uncommon):
-        //   x86:  68 bytes
-        //   x64: 104 bytes
-
         // _firstPart stores the 24:8 packed (pageIndex:packetIndex) of the first page.
         // _extraParts stores packed pageIndex values for any continuation pages (null for
         // the common single-page case, avoiding the List<int> + backing-array allocation).
+        // The 24-bit page field is a deliberate tradeoff: good to ~1016 GiB of Ogg (~300 days at
+        // 160kbps). Files beyond that ceiling would need this scheme revisited; not future-proofed past it.
         private readonly int _firstPart;
         private readonly int[] _extraParts;
         private readonly int _partCount;
-        private readonly IPacketReader _packetReader;                    // IntPtr
+        private readonly IPacketReader _packetReader;
         int _dataCount;
         Memory<byte> _data;
-        int _dataIndex;                                         // 4
-        int _dataOfs;                                           // 4
+        int _dataIndex;
+        int _dataOfs;
 
         internal Packet(int firstPart, IPacketReader packetReader, Memory<byte> initialData)
         {

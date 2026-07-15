@@ -2,6 +2,9 @@
 {
     class Crc : Contracts.Ogg.ICrc
     {
+        // Ogg's CRC-32 variant: MSB-first, left-shifting (non-reflected in, reflected out). NOT the common
+        // right-shifting IEEE CRC-32 (0xEDB88320) used by zip/PNG/System.IO.Hashing.Crc32 - a standard-library
+        // CRC would compute a different value and silently fail every page check. Don't swap it out.
         const uint CRC32_POLY = 0x04c11db7;
         static readonly uint[] s_crcTable;
 

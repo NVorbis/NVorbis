@@ -20,6 +20,9 @@ namespace NVorbis
             base.Decode(packet, doNotDecodeChannel, blockSize * _channels, buffer);
         }
 
+        // Implements Vorbis residue-type-2 channel interleaving directly, with no intermediate flat buffer:
+        // chPtr wraps across channels and offset advances only every _channels'th write. Reads like arbitrary
+        // modular arithmetic without the spec's residue-type-2 interleaving definition open alongside it.
         protected override bool WriteVectors(ICodebook codebook, IPacket packet, float[][] residue, int channel, int offset, int partitionSize)
         {
             var chPtr = 0;

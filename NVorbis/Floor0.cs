@@ -51,6 +51,8 @@ namespace NVorbis
             }
             _bookBits = Utils.ilog(_books.Length);
 
+            // Precompute the transcendental-heavy Bark/window-delta curves once per block size (only ever
+            // 2 keys) here in Init, rather than resynthesizing them on every Apply call.
             _barkMaps = new Dictionary<int, int[]>
             {
                 [block0Size] = SynthesizeBarkCurve(block0Size / 2),

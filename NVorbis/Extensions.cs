@@ -148,6 +148,7 @@ namespace NVorbis
         /// <param name="count">The number of bytes to advance.</param>
         public static void SkipBytes(this IPacket packet, int count)
         {
+            // Chunked into <=64-bit skips because SkipBits rejects count > 64 (see its shift-gotcha guard).
             while (count > 8) { packet.SkipBits(64); count -= 8; }
             if (count > 0) packet.SkipBits(count * 8);
         }

@@ -1,6 +1,9 @@
 {
   "$schema": "https://raw.githubusercontent.com/dotnet/Nerdbank.GitVersioning/main/src/NerdBank.GitVersioning/version.schema.json",
   "version": "1.0.0-rc.{height}",
+  // precision "minor" pins AssemblyVersion/FileVersion to major.minor (e.g. 1.0) while the NuGet package
+  // version above keeps moving with git height/prerelease label. A moving AssemblyVersion would force every
+  // strong-named consumer to add a binding redirect on each prerelease bump; this avoids that churn.
   "assemblyVersion": {
     "precision": "minor"
   },

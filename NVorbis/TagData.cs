@@ -55,6 +55,8 @@ namespace NVorbis
                 {
                     return string.Join(Environment.NewLine, values.ToArray());
                 }
+                // Last wins for a repeated key. Vorbis allows repeats with no spec-defined precedence, so
+                // this is a deliberate interpretation choice (first-wins would be equally valid), not a bug.
                 return values[values.Count - 1];
             }
             return string.Empty;

@@ -6,6 +6,8 @@ namespace NVorbis
 {
     class Huffman : IHuffman, IComparer<HuffmanListNode>
     {
+        // Codes up to MAX_TABLE_BITS go in the direct-indexed prefix table; longer ones spill to the
+        // linear overflow list. UNUSED_LENGTH is a sentinel that sorts unused (0-length) entries to the end.
         const int MAX_TABLE_BITS = 10;
         const int UNUSED_LENGTH = 99999;
 
@@ -52,6 +54,8 @@ namespace NVorbis
                 }
                 else
                 {
+                    // Replicate this short code into every table slot whose low itemBits match its pattern,
+                    // so a direct index by the peeked tableBits resolves it in one lookup.
                     var maxVal = 1 << (tableBits - itemBits);
                     var item = list[i];
                     for (int j = 0; j < maxVal; j++)

@@ -19,6 +19,9 @@ namespace NVorbis
         // stream without taking a lock or hashing on the per-packet path.
         MdctImpl _impl0, _impl1;
 
+        // Defense-in-depth / documented contract for any caller. The primary guard is StreamDecoder's
+        // header-level block-size rejection, which catches malformed input at parse time rather than
+        // surfacing it mid-decode deep in this call stack; keep both.
         public void Reverse(float[] samples, int sampleCount)
         {
             if (samples == null) throw new ArgumentNullException(nameof(samples));
@@ -357,7 +360,9 @@ namespace NVorbis
             // The step3 helpers use ref arithmetic instead of array indexing: the
             // decreasing computed indices defeat the JIT's bounds-check elimination,
             // and these loops dominate the transform's cost. Offsets are provably
-            // in-range for any legal block size (see the golden-output tests).
+            // in-range for any legal block size (see the golden-output tests). The k00_20/v41_21-style
+            // names only make sense against the stb_vorbis/libvorbis C reference; don't rename to "clean
+            // up" without re-deriving the index math from that reference.
             void step3_iter0_loop(int n, float[] e, int i_off, int k_off)
             {
                 ref float ee0 = ref Unsafe.Add(ref e[0], i_off);
