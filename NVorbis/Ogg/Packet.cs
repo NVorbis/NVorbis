@@ -64,6 +64,42 @@ namespace NVorbis.Ogg
             return b;
         }
 
+        // Bulk equivalent of ReadNextByte for the bit-reader refill: copies whole runs with a single
+        // _data.Span materialization per part instead of rebuilding the span for every byte, crossing
+        // part (page) boundaries as needed. Field bookkeeping stays byte-identical to ReadNextByte, so
+        // TotalBits and a later ReadNextByte on the cold skip path see a consistent position.
+        protected override int FetchBytes(Span<byte> destination)
+        {
+            int written = 0;
+            while (written < destination.Length && _dataIndex < _partCount)
+            {
+                var span = _data.Span;
+                int available = span.Length - _dataOfs;
+                if (available > 0)
+                {
+                    int n = Math.Min(available, destination.Length - written);
+                    span.Slice(_dataOfs, n).CopyTo(destination.Slice(written));
+                    _dataOfs += n;
+                    written += n;
+                }
+
+                if (_dataOfs == _data.Length)
+                {
+                    _dataOfs = 0;
+                    _dataCount += _data.Length;
+                    if (++_dataIndex < _partCount)
+                    {
+                        _data = _packetReader.GetPacketData(GetPart(_dataIndex));
+                    }
+                    else
+                    {
+                        _data = Memory<byte>.Empty;
+                    }
+                }
+            }
+            return written;
+        }
+
         public override void Reset()
         {
             _dataIndex = 0;
