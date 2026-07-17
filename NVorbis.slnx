@@ -1,0 +1,22 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Folder Name="/Solution Items/">
+    <File Path="README.md" />
+    <File Path="TODO" />
+  </Folder>
+  <Folder Name="/Solution Items/Git Settings/">
+    <File Path=".gitattributes" />
+    <File Path=".gitignore" />
+  </Folder>
+  <Folder Name="/Solution Items/Github Actions/">
+    <File Path=".github/workflows/dotnetcore.yml" />
+    <File Path=".github/workflows/publish-nuget.yml" />
+  </Folder>
+  <Project Path="NVorbis.Tests/NVorbis.Tests.csproj" />
+  <Project Path="NVorbis/NVorbis.csproj" />
+  <Project Path="TestApp/TestApp.csproj" />
+</Solution>
