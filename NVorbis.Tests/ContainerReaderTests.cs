@@ -33,6 +33,7 @@ namespace NVorbis.Tests
             public IPacket PeekNextPacket() => null;
             public long SeekTo(long granulePos, int preRoll, GetPacketGranuleCount getPacketGranuleCount) => 0;
             public long GetGranuleCount() => 0;
+            public Func<GranuleDiscrepancy, GranuleDiscrepancyResolution?> GranuleDiscrepancyHandler { get; set; }
         }
 
         private static ContainerReader MakeReader() =>

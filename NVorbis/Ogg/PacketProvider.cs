@@ -17,13 +17,13 @@ namespace NVorbis.Ogg
         private Packet _lastPacket;
         private int _nextPacketPageIndex;
         private int _nextPacketPacketIndex;
-        private long _streamStartGranule;
-        private bool _streamStartGranuleKnown;
         private int _firstAudioPacketIndex;
 
         public bool CanSeek => true;
 
         public int StreamSerial { get; }
+
+        public Func<GranuleDiscrepancy, GranuleDiscrepancyResolution?> GranuleDiscrepancyHandler { get; set; }
 
         internal PacketProvider(IStreamPageReader reader, int streamSerial)
         {
@@ -68,12 +68,18 @@ namespace NVorbis.Ogg
                 // We are on the very first audio page (or somehow before it). There is no
                 // preceding audio page to validate granule positions against, so skip the
                 // complex FindPacket logic and snap directly to the stream beginning.
-                // GetStreamStartGranule resolves the first real audio packet's index (skipping
-                // a header tail spilled onto this page, if any -- issue #37) and the stream's
-                // true start granule, which isn't necessarily zero (e.g. a stream cut or
-                // captured mid-broadcast -- issue #35).
+                // If a packet from the previous logical grouping spilled its tail onto this
+                // page (the page's continuation flag is set -- issue #37), packet 0 completes
+                // that spill and the first fresh packet is index 1. Reading the continuation
+                // flag is generic Ogg page positioning, not codec knowledge. We return the raw
+                // packet-start granule of that first fresh packet; the codec decides whether/how
+                // to normalize it (a stream cut or captured mid-broadcast doesn't start at
+                // granule zero -- issue #35).
                 pageIndex = _reader.FirstDataPageIndex;
-                granulePos = GetStreamStartGranule(getPacketGranuleCount);
+                _reader.GetPage(pageIndex, out _, out _, out var isContinuation, out _, out _, out _);
+                _firstAudioPacketIndex = isContinuation ? 1 : 0;
+                var (gps, endGP) = GetTargetPageInfo(pageIndex, _firstAudioPacketIndex, 0, getPacketGranuleCount);
+                granulePos = gps.Length > _firstAudioPacketIndex ? gps[_firstAudioPacketIndex] : endGP;
                 packetIndex = _firstAudioPacketIndex;
             }
             else
@@ -166,28 +172,24 @@ namespace NVorbis.Ogg
             return (gps, endGP);
         }
 
-        // Three deliberately narrow, evidence-based cases when calculated end-granule != next page's stored
-        // granule: (1) libvorbis bug bit-pattern, (2) genuine spliced-timeline hole, (3) EOS-clip over-count.
-        // A fourth scenario found in the wild should be a fourth explicit case, not folded into these.
+        // When the calculated end-granule != the next page's stored granule, hand a positive
+        // discrepancy to the codec (it may account for it, e.g. an encoder mis-count) and handle a
+        // negative one as a generic EOS-clip over-count. A positive discrepancy the codec declines
+        // is a genuine spliced-timeline hole (issue #39).
         private int FindPacket(long[] gps, long endGP, long lastPageGranulePos, int lastPagePacketLength, ref long granulePos)
         {
-            // next check for a bugged vorbis encoder...
             if (endGP != lastPageGranulePos)
             {
                 var diff = endGP - lastPageGranulePos;
                 if (diff > 0)
                 {
-                    if (GetIsVorbisBugDiff(diff))
+                    var resolution = GranuleDiscrepancyHandler?.Invoke(
+                        new GranuleDiscrepancy(granulePos, endGP, lastPagePacketLength, diff));
+                    if (resolution.HasValue)
                     {
-                        // the last packet in the last page is a long block that was mis-counted by libvorbis
-                        // if the requested granulePos is <= endGP, it's in that packet
-                        // otherwise, the normal logic should be fine
-                        // NOTE that this bug does not appear to happen on a continued packet, which makes this safe
-                        if (granulePos <= endGP)
-                        {
-                            granulePos = endGP - lastPagePacketLength;
-                            return -1;
-                        }
+                        // the codec accounts for the discrepancy; seek to the packet/granule it returned
+                        granulePos = resolution.Value.GranulePos;
+                        return resolution.Value.PacketOffset;
                     }
                     // otherwise there's a granule hole between the previous page and this one:
                     // the stream's timeline skips forward, e.g. because it was spliced together
@@ -242,71 +244,6 @@ namespace NVorbis.Ogg
             return packetIndex;
         }
 
-        private bool GetIsVorbisBugDiff(long diff)
-        {
-            // This requires either breaking abstractions OR doing some fancy bit math...
-            // We're gonna use the latter to keep the abstractions clean.
-            // For our bug, the bit pattern is x set bits followed by y cleared bits:
-            //   x = the number of bits between short & long block sizes
-            //   y = the number of bits in the short block size - 2
-            // So in binary it looks like 111000000 for 2048/256 block sizes.
-            // We pre-adjust the "/ 4" out by starting at 0 for y instead of 2
-
-            // we have to use the absolute value for this to work right
-            diff = Math.Abs(diff);
-
-            // find the count for y
-            var temp = diff;
-            var shortBlockBits = 0;
-            while (temp > 0 && (temp & 1) == 0)
-            {
-                ++shortBlockBits;
-                temp >>= 1;
-            }
-
-            // find the count for x (shortcut: start from shortBlockBits since this is really an offset from there)
-            var longBlockBits = shortBlockBits;
-            while ((temp & 1) == 1)
-            {
-                ++longBlockBits;
-                temp >>= 1;
-            }
-
-            // if we've encountered the bug, temp will be 0 and diff will equal longBlock / 4 - shortBLock /4
-            return temp == 0 && diff == (1 << longBlockBits) - (1 << shortBlockBits);
-        }
-
-        private long GetStreamStartGranule(GetPacketGranuleCount getPacketGranuleCount)
-        {
-            if (!_streamStartGranuleKnown)
-            {
-                // The Vorbis I spec requires audio data to start on a fresh page, but some
-                // encoders spill the setup header's tail onto the first data page (issue #37).
-                // When that happens, packet 0 there is header data, not audio, and must be
-                // skipped when walking for the true start granule.
-                _reader.GetPage(_reader.FirstDataPageIndex, out _, out _, out var isContinuation, out _, out _, out _);
-                _firstAudioPacketIndex = isContinuation ? 1 : 0;
-
-                // Walk the first data page to find where the first audio packet's output ends;
-                // that is the granule of the stream's first decodable sample (that packet only
-                // primes the overlap buffer, so it emits nothing itself).  Normally this is 0,
-                // but a stream cut or captured mid-timeline starts at whatever granule the
-                // encoder was up to (issue #35).
-                // A negative result here isn't reliable: normal packet-boundary block-size
-                // accounting (and, on some files, the same encoder mis-count PacketProvider
-                // already compensates for elsewhere) can legitimately produce small negative
-                // values on an ordinary, non-trimmed file, with no way to distinguish that from
-                // a genuine begin-trim. Clamp to 0, as before -- Vorbis has no formal lead-in
-                // trim concept the way Opus does, and no observed file needs one.
-                var (gps, endGP) = GetTargetPageInfo(_reader.FirstDataPageIndex, _firstAudioPacketIndex, 0, getPacketGranuleCount);
-                var start = gps.Length > _firstAudioPacketIndex ? gps[_firstAudioPacketIndex] : endGP;
-
-                _streamStartGranule = Math.Max(0, start);
-                _streamStartGranuleKnown = true;
-            }
-            return _streamStartGranule;
-        }
-
         // this method calc's the appropriate page and packet prior to the one specified, honoring continuations and handling negative packetIndex values
         // if packet index is larger than the current page allows, we just return it as-is
         private bool NormalizePacketIndex(ref int pageIndex, ref int packetIndex)
@@ -332,7 +269,7 @@ namespace NVorbis.Ogg
                 if (pgIdx <= firstDataPage)
                 {
                     pageIndex = firstDataPage;
-                    packetIndex = _streamStartGranuleKnown ? _firstAudioPacketIndex : 0;
+                    packetIndex = _firstAudioPacketIndex;
                     return true;
                 }
 

@@ -86,6 +86,7 @@ namespace NVorbis.Tests
             public long SeekTo(long granulePos, int preRoll, GetPacketGranuleCount getPacketGranuleCount) =>
                 throw new NotSupportedException();
             public long GetGranuleCount() => throw new NotSupportedException();
+            public Func<GranuleDiscrepancy, GranuleDiscrepancyResolution?> GranuleDiscrepancyHandler { get; set; }
         }
 
         private static byte[] StreamHeaderWithBlockSizes(int block0Exp, int block1Exp) =>

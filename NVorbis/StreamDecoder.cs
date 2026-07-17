@@ -29,7 +29,9 @@ namespace NVorbis
         // Timeline normalization: every public position/seek/total-samples computation subtracts this so
         // callers always see position 0 as the first decodable sample (streams needn't start at granule 0).
         // Part of the public-position API contract, not a local detail — any new position member must apply it.
-        private readonly long _granuleOffset;
+        // Resolved lazily: null until the first decoded packet exposing a granule (inverted formula) or the
+        // first seek/total-samples query (EnsureGranuleOffset walk) sets it. Forward-only streams pin it to 0.
+        private long? _granuleOffset;
         private bool _hasClipped;
         private bool _hasPosition;
         private bool _eosFound;
@@ -68,22 +70,21 @@ namespace NVorbis
                 throw GetInvalidStreamException(packet);
             }
 
-            if (_packetProvider.CanSeek)
-            {
-                try
-                {
-                    // Find where the stream's granule timeline starts.  Normally that's 0, but a
-                    // stream cut or captured mid-timeline starts later (issue #35); all positions
-                    // we report are normalized so the first decodable sample is position 0.
-                    // The provider is already positioned at the first audio packet, so this seek
-                    // doesn't change any state we care about.
-                    _granuleOffset = _packetProvider.SeekTo(0, 0, GetPacketGranules);
-                }
-                catch (ArgumentOutOfRangeException)
-                {
-                    // no audio pages; nothing to normalize
-                }
-            }
+            // The stream's granule timeline needn't start at 0 (a stream cut or captured
+            // mid-timeline starts later -- issue #35); all reported positions subtract _granuleOffset
+            // so the first decodable sample is position 0.  Seekable streams resolve it lazily (see
+            // EnsureGranuleOffset / the decode-path resolution); forward-only streams can't walk back,
+            // so they pin it to 0 as before.
+            _granuleOffset = _packetProvider.CanSeek ? (long?)null : 0L;
+
+            // The block sizes are loaded now, so hand the codec's granule-discrepancy policy to the
+            // container: a positive discrepancy equal to (block1 - block0)/4 is an encoder long-block
+            // mis-count -- the seek target lands in the prior page's last packet.  Anything else is a
+            // genuine timeline gap the container handles generically (returns null here).
+            _packetProvider.GranuleDiscrepancyHandler = d =>
+                d.Diff == (_block1Size - _block0Size) / 4 && d.TargetGranule <= d.CalculatedEndGranule
+                    ? new GranuleDiscrepancyResolution(-1, d.CalculatedEndGranule - d.PreviousPageLastPacketLength)
+                    : (GranuleDiscrepancyResolution?)null;
 
             _tags = new Lazy<ITagData>(() => new TagData(_vendor, _comments));
         }
@@ -404,11 +405,19 @@ namespace NVorbis
 
                     // If we need to pick up a position, and the packet had one, apply it now.
                     // _granuleOffset translates the stream's timeline (which doesn't necessarily
-                    // start at zero -- issue #35) to the 0-based positions we report.
+                    // start at zero -- issue #35) to the 0-based positions we report.  When decoding
+                    // from the start, the offset falls out for free here: invert the position formula
+                    // to solve for the offset instead (this is the first packet exposing a granule, so
+                    // _currentPosition/count reflect exactly the samples emitted before it). Clamp >=0,
+                    // matching EnsureGranuleOffset -- Vorbis has no formal begin-trim concept.
                     if (framePosition.HasValue && !_hasPosition)
                     {
                         _hasPosition = true;
-                        _currentPosition = framePosition.Value - _granuleOffset - (_prevPacketEnd - _prevPacketStart) - count / _channels;
+                        if (_granuleOffset == null)
+                        {
+                            _granuleOffset = Math.Max(0, framePosition.Value - _currentPosition - (_prevPacketEnd - _prevPacketStart) - count / _channels);
+                        }
+                        _currentPosition = framePosition.Value - _granuleOffset.Value - (_prevPacketEnd - _prevPacketStart) - count / _channels;
                     }
                 }
 
@@ -497,7 +506,15 @@ namespace NVorbis
             if (framePosition.HasValue && isEndOfStream)
             {
                 var actualEnd = _currentPosition + bufferedSamples + validLen - startIndex;
-                var diff = (int)(framePosition.Value - _granuleOffset - actualEnd);
+                // When EOS lands on the very first packet exposing a granule (a single-page stream),
+                // this backoff runs before the Read-path position pickup, so the offset may still be
+                // null.  Resolve it here first, self-consistently (offset = granule - actualEnd), which
+                // makes diff 0 -- correct, since a start-decoded stream never overruns its own end.
+                if (_granuleOffset == null)
+                {
+                    _granuleOffset = Math.Max(0, framePosition.Value - actualEnd);
+                }
+                var diff = (int)(framePosition.Value - _granuleOffset.Value - actualEnd);
                 if (diff < 0)
                 {
                     validLen += diff;
@@ -657,6 +674,10 @@ namespace NVorbis
             ResetDecoder();
             _hasPosition = true;
 
+            // Resolve the timeline offset up front (cheap walk if not already known; no-op once set),
+            // so nothing below observes a null offset and no full decode-from-0 is needed.
+            var granuleOffset = EnsureGranuleOffset();
+
             long pos;
             int rollForward;
             try
@@ -665,14 +686,14 @@ namespace NVorbis
                 // one packet back so the MDCT overlap is valid.  PacketProvider.SeekTo clamps
                 // to the first audio packet when framePosition falls on the first data page
                 // (covers position 0 and the first ~block_size samples generically).
-                // _granuleOffset translates our 0-based position onto the stream's timeline.
-                pos = _packetProvider.SeekTo(framePosition + _granuleOffset, 1, GetPacketGranules);
-                rollForward = (int)(framePosition + _granuleOffset - pos);
+                // granuleOffset translates our 0-based position onto the stream's timeline.
+                pos = _packetProvider.SeekTo(framePosition + granuleOffset, 1, GetPacketGranules);
+                rollForward = (int)(framePosition + granuleOffset - pos);
             }
             catch (ArgumentOutOfRangeException)
             {
                 // the requested position is past the end of the stream
-                _currentPosition = _packetProvider.GetGranuleCount() - _granuleOffset;
+                _currentPosition = _packetProvider.GetGranuleCount() - granuleOffset;
                 _prevPacketStart = _prevPacketEnd = 0;
                 _eosFound = true;
                 return;
@@ -683,7 +704,7 @@ namespace NVorbis
                 // The target falls in a granule hole -- a gap in the stream's timeline, e.g. a
                 // spliced stream (issue #39) -- so the provider gave us the first packet after
                 // the hole.  Snap forward to the first sample that actually exists.
-                framePosition = pos - _granuleOffset;
+                framePosition = pos - granuleOffset;
                 rollForward = 0;
             }
 
@@ -692,7 +713,7 @@ namespace NVorbis
             {
                 // we'll use this to force ReadSamples to fail to read
                 _eosFound = true;
-                if (_packetProvider.GetGranuleCount() - _granuleOffset != framePosition)
+                if (_packetProvider.GetGranuleCount() - granuleOffset != framePosition)
                 {
                     throw new InvalidOperationException("Could not read pre-roll packet!  Try seeking again prior to reading more samples.");
                 }
@@ -725,6 +746,28 @@ namespace NVorbis
 
             _prevPacketStart += rollForward;
             _currentPosition = framePosition;
+        }
+
+        private long EnsureGranuleOffset()
+        {
+            // Resolve the stream's start granule (issue #35) without decoding from position 0.
+            // Only reachable when the provider can seek (forward-only pins the offset to 0 in the
+            // ctor); the decode path resolves it inline otherwise.  PacketProvider.SeekTo(0, 0, ...)
+            // returns the raw packet-start granule of the first audio packet and repositions there;
+            // clamp >=0 (Vorbis has no formal begin-trim).  Cached, so this walk runs at most once.
+            if (_granuleOffset == null)
+            {
+                try
+                {
+                    _granuleOffset = Math.Max(0, _packetProvider.SeekTo(0, 0, GetPacketGranules));
+                }
+                catch (ArgumentOutOfRangeException)
+                {
+                    // no audio pages to locate; nothing to normalize (matches the old ctor seek)
+                    _granuleOffset = 0L;
+                }
+            }
+            return _granuleOffset.Value;
         }
 
         private int GetPacketGranules(IPacket curPacket)
@@ -798,7 +841,15 @@ namespace NVorbis
         /// <summary>
         /// Gets the total number of frames (samples per channel) in the decoded stream.
         /// </summary>
-        public long TotalFrames => (_packetProvider ?? throw new ObjectDisposedException(nameof(StreamDecoder))).GetGranuleCount() - _granuleOffset;
+        public long TotalFrames
+        {
+            get
+            {
+                if (_packetProvider == null) throw new ObjectDisposedException(nameof(StreamDecoder));
+                // EnsureGranuleOffset is a no-op once resolved (and for forward-only, pinned to 0 in the ctor).
+                return _packetProvider.GetGranuleCount() - EnsureGranuleOffset();
+            }
+        }
 
         /// <inheritdoc/>
         [Obsolete("Renamed to " + nameof(TotalFrames) + " to disambiguate frames from interleaved samples.")]

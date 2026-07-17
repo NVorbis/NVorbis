@@ -34,6 +34,9 @@ namespace NVorbis.Ogg
 
         public int StreamSerial { get; }
 
+        // Satisfies IPacketProvider; never invoked because this provider cannot seek.
+        public Func<GranuleDiscrepancy, GranuleDiscrepancyResolution?> GranuleDiscrepancyHandler { get; set; }
+
         public bool AddPage(byte[] buf, bool isResync)
         {
             if (((PageFlags)buf[5] & PageFlags.BeginningOfStream) != 0)

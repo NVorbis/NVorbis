@@ -40,6 +40,7 @@ namespace NVorbis.Tests
             public Contracts.IPacket PeekNextPacket() => null;
             public long SeekTo(long granulePos, int preRoll, Contracts.GetPacketGranuleCount getPacketGranuleCount) => 0;
             public long GetGranuleCount() => 0;
+            public Func<Contracts.GranuleDiscrepancy, Contracts.GranuleDiscrepancyResolution?> GranuleDiscrepancyHandler { get; set; }
         }
 
         // Minimal Contracts.IStreamDecoder spy that only tracks whether Dispose() was called.
