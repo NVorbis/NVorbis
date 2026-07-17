@@ -74,11 +74,11 @@ namespace NVorbis.Tests
         }
 
         [Fact]
-        public void TotalSamples_NonSeekableStream_ThrowsNotSupportedException()
+        public void TotalFrames_NonSeekableStream_ThrowsNotSupportedException()
         {
             // ForwardOnlyPacketProvider.GetGranuleCount() is not supported.
             using var reader = OpenNonSeekable("3test.ogg");
-            Assert.Throws<NotSupportedException>(() => _ = reader.TotalSamples);
+            Assert.Throws<NotSupportedException>(() => _ = reader.TotalFrames);
         }
 
         [Fact]

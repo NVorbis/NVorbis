@@ -29,7 +29,7 @@ namespace NVorbis.Tests
 
             reader.SeekTo(HoleTarget, SeekOrigin.Begin);
 
-            Assert.Equal(HoleEnd, reader.SamplePosition);
+            Assert.Equal(HoleEnd, reader.FramePosition);
 
             var buf = new float[reader.Channels * 4096];
             Assert.True(reader.ReadSamples(buf, 0, buf.Length) > 0);
@@ -40,14 +40,14 @@ namespace NVorbis.Tests
         {
             var rand = new Random(39 ^ Issue39File.GetHashCode());
             using var reader = new VorbisReader(TestFile(Issue39File));
-            long total = reader.TotalSamples;
+            long total = reader.TotalFrames;
             var buf = new float[reader.Channels * 4096];
 
             for (int i = 0; i < 2000; i++)
             {
                 long target = (long)(rand.NextDouble() * total);
                 reader.SeekTo(target, SeekOrigin.Begin);
-                Assert.True(reader.SamplePosition >= target, $"pos {reader.SamplePosition} < target {target}");
+                Assert.True(reader.FramePosition >= target, $"pos {reader.FramePosition} < target {target}");
                 reader.ReadSamples(buf, 0, buf.Length);
             }
         }

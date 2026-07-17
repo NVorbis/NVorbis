@@ -21,12 +21,12 @@ namespace NVorbis.Tests
             var buf = new float[reader.SampleRate * reader.Channels];
             reader.ReadSamples(buf, 0, buf.Length);
 
-            var before = reader.SamplePosition;
+            var before = reader.FramePosition;
             const long offset = 1000L;
 
             reader.SeekTo(offset, SeekOrigin.Current);
 
-            Assert.Equal(before + offset, reader.SamplePosition);
+            Assert.Equal(before + offset, reader.FramePosition);
         }
 
         [Fact]
@@ -37,11 +37,11 @@ namespace NVorbis.Tests
             var buf = new float[reader.SampleRate * reader.Channels];
             reader.ReadSamples(buf, 0, buf.Length);
 
-            var before = reader.SamplePosition;
+            var before = reader.FramePosition;
 
             reader.SeekTo(0L, SeekOrigin.Current);
 
-            Assert.Equal(before, reader.SamplePosition);
+            Assert.Equal(before, reader.FramePosition);
         }
 
         [Fact]
@@ -53,15 +53,15 @@ namespace NVorbis.Tests
             var buf = new float[reader.SampleRate * reader.Channels * 2];
             reader.ReadSamples(buf, 0, buf.Length);
 
-            var before = reader.SamplePosition;
+            var before = reader.FramePosition;
             const long offset = 5000L;
 
             reader.SeekTo(offset, SeekOrigin.Current);
 
             // must be strictly forward
-            Assert.True(reader.SamplePosition > before,
-                $"Expected position > {before} but got {reader.SamplePosition}");
-            Assert.Equal(before + offset, reader.SamplePosition);
+            Assert.True(reader.FramePosition > before,
+                $"Expected position > {before} but got {reader.FramePosition}");
+            Assert.Equal(before + offset, reader.FramePosition);
         }
 
         [Fact]
@@ -71,7 +71,7 @@ namespace NVorbis.Tests
 
             reader.SeekTo(1000L, SeekOrigin.Begin);
 
-            Assert.Equal(1000L, reader.SamplePosition);
+            Assert.Equal(1000L, reader.FramePosition);
         }
 
         // Regression tests for issue #37: seeking to position 0 on a file whose last
@@ -92,7 +92,7 @@ namespace NVorbis.Tests
 
             // must not throw
             reader.SeekTo(0L, SeekOrigin.Begin);
-            Assert.Equal(0L, reader.SamplePosition);
+            Assert.Equal(0L, reader.FramePosition);
         }
 
         [Fact]
@@ -116,7 +116,7 @@ namespace NVorbis.Tests
 
             reader.SeekTo(0L, SeekOrigin.Begin);
 
-            Assert.Equal(0L, reader.SamplePosition);
+            Assert.Equal(0L, reader.FramePosition);
         }
 
         [Fact]
@@ -128,7 +128,7 @@ namespace NVorbis.Tests
             while (reader.ReadSamples(buf, 0, buf.Length) > 0) { }
 
             reader.SeekTo(TimeSpan.Zero);
-            Assert.Equal(0L, reader.SamplePosition);
+            Assert.Equal(0L, reader.FramePosition);
         }
 
         [Fact]
@@ -137,9 +137,9 @@ namespace NVorbis.Tests
             // Position 64 falls within the first-page shortcut range; verify
             // the shortcut branch still lands at the right sample offset.
             using var reader = new VorbisReader(TestFile(Issue37File));
-            var target = Math.Min(64L, reader.TotalSamples - 1);
+            var target = Math.Min(64L, reader.TotalFrames - 1);
             reader.SeekTo(target, SeekOrigin.Begin);
-            Assert.Equal(target, reader.SamplePosition);
+            Assert.Equal(target, reader.FramePosition);
         }
 
         [Fact]
@@ -147,20 +147,20 @@ namespace NVorbis.Tests
         {
             // Mid-stream seek exercises the normal FindPacket path (past FDI).
             using var reader = new VorbisReader(TestFile(Issue37File));
-            var mid = reader.TotalSamples / 2;
+            var mid = reader.TotalFrames / 2;
             if (mid == 0) return;
             reader.SeekTo(mid, SeekOrigin.Begin);
-            Assert.Equal(mid, reader.SamplePosition);
+            Assert.Equal(mid, reader.FramePosition);
         }
 
         [Fact]
         public void Issue37_SeekToMiddle_CanReadSamples()
         {
             using var reader = new VorbisReader(TestFile(Issue37File));
-            var mid = reader.TotalSamples / 2;
+            var mid = reader.TotalFrames / 2;
             if (mid == 0) return;
             reader.SeekTo(mid, SeekOrigin.Begin);
-            Assert.Equal(mid, reader.SamplePosition);
+            Assert.Equal(mid, reader.FramePosition);
             var buf = new float[4096];
             var count = reader.ReadSamples(buf, 0, buf.Length);
             Assert.True(count > 0, "Expected samples after seeking to midpoint");
@@ -172,24 +172,24 @@ namespace NVorbis.Tests
             // Drain to EOS then seek to a non-zero position; exercises the
             // normal path from a post-EOS state.
             using var reader = new VorbisReader(TestFile(Issue37File));
-            var mid = reader.TotalSamples / 2;
+            var mid = reader.TotalFrames / 2;
             if (mid == 0) return;
             var buf = new float[4096];
             while (reader.ReadSamples(buf, 0, buf.Length) > 0) { }
             reader.SeekTo(mid, SeekOrigin.Begin);
-            Assert.Equal(mid, reader.SamplePosition);
+            Assert.Equal(mid, reader.FramePosition);
         }
 
         [Fact]
         public void Issue37_SeekToMiddleAfterEos_CanReadSamples()
         {
             using var reader = new VorbisReader(TestFile(Issue37File));
-            var mid = reader.TotalSamples / 2;
+            var mid = reader.TotalFrames / 2;
             if (mid == 0) return;
             var buf = new float[4096];
             while (reader.ReadSamples(buf, 0, buf.Length) > 0) { }
             reader.SeekTo(mid, SeekOrigin.Begin);
-            Assert.Equal(mid, reader.SamplePosition);
+            Assert.Equal(mid, reader.FramePosition);
             var count = reader.ReadSamples(buf, 0, buf.Length);
             Assert.True(count > 0, "Expected samples after seeking to midpoint post-EOS");
         }

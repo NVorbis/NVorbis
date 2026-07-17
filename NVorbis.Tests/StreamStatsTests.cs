@@ -182,14 +182,14 @@ namespace NVorbis.Tests
         // ── Residue decode correctness after ArrayPool change ─────────────────
 
         [Fact]
-        public void Residue_ArrayPool_FullDecode_SampleCountMatchesTotalSamples()
+        public void Residue_ArrayPool_FullDecode_SampleCountMatchesTotalFrames()
         {
             // Draining the file exercises every Residue0.WriteVectors call.
             // If the ArrayPool rent/return is incorrect the decoded sample count
-            // will not match TotalSamples (corruption manifests as premature EOS
+            // will not match TotalFrames (corruption manifests as premature EOS
             // or a mismatch in the running total).
             using var reader = new VorbisReader(TestFile("3test.ogg"));
-            long expected = reader.TotalSamples;
+            long expected = reader.TotalFrames;
             var buf = new float[4096 * reader.Channels];
             long total = 0;
             int n;

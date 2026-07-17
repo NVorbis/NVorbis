@@ -44,8 +44,14 @@ namespace NVorbis.Contracts
         TimeSpan TotalTime { get; }
 
         /// <summary>
-        /// Gets the total number of samples in the decoded stream.
+        /// Gets the total number of frames (samples per channel) in the decoded stream.
         /// </summary>
+        long TotalFrames { get; }
+
+        /// <summary>
+        /// Gets the total number of frames in the decoded stream.
+        /// </summary>
+        [Obsolete("Renamed to " + nameof(TotalFrames) + " to disambiguate frames from interleaved samples.")]
         long TotalSamples { get; }
 
         /// <summary>
@@ -54,8 +60,14 @@ namespace NVorbis.Contracts
         TimeSpan TimePosition { get; set; }
 
         /// <summary>
-        /// Gets or sets the current sample position of the stream.
+        /// Gets or sets the current frame position (samples per channel) of the stream.
         /// </summary>
+        long FramePosition { get; set; }
+
+        /// <summary>
+        /// Gets or sets the current frame position of the stream.
+        /// </summary>
+        [Obsolete("Renamed to " + nameof(FramePosition) + " to disambiguate frames from interleaved samples.")]
         long SamplePosition { get; set; }
 
         /// <summary>
@@ -88,9 +100,9 @@ namespace NVorbis.Contracts
         /// <summary>
         /// Seeks the stream by the specified sample count.
         /// </summary>
-        /// <param name="samplePosition">The relative sample position to seek to.</param>
+        /// <param name="framePosition">The relative frame position (samples per channel) to seek to.</param>
         /// <param name="seekOrigin">The reference point used to obtain the new position.</param>
-        void SeekTo(long samplePosition, SeekOrigin seekOrigin = SeekOrigin.Begin);
+        void SeekTo(long framePosition, SeekOrigin seekOrigin = SeekOrigin.Begin);
 
         /// <summary>
         /// Reads samples into the specified buffer.

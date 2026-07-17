@@ -5,7 +5,7 @@ using Xunit;
 namespace NVorbis.Tests
 {
     // Regression tests for issue #35: "the number of samples returned by ReadSamples() does not
-    // line up with SamplePosition ... seeking to SamplePosition = 0 before reading improves the
+    // line up with FramePosition ... seeking to FramePosition = 0 before reading improves the
     // issue, but doesn't entirely fix it."
     //
     // Root cause: issue6test.ogg's granule timeline doesn't start at 0 (a stream cut or capture
@@ -13,7 +13,7 @@ namespace NVorbis.Tests
     // snap forced granulePos = 0, so the two paths disagreed by the timeline's true start offset --
     // matching the reporter's "seeking to 0 improves it, but doesn't fix it" symptom exactly.
     // StreamDecoder now learns the stream's start granule at construction time and normalizes
-    // every position (SamplePosition, TotalSamples, seek targets) to be 0-based from there.
+    // every position (FramePosition, TotalFrames, seek targets) to be 0-based from there.
     //
     // issue37test.ogg additionally violates the Vorbis I spec: its setup header spills onto the
     // first data page (a continuation), so packet 0 there is header tail, not audio. The same
@@ -27,7 +27,7 @@ namespace NVorbis.Tests
         [Theory]
         [InlineData("issue6test.ogg")]
         [InlineData("issue37test.ogg")]
-        public void CumulativeReadLength_MatchesSamplePosition(string file)
+        public void CumulativeReadLength_MatchesFramePosition(string file)
         {
             var rand = new Random(35 ^ file.GetHashCode());
             using var reader = new VorbisReader(TestFile(file));
@@ -44,7 +44,7 @@ namespace NVorbis.Tests
                 if (count == 0) break;
 
                 expected += count / reader.Channels;
-                Assert.Equal(expected, reader.SamplePosition);
+                Assert.Equal(expected, reader.FramePosition);
             }
         }
 
@@ -59,21 +59,21 @@ namespace NVorbis.Tests
 
             using var seekReader = new VorbisReader(TestFile(file));
             seekReader.SeekTo(0L, SeekOrigin.Begin);
-            Assert.Equal(0L, seekReader.SamplePosition);
+            Assert.Equal(0L, seekReader.FramePosition);
             var seekBuf = new float[seekReader.Channels * 4096];
             int seekCount = seekReader.ReadSamples(seekBuf, 0, seekBuf.Length);
 
             Assert.Equal(openCount, seekCount);
-            Assert.Equal(openReader.SamplePosition, seekReader.SamplePosition);
+            Assert.Equal(openReader.FramePosition, seekReader.FramePosition);
         }
 
         [Theory]
         [InlineData("issue6test.ogg")]
         [InlineData("issue37test.ogg")]
-        public void SamplePosition_Zero_AfterOpen(string file)
+        public void FramePosition_Zero_AfterOpen(string file)
         {
             using var reader = new VorbisReader(TestFile(file));
-            Assert.Equal(0L, reader.SamplePosition);
+            Assert.Equal(0L, reader.FramePosition);
         }
     }
 }

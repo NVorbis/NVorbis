@@ -115,7 +115,7 @@ namespace NVorbis.Tests
         // ── Synthetic Init/Unpack/Apply smoke test ────────────────────────────
         //
         // Floor type 0 is virtually unused in the wild (no known encoder past
-        // libvorbis's own beta 4 emits it -- see DESIGN_DECISIONS.md), so no real
+        // libvorbis's own beta 4 emits it), so no real
         // .ogg fixture exercises this path. These tests hand-build a minimal,
         // spec-shaped floor0 header/data packet and drive the full Init -> Unpack
         // -> Apply pipeline directly, to catch "throws/crashes/produces NaN" on

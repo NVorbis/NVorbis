@@ -383,20 +383,20 @@ namespace NVorbis
                         break;
                     }
 
-                    if (!ReadNextPacket(count / _channels, out var samplePosition))
+                    if (!ReadNextPacket(count / _channels, out var framePosition))
                     {
                         // Drain the current packet (the windowing will fade it out). Left
                         // unclamped, this can emit past the stream's stated end when EOS wasn't
                         // flagged during decode (HasAllPages was still false, so the normal EOS
                         // valid-length backoff in ReadNextPacket never ran) -- making the total
-                        // emitted length depend on whether TotalSamples was queried first. Clamp
-                        // the drain to what's actually left. GetGranuleCount() (via TotalSamples)
+                        // emitted length depend on whether TotalFrames was queried first. Clamp
+                        // the drain to what's actually left. GetGranuleCount() (via TotalFrames)
                         // is cheap here: reaching this branch means the provider already hit EOF,
                         // so HasAllPages is already true and no extra I/O is triggered.
                         long drainSpan = _prevPacketStop - _prevPacketStart;
                         if (_packetProvider.CanSeek)
                         {
-                            var allowed = TotalSamples - (_currentPosition + count / _channels);
+                            var allowed = TotalFrames - (_currentPosition + count / _channels);
                             drainSpan = Math.Min(drainSpan, Math.Max(0, allowed));
                         }
                         _prevPacketEnd = _prevPacketStart + (int)drainSpan;
@@ -405,10 +405,10 @@ namespace NVorbis
                     // If we need to pick up a position, and the packet had one, apply it now.
                     // _granuleOffset translates the stream's timeline (which doesn't necessarily
                     // start at zero -- issue #35) to the 0-based positions we report.
-                    if (samplePosition.HasValue && !_hasPosition)
+                    if (framePosition.HasValue && !_hasPosition)
                     {
                         _hasPosition = true;
-                        _currentPosition = samplePosition.Value - _granuleOffset - (_prevPacketEnd - _prevPacketStart) - count / _channels;
+                        _currentPosition = framePosition.Value - _granuleOffset - (_prevPacketEnd - _prevPacketStart) - count / _channels;
                     }
                 }
 
@@ -482,10 +482,10 @@ namespace NVorbis
             return idx;
         }
 
-        private bool ReadNextPacket(int bufferedSamples, out long? samplePosition)
+        private bool ReadNextPacket(int bufferedSamples, out long? framePosition)
         {
             // decode the next packet now so we can start overlapping with it
-            var curPacket = DecodeNextPacket(out var startIndex, out var validLen, out var totalLen, out var isEndOfStream, out samplePosition, out var bitsRead, out var bitsRemaining, out var containerOverheadBits);
+            var curPacket = DecodeNextPacket(out var startIndex, out var validLen, out var totalLen, out var isEndOfStream, out framePosition, out var bitsRead, out var bitsRemaining, out var containerOverheadBits);
             _eosFound |= isEndOfStream;
             if (curPacket == null)
             {
@@ -493,11 +493,11 @@ namespace NVorbis
                 return false;
             }
 
-            // if we get a max sample position, back off our valid length to match
-            if (samplePosition.HasValue && isEndOfStream)
+            // if we get a max frame position, back off our valid length to match
+            if (framePosition.HasValue && isEndOfStream)
             {
                 var actualEnd = _currentPosition + bufferedSamples + validLen - startIndex;
-                var diff = (int)(samplePosition.Value - _granuleOffset - actualEnd);
+                var diff = (int)(framePosition.Value - _granuleOffset - actualEnd);
                 if (diff < 0)
                 {
                     validLen += diff;
@@ -530,7 +530,7 @@ namespace NVorbis
             return true;
         }
 
-        private float[][] DecodeNextPacket(out int packetStartindex, out int packetValidLength, out int packetTotalLength, out bool isEndOfStream, out long? samplePosition, out int bitsRead, out int bitsRemaining, out int containerOverheadBits)
+        private float[][] DecodeNextPacket(out int packetStartindex, out int packetValidLength, out int packetTotalLength, out bool isEndOfStream, out long? framePosition, out int bitsRead, out int bitsRemaining, out int containerOverheadBits)
         {
             // initialize the outputs up front so the bad/short/non-audio packet paths can report real
             // bit counts to the stats without being clobbered by a trailing reset block
@@ -538,7 +538,7 @@ namespace NVorbis
             packetValidLength = 0;
             packetTotalLength = 0;
             isEndOfStream = false;
-            samplePosition = null;
+            framePosition = null;
             bitsRead = 0;
             bitsRemaining = 0;
             containerOverheadBits = 0;
@@ -585,7 +585,7 @@ namespace NVorbis
                         if (mode.Decode(packet, _nextPacketBuf, out packetStartindex, out packetValidLength, out packetTotalLength))
                         {
                             // per the spec, do not decode more samples than the last granulePosition
-                            samplePosition = packet.GranulePosition;
+                            framePosition = packet.GranulePosition;
                             bitsRead = packet.BitsRead;
                             bitsRemaining = packet.BitsRemaining;
                             return _nextPacketBuf;
@@ -629,9 +629,9 @@ namespace NVorbis
         /// <summary>
         /// Seeks the stream by the specified sample count.
         /// </summary>
-        /// <param name="samplePosition">The relative sample position to seek to.</param>
+        /// <param name="framePosition">The relative frame position (samples per channel) to seek to.</param>
         /// <param name="seekOrigin">The reference point used to obtain the new position.</param>
-        public void SeekTo(long samplePosition, SeekOrigin seekOrigin = SeekOrigin.Begin)
+        public void SeekTo(long framePosition, SeekOrigin seekOrigin = SeekOrigin.Begin)
         {
             if (_packetProvider == null) throw new ObjectDisposedException(nameof(StreamDecoder));
             if (!_packetProvider.CanSeek) throw new InvalidOperationException("Seek is not supported by the Contracts.IPacketProvider instance.");
@@ -642,16 +642,16 @@ namespace NVorbis
                     // no-op
                     break;
                 case SeekOrigin.Current:
-                    samplePosition = SamplePosition + samplePosition;
+                    framePosition = FramePosition + framePosition;
                     break;
                 case SeekOrigin.End:
-                    samplePosition = TotalSamples - samplePosition;
+                    framePosition = TotalFrames - framePosition;
                     break;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(seekOrigin));
             }
 
-            if (samplePosition < 0) throw new ArgumentOutOfRangeException(nameof(samplePosition));
+            if (framePosition < 0) throw new ArgumentOutOfRangeException(nameof(framePosition));
 
             // clear out old data
             ResetDecoder();
@@ -661,13 +661,13 @@ namespace NVorbis
             int rollForward;
             try
             {
-                // Seek to the packet whose granule range contains samplePosition, pre-rolling
+                // Seek to the packet whose granule range contains framePosition, pre-rolling
                 // one packet back so the MDCT overlap is valid.  PacketProvider.SeekTo clamps
-                // to the first audio packet when samplePosition falls on the first data page
+                // to the first audio packet when framePosition falls on the first data page
                 // (covers position 0 and the first ~block_size samples generically).
                 // _granuleOffset translates our 0-based position onto the stream's timeline.
-                pos = _packetProvider.SeekTo(samplePosition + _granuleOffset, 1, GetPacketGranules);
-                rollForward = (int)(samplePosition + _granuleOffset - pos);
+                pos = _packetProvider.SeekTo(framePosition + _granuleOffset, 1, GetPacketGranules);
+                rollForward = (int)(framePosition + _granuleOffset - pos);
             }
             catch (ArgumentOutOfRangeException)
             {
@@ -683,7 +683,7 @@ namespace NVorbis
                 // The target falls in a granule hole -- a gap in the stream's timeline, e.g. a
                 // spliced stream (issue #39) -- so the provider gave us the first packet after
                 // the hole.  Snap forward to the first sample that actually exists.
-                samplePosition = pos - _granuleOffset;
+                framePosition = pos - _granuleOffset;
                 rollForward = 0;
             }
 
@@ -692,12 +692,12 @@ namespace NVorbis
             {
                 // we'll use this to force ReadSamples to fail to read
                 _eosFound = true;
-                if (_packetProvider.GetGranuleCount() - _granuleOffset != samplePosition)
+                if (_packetProvider.GetGranuleCount() - _granuleOffset != framePosition)
                 {
                     throw new InvalidOperationException("Could not read pre-roll packet!  Try seeking again prior to reading more samples.");
                 }
                 _prevPacketStart = _prevPacketStop;
-                _currentPosition = samplePosition;
+                _currentPosition = framePosition;
                 return;
             }
 
@@ -724,7 +724,7 @@ namespace NVorbis
             }
 
             _prevPacketStart += rollForward;
-            _currentPosition = samplePosition;
+            _currentPosition = framePosition;
         }
 
         private int GetPacketGranules(IPacket curPacket)
@@ -793,12 +793,16 @@ namespace NVorbis
         /// Gets the total duration of the decoded stream.
         /// </summary>
         // double, not float: TimeSpan.FromSeconds has no float overload (BCL constraint, not a hot path).
-        public TimeSpan TotalTime => TimeSpan.FromSeconds((double)TotalSamples / _sampleRate);
+        public TimeSpan TotalTime => TimeSpan.FromSeconds((double)TotalFrames / _sampleRate);
 
         /// <summary>
-        /// Gets the total number of samples in the decoded stream.
+        /// Gets the total number of frames (samples per channel) in the decoded stream.
         /// </summary>
-        public long TotalSamples => (_packetProvider ?? throw new ObjectDisposedException(nameof(StreamDecoder))).GetGranuleCount() - _granuleOffset;
+        public long TotalFrames => (_packetProvider ?? throw new ObjectDisposedException(nameof(StreamDecoder))).GetGranuleCount() - _granuleOffset;
+
+        /// <inheritdoc/>
+        [Obsolete("Renamed to " + nameof(TotalFrames) + " to disambiguate frames from interleaved samples.")]
+        public long TotalSamples => TotalFrames;
 
         /// <summary>
         /// Gets or sets the current time position of the stream.
@@ -811,12 +815,20 @@ namespace NVorbis
         }
 
         /// <summary>
-        /// Gets or sets the current sample position of the stream.
+        /// Gets or sets the current frame position (samples per channel) of the stream.
         /// </summary>
-        public long SamplePosition
+        public long FramePosition
         {
             get => _currentPosition;
             set => SeekTo(value);
+        }
+
+        /// <inheritdoc/>
+        [Obsolete("Renamed to " + nameof(FramePosition) + " to disambiguate frames from interleaved samples.")]
+        public long SamplePosition
+        {
+            get => FramePosition;
+            set => FramePosition = value;
         }
 
         /// <summary>

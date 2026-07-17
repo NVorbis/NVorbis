@@ -27,10 +27,10 @@ namespace NVorbis.Tests
         }
 
         [Fact]
-        public void Issue28_TotalSamples_Positive()
+        public void Issue28_TotalFrames_Positive()
         {
             using var reader = new VorbisReader(TestFile(Issue28File));
-            Assert.True(reader.TotalSamples > 0);
+            Assert.True(reader.TotalFrames > 0);
         }
 
         [Fact]
@@ -54,7 +54,7 @@ namespace NVorbis.Tests
             // the mid-stream seek runs FindPacket, which is where the granule-pos
             // mismatch workaround lives
             using var reader = new VorbisReader(TestFile(Issue28File));
-            var target = reader.TotalSamples / 2;
+            var target = reader.TotalFrames / 2;
 
             reader.SeekTo(target, SeekOrigin.Begin);
 
@@ -66,10 +66,10 @@ namespace NVorbis.Tests
         public void Issue28_SeekNearEnd_DoesNotThrow()
         {
             using var reader = new VorbisReader(TestFile(Issue28File));
-            var target = Math.Max(0, reader.TotalSamples - 1024);
+            var target = Math.Max(0, reader.TotalFrames - 1024);
 
             reader.SeekTo(target, SeekOrigin.Begin);
-            Assert.Equal(target, reader.SamplePosition);
+            Assert.Equal(target, reader.FramePosition);
         }
 
         [Fact]

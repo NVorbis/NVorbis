@@ -15,26 +15,26 @@ namespace NVorbis.Tests
         public void SeekTo_End_ZeroOffset_SeeksToEndOfStream()
         {
             using var reader = new VorbisReader(TestFile("3test.ogg"));
-            long total = reader.TotalSamples;
+            long total = reader.TotalFrames;
             reader.SeekTo(0L, SeekOrigin.End);
-            Assert.Equal(total, reader.SamplePosition);
+            Assert.Equal(total, reader.FramePosition);
         }
 
         [Fact]
         public void SeekTo_End_PositiveOffset_SeeksToTotalMinusOffset()
         {
             using var reader = new VorbisReader(TestFile("3test.ogg"));
-            long total = reader.TotalSamples;
+            long total = reader.TotalFrames;
             long offset = Math.Min(1000L, total);
             reader.SeekTo(offset, SeekOrigin.End);
-            Assert.Equal(total - offset, reader.SamplePosition);
+            Assert.Equal(total - offset, reader.FramePosition);
         }
 
         [Fact]
         public void SeekTo_End_PositiveOffset_CanReadSamples()
         {
             using var reader = new VorbisReader(TestFile("3test.ogg"));
-            long offset = Math.Min(1000L, reader.TotalSamples);
+            long offset = Math.Min(1000L, reader.TotalFrames);
             reader.SeekTo(offset, SeekOrigin.End);
             var buf = new float[offset * reader.Channels];
             Assert.True(reader.ReadSamples(buf, 0, buf.Length) > 0);
@@ -53,7 +53,7 @@ namespace NVorbis.Tests
         public void SeekTo_End_OffsetBeyondTotal_Throws()
         {
             using var reader = new VorbisReader(TestFile("3test.ogg"));
-            long overflow = reader.TotalSamples + 1;
+            long overflow = reader.TotalFrames + 1;
             Assert.Throws<ArgumentOutOfRangeException>(() => reader.SeekTo(overflow, SeekOrigin.End));
         }
 
@@ -64,21 +64,21 @@ namespace NVorbis.Tests
             Assert.Throws<ArgumentOutOfRangeException>(() => reader.SeekTo(-1L, SeekOrigin.Current));
         }
 
-        // ── SamplePosition property setter ───────────────────────────────────
+        // ── FramePosition property setter ───────────────────────────────────
 
         [Fact]
-        public void SamplePosition_Setter_UpdatesPosition()
+        public void FramePosition_Setter_UpdatesPosition()
         {
             using var reader = new VorbisReader(TestFile("3test.ogg"));
-            reader.SamplePosition = 1000L;
-            Assert.Equal(1000L, reader.SamplePosition);
+            reader.FramePosition = 1000L;
+            Assert.Equal(1000L, reader.FramePosition);
         }
 
         [Fact]
-        public void SamplePosition_Setter_CanReadSamples()
+        public void FramePosition_Setter_CanReadSamples()
         {
             using var reader = new VorbisReader(TestFile("3test.ogg"));
-            reader.SamplePosition = 500L;
+            reader.FramePosition = 500L;
             var buf = new float[reader.SampleRate * reader.Channels];
             Assert.True(reader.ReadSamples(buf, 0, buf.Length) > 0);
         }
@@ -97,7 +97,7 @@ namespace NVorbis.Tests
         }
 
         [Fact]
-        public void TimePosition_Getter_ReflectsSamplePosition()
+        public void TimePosition_Getter_ReflectsFramePosition()
         {
             using var reader = new VorbisReader(TestFile("3test.ogg"));
             reader.SeekTo(1000L, SeekOrigin.Begin);
@@ -121,18 +121,18 @@ namespace NVorbis.Tests
         {
             using var reader = new VorbisReader(TestFile("3test.ogg"));
             reader.SeekTo(TimeSpan.FromSeconds(1), SeekOrigin.Begin);
-            var before = reader.SamplePosition;
+            var before = reader.FramePosition;
             reader.SeekTo(TimeSpan.FromSeconds(1), SeekOrigin.Current);
-            Assert.True(reader.SamplePosition > before);
+            Assert.True(reader.FramePosition > before);
         }
 
         [Fact]
         public void SeekTo_TimeSpan_End_SeeksFromEnd()
         {
             using var reader = new VorbisReader(TestFile("3test.ogg"));
-            long total = reader.TotalSamples;
+            long total = reader.TotalFrames;
             reader.SeekTo(TimeSpan.Zero, SeekOrigin.End);
-            Assert.Equal(total, reader.SamplePosition);
+            Assert.Equal(total, reader.FramePosition);
         }
     }
 }

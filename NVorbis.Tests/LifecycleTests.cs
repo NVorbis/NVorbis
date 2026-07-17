@@ -29,11 +29,11 @@ namespace NVorbis.Tests
         }
 
         [Fact]
-        public void TotalSamples_AfterDispose_ThrowsObjectDisposedException()
+        public void TotalFrames_AfterDispose_ThrowsObjectDisposedException()
         {
             var reader = new VorbisReader(TestFile("3test.ogg"));
             reader.Dispose();
-            Assert.Throws<ObjectDisposedException>(() => _ = reader.TotalSamples);
+            Assert.Throws<ObjectDisposedException>(() => _ = reader.TotalFrames);
         }
 
         [Fact]

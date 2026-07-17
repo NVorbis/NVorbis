@@ -215,9 +215,13 @@ namespace NVorbis
         public TimeSpan TotalTime => _streamDecoder.TotalTime;
 
         /// <summary>
-        /// Gets the total number of samples in the decoded stream.
+        /// Gets the total number of frames (samples per channel) in the decoded stream.
         /// </summary>
-        public long TotalSamples => _streamDecoder.TotalSamples;
+        public long TotalFrames => _streamDecoder.TotalFrames;
+
+        /// <inheritdoc/>
+        [Obsolete("Renamed to " + nameof(TotalFrames) + " to disambiguate frames from interleaved samples.")]
+        public long TotalSamples => TotalFrames;
 
         /// <summary>
         /// Gets or sets the current time position of the stream.
@@ -232,15 +236,23 @@ namespace NVorbis
         }
 
         /// <summary>
-        /// Gets or sets the current sample position of the stream.
+        /// Gets or sets the current frame position (samples per channel) of the stream.
         /// </summary>
-        public long SamplePosition
+        public long FramePosition
         {
-            get => _streamDecoder.SamplePosition;
+            get => _streamDecoder.FramePosition;
             set
             {
-                _streamDecoder.SamplePosition = value;
+                _streamDecoder.FramePosition = value;
             }
+        }
+
+        /// <inheritdoc/>
+        [Obsolete("Renamed to " + nameof(FramePosition) + " to disambiguate frames from interleaved samples.")]
+        public long SamplePosition
+        {
+            get => FramePosition;
+            set => FramePosition = value;
         }
 
         /// <summary>
@@ -314,11 +326,11 @@ namespace NVorbis
         /// <summary>
         /// Seeks the stream by the specified sample count.
         /// </summary>
-        /// <param name="samplePosition">The relative sample position to seek to.</param>
+        /// <param name="framePosition">The relative frame position (samples per channel) to seek to.</param>
         /// <param name="seekOrigin">The reference point used to obtain the new position.</param>
-        public void SeekTo(long samplePosition, SeekOrigin seekOrigin = SeekOrigin.Begin)
+        public void SeekTo(long framePosition, SeekOrigin seekOrigin = SeekOrigin.Begin)
         {
-            _streamDecoder.SeekTo(samplePosition, seekOrigin);
+            _streamDecoder.SeekTo(framePosition, seekOrigin);
         }
 
         /// <summary>

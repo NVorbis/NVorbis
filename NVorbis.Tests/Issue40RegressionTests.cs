@@ -51,7 +51,7 @@ namespace NVorbis.Tests
             WithinWatchdog(() =>
             {
                 using var reader = new VorbisReader(TestFile(file));
-                long total = reader.TotalSamples;
+                long total = reader.TotalFrames;
                 long target = Math.Max(0, total - 40); // lands inside the final page
                 var buf1 = new float[reader.Channels * 4096]; // far larger than the samples that remain
                 var buf2 = new float[reader.Channels * 4096];
@@ -80,7 +80,7 @@ namespace NVorbis.Tests
             WithinWatchdog(() =>
             {
                 using var reader = new VorbisReader(TestFile("3test.ogg"));
-                long target = Math.Max(0, reader.TotalSamples - 1);
+                long target = Math.Max(0, reader.TotalFrames - 1);
                 var buf = new float[reader.Channels * 4096];
 
                 int expected = -1;
@@ -114,7 +114,7 @@ namespace NVorbis.Tests
                 Assert.True(total > 0);
                 Assert.True(reader.IsEndOfStream);
 
-                long target = Math.Max(0, reader.TotalSamples - 40);
+                long target = Math.Max(0, reader.TotalFrames - 40);
                 try
                 {
                     reader.SeekTo(target, SeekOrigin.Begin);

@@ -75,10 +75,10 @@ namespace NVorbis.Tests
         }
 
         [Fact]
-        public void FullFile_TotalSamplesMatchesActualRead()
+        public void FullFile_TotalFramesMatchesActualRead()
         {
             using var reader = new VorbisReader(TestFile("3test.ogg"));
-            long declared = reader.TotalSamples;
+            long declared = reader.TotalFrames;
 
             var buf = new float[4096];
             long actual = 0;

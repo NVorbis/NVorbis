@@ -67,7 +67,7 @@ namespace NVorbis.Tests
             Assert.Empty(reader.GetStreams());
         }
 
-        // Fixed defect (was documented in DESIGN_DECISIONS.md): GetStreams's cleanup branch
+        // Fixed defect: GetStreams's cleanup branch
         // used to call list.RemoveAt(i) against the *output* list (which never contained the
         // dead entry) using the *source* list's index, throwing instead of silently dropping
         // the stale entry. Now prunes the source list (_packetProviders) instead.

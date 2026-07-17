@@ -293,25 +293,25 @@ namespace NVorbis.Tests
         }
 
         [Fact]
-        public void TotalSamples_AfterDispose_ThrowsObjectDisposedException()
+        public void TotalFrames_AfterDispose_ThrowsObjectDisposedException()
         {
             var provider = GetRealPacketProvider("3test.ogg", out var containerReader);
             using (containerReader)
             {
                 var decoder = new StreamDecoder(provider);
                 decoder.Dispose();
-                Assert.Throws<ObjectDisposedException>(() => _ = decoder.TotalSamples);
+                Assert.Throws<ObjectDisposedException>(() => _ = decoder.TotalFrames);
             }
         }
 
         [Fact]
-        public void TotalTime_MatchesTotalSamplesAndSampleRate()
+        public void TotalTime_MatchesTotalFramesAndSampleRate()
         {
             var provider = GetRealPacketProvider("3test.ogg", out var containerReader);
             using (containerReader)
             {
                 var decoder = new StreamDecoder(provider);
-                var expected = TimeSpan.FromSeconds((double)decoder.TotalSamples / decoder.SampleRate);
+                var expected = TimeSpan.FromSeconds((double)decoder.TotalFrames / decoder.SampleRate);
                 Assert.Equal(expected, decoder.TotalTime);
             }
         }

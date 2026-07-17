@@ -41,10 +41,10 @@ namespace NVorbis.Tests
         }
 
         [Fact]
-        public void Issue6_TotalSamples_Positive()
+        public void Issue6_TotalFrames_Positive()
         {
             using var reader = new VorbisReader(TestFile(Issue6File));
-            Assert.True(reader.TotalSamples > 0);
+            Assert.True(reader.TotalFrames > 0);
         }
 
         [Fact]
@@ -52,7 +52,7 @@ namespace NVorbis.Tests
         {
             using var reader = new VorbisReader(TestFile(Issue6File));
             reader.SeekTo(0L, SeekOrigin.Begin);
-            Assert.Equal(0L, reader.SamplePosition);
+            Assert.Equal(0L, reader.FramePosition);
         }
 
         [Fact]

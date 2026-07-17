@@ -53,15 +53,19 @@ namespace NVorbis.Tests
             public int LowerBitrate => 0;
             public Contracts.ITagData Tags => null;
             public TimeSpan TotalTime => TimeSpan.Zero;
+            public long TotalFrames => 0;
+            [Obsolete]
             public long TotalSamples => 0;
             public TimeSpan TimePosition { get; set; }
+            public long FramePosition { get; set; }
+            [Obsolete]
             public long SamplePosition { get; set; }
             public bool ClipSamples { get; set; }
             public bool HasClipped => false;
             public bool IsEndOfStream => false;
             public Contracts.IStreamStats Stats => null;
             public void SeekTo(TimeSpan timePosition, SeekOrigin seekOrigin = SeekOrigin.Begin) { }
-            public void SeekTo(long samplePosition, SeekOrigin seekOrigin = SeekOrigin.Begin) { }
+            public void SeekTo(long framePosition, SeekOrigin seekOrigin = SeekOrigin.Begin) { }
             public int Read(Span<float> buffer) => 0;
             [Obsolete]
             public int Read(Span<float> buffer, int offset, int count) => 0;

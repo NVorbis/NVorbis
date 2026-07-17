@@ -38,14 +38,20 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
-    <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.0.0" />
     <PackageReference Include="Nerdbank.GitVersioning" Version="3.10.91" PrivateAssets="All" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+    <!-- System.Memory transitively supplies System.Runtime.CompilerServices.Unsafe on 2.0. -->
     <PackageReference Include="Microsoft.Bcl.Numerics" Version="10.0.9" />
     <PackageReference Include="System.Memory" Version="4.5.3" />
     <PackageReference Include="System.ValueTuple" Version="4.5.0" />
+  </ItemGroup>
+
+  <!-- netstandard2.1 has Span/Memory in-box, so it doesn't pull System.Memory (and thus
+       Unsafe) transitively; reference Unsafe explicitly here only. Used by Mdct's hot IMDCT loop. -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.1'">
+    <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.0.0" />
   </ItemGroup>
 
 </Project>
